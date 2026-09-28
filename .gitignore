@@ -1,3 +1,17 @@
-__pycache__/dbd_randomizer_config.txt
-community_builds_cache.json
 __pycache__/
+*.pyc
+
+# ЛИЧНЫЕ ДАННЫЕ: координаты, отметки персонажей, ник и ТОКЕН GitHub
+dbd_randomizer_config.json
+dbd_randomizer_config.txt
+dbd_randomizer_config.txt.migrated
+dbd_randomizer_config.json.broken
+.github_token
+
+# локальные артефакты
+dbd_database.json
+community_builds_cache.json
+dbd_data_report.txt
+*.bak
+*.new
+*.tmp

@@ -1,7 +1,9 @@
 @echo off
+chcp 65001 >nul
 REM ============================================
 REM  DBD Randomizer - установка зависимостей
- ============================================
+REM ============================================
+cd /d "%~dp0"
 echo Проверяю Python...
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -10,7 +12,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Устанавливаю зависимости (pyautogui, pyperclip, pydirectinput)...
+echo Устанавливаю зависимости (pyautogui, pyperclip, pydirectinput, keyboard)...
 python -m pip install --upgrade pip >nul
 pip install -r requirements.txt
 if errorlevel 1 (
