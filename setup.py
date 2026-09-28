@@ -24,7 +24,7 @@ def read_long_description():
 
 setup(
     name="dbd-randomizer",
-    version="1.0.0",
+    version="1.1.0",
     description="DBD Ultimate Search Randomizer — рандомайзер билдов и авто-экипировка для Dead by Daylight",
     long_description=read_long_description(),
     long_description_content_type="text/markdown",

@@ -1,9 +1,13 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import threading
 import time
 import random
+import re
+import json
+import base64
 import urllib.request
+import urllib.error
 import subprocess
 import sys
 import pyautogui
@@ -14,19 +18,32 @@ import os
 pyautogui.PAUSE = 0.05
 
 # ================== АВТО-ОБНОВЛЕНИЕ ==================
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 GITHUB_REPO = "yungspiderq/dbd-randomizer"
 UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000  # проверка каждые 30 минут
+BUILDS_FILE_NAME = "community_builds.json"          # файл билдов в репозитории GitHub
+BUILDS_LOCAL_CACHE = "community_builds_cache.json"  # локальный кэш (работает офлайн)
+MAX_COMMUNITY_BUILDS = 200                          # защита от разрастания файла
 
 
-def _http_get(url, timeout=8, headers=None):
+def _http_request(url, data=None, timeout=10, headers=None, method=None):
+    """Универсальный HTTP-запрос (GET без data, POST/PUT/PATCH с JSON data)."""
     h = {"User-Agent": "DBDRandomizer/" + APP_VERSION}
     if headers:
         h.update(headers)
+    body = None
+    if data is not None:
+        body = json.dumps(data).encode("utf-8")
+        h["Content-Type"] = "application/json"
     sep = "&" if "?" in url else "?"
-    req = urllib.request.Request(url + sep + "_=" + str(int(time.time())), headers=h)
+    req = urllib.request.Request(url + sep + "_=" + str(int(time.time() * 1000)),
+                                 data=body, headers=h, method=method)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
+
+
+def _http_get(url, timeout=8, headers=None):
+    return _http_request(url, timeout=timeout, headers=headers)
 
 
 def get_latest_release_info():
@@ -50,16 +67,37 @@ def version_tuple(v):
 def _gh_api_headers():
     h = {"User-Agent": "DBDRandomizer/" + APP_VERSION,
          "Accept": "application/vnd.github+json"}
-    tok = os.environ.get("DBD_UPDATE_TOKEN", "")
+    tok = get_saved_token()
     if tok:
         h["Authorization"] = "Bearer " + tok
     return h
 
 
+def get_saved_token():
+    """Токен из переменной окружения или из конфига (вкладка «БИЛДЫ»)."""
+    tok = os.environ.get("DBD_UPDATE_TOKEN", "")
+    if tok:
+        return tok
+    try:
+        try:
+            cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILE)
+        except NameError:  # __file__ недоступен (например, интерпретатор без файла)
+            cfg_path = CONFIG_FILE
+        for p in (cfg_path, CONFIG_FILE):
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("gh_token="):
+                            return line.split("=", 1)[1].strip()
+                break
+    except OSError:
+        pass
+    return ""
+
+
 def _get_remote_file_b64(path):
     """Возвращает (content_bytes, sha) файла из main-ветки репозитория или (None, None)."""
     try:
-        import json, base64
         url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}?ref=main"
         raw = _http_get(url, headers=_gh_api_headers())
         data = json.loads(raw.decode("utf-8"))
@@ -67,6 +105,105 @@ def _get_remote_file_b64(path):
     except Exception as e:
         print("Не удалось получить", path, ":", e)
         return None, None
+
+
+# ================== СООБЩЕСТВО: ОБЩИЕ БИЛДЫ ==================
+def load_community_builds():
+    """Читает общий файл билдов из GitHub; при сетевой ошибке — локальный кэш."""
+    try:
+        content, _ = _get_remote_file_b64(BUILDS_FILE_NAME)
+        if content:
+            builds = json.loads(content.decode("utf-8"))
+            if isinstance(builds, list):
+                try:
+                    with open(BUILDS_LOCAL_CACHE, "w", encoding="utf-8") as f:
+                        json.dump(builds, f, ensure_ascii=False)
+                except OSError:
+                    pass
+                return builds, True
+        else:
+            # 404 — файла ещё нет, это нормально (никто ещё ничего не опубликовал)
+            return [], True
+    except Exception:
+        pass
+    # Офлайн / ошибка сети — отдаём кэш
+    try:
+        if os.path.exists(BUILDS_LOCAL_CACHE):
+            with open(BUILDS_LOCAL_CACHE, "r", encoding="utf-8") as f:
+                return json.load(f), False
+    except (OSError, ValueError):
+        pass
+    return [], False
+
+
+def publish_build_to_github(build, token):
+    """
+    Публикует билд в общий файл community_builds.json через GitHub Contents API.
+    Читает текущий файл, добавляет билд и делает PUT с sha (защита от перезаписи чужих данных).
+    Возвращает (ok: bool, message: str).
+    """
+    if not token:
+        return False, "Не указан токен GitHub. Сохраните его в настройках вкладки «БИЛДЫ»."
+    headers = {"User-Agent": "DBDRandomizer/" + APP_VERSION,
+               "Accept": "application/vnd.github+json",
+               "Authorization": "Bearer " + token}
+    try:
+        # 1. Читаем текущий файл (и его sha)
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{BUILDS_FILE_NAME}"
+        builds = []
+        sha = None
+        try:
+            raw = _http_get(url, headers=headers)
+            data = json.loads(raw.decode("utf-8"))
+            builds = json.loads(base64.b64decode(data["content"]).decode("utf-8"))
+            sha = data.get("sha")
+            if not isinstance(builds, list):
+                builds = []
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+        # 2. Добавляем новый билд (с защитой от дублей и лимитом)
+        if any(b.get("id") == build.get("id") for b in builds):
+            return True, "Такой билд уже опубликован."
+        builds.insert(0, build)
+        builds = builds[:MAX_COMMUNITY_BUILDS]
+        # 3. PUT (создание или обновление с актуальным sha)
+        payload = {
+            "message": f"community: +{build.get('author', 'anon')} '{build.get('char', '?')}'",
+            "content": base64.b64encode(
+                json.dumps(builds, ensure_ascii=False, indent=1).encode("utf-8")).decode("ascii"),
+        }
+        if sha:
+            payload["sha"] = sha
+        try:
+            resp = _http_request(url, data=payload, method="PUT", headers=headers)
+            json.loads(resp.decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 409:  # гонка — кто-то обновил файл, один повтор
+                raw = _http_get(url, headers=headers)
+                data = json.loads(raw.decode("utf-8"))
+                builds = json.loads(base64.b64decode(data["content"]).decode("utf-8"))
+                if any(b.get("id") == build.get("id") for b in builds):
+                    return True, "Такой билд уже опубликован."
+                builds.insert(0, build)
+                builds = builds[:MAX_COMMUNITY_BUILDS]
+                payload = {
+                    "message": payload["message"],
+                    "content": base64.b64encode(
+                        json.dumps(builds, ensure_ascii=False, indent=1).encode("utf-8")).decode("ascii"),
+                    "sha": data.get("sha"),
+                }
+                resp = _http_request(url, data=payload, method="PUT", headers=headers)
+                json.loads(resp.decode("utf-8"))
+            elif e.code == 401:
+                return False, "Токен недействителен или отозван. Создайте новый с правами Contents: Write."
+            elif e.code == 403:
+                return False, "У токена нет прав на запись (нужен scope repo / Contents: Read and Write)."
+            else:
+                return False, f"Ошибка GitHub API: HTTP {e.code}"
+        return True, "Билд опубликован! Он появится у всех пользователей после обновления списка."
+    except Exception as e:
+        return False, f"Не удалось опубликовать: {e}"
 
 
 def update_files_in_place():
@@ -860,7 +997,9 @@ def load_config():
         # ВСТАВИТЬ СЮДА ЭТИ ДВЕ СТРОКИ:
         "owned_killers": "",
         "owned_surv_chars": "",
-        "auto_update": "1"
+        "auto_update": "1",
+        "gh_token": "",
+        "nickname": ""
     }
     for i in range(1, 5):
         config[f"slot{i}_x"] = ""
@@ -874,8 +1013,30 @@ def load_config():
     return config
 
 def save_config(config_dict):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        for key, val in config_dict.items(): f.write(f"{key}={val}\n")
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            for key, val in config_dict.items(): f.write(f"{key}={val}\n")
+    except OSError:
+        pass  # конфиг не критичен — не роняем программу
+
+
+def format_build_text(b):
+    """Карточка билда для копирования в буфер обмена."""
+    side_icon = "👹" if b.get("side") == "KILLER" else "👤"
+    lines = [
+        f"=== DBD БИЛД {side_icon} ===",
+        f"Автор: {b.get('author', '—')} | {b.get('date', '')}",
+        f"Персонаж: {b.get('char', '—')}",
+        f"{'Сила' if b.get('side') == 'KILLER' else 'Предмет'}: {b.get('power_or_item', '—')}",
+        "Аддоны:",
+    ]
+    addons = b.get("addons", ["—", "—"])
+    lines += [f"  • {addons[0] if len(addons) > 0 else '—'}",
+              f"  • {addons[1] if len(addons) > 1 else '—'}"]
+    lines.append("Навыки:")
+    for i, p in enumerate(b.get("perks", []), 1):
+        lines.append(f"  {i}. {p}")
+    return "\n".join(lines)
 
 
 class CoordinateGrabber:
@@ -933,30 +1094,47 @@ class DBDUniversalRandomizer:
                              padding=8)
         self.style.map("Equip.TButton", background=[("active", "#4cd964")])
         self.style.configure("Sec.TButton", background="#2c2c2c", foreground="#ffffff", padding=4)
+        self.style.configure("Pub.TButton", background="#5e5ce6", foreground="#ffffff", font=("Segoe UI", 11, "bold"),
+                             padding=8)
+        self.style.map("Pub.TButton", background=[("active", "#7a79f0")])
+        self.style.configure("Head.TLabel", font=("Segoe UI", 15, "bold"), foreground="#ff9500")
 
-        mode_frame = ttk.Frame(self.root)
-        mode_frame.pack(fill=tk.X, padx=15, pady=5)
-        ttk.Label(mode_frame, text="ВЫБЕРИТЕ СТОРОНУ ИГРЫ:", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=5)
+        # --- ВЕРХНЯЯ ПАНЕЛЬ (ЗАГОЛОВОК + ПЕРЕКЛЮЧАТЕЛЬ СТОРОНЫ) ---
+        header = tk.Frame(self.root, bg="#121212")
+        header.pack(fill=tk.X, padx=15, pady=(10, 2))
+        ttk.Label(header, text="☠ DBD RANDOMIZER", style="Head.TLabel").pack(side=tk.LEFT)
+        ttk.Label(header, text=f"v{APP_VERSION}", font=("Segoe UI", 9), foreground="#8e8e93").pack(side=tk.LEFT,
+                                                                                                    padx=(8, 0),
+                                                                                                    pady=(6, 0))
+        mode_frame = tk.Frame(header, bg="#121212")
+        mode_frame.pack(side=tk.RIGHT)
+        ttk.Label(mode_frame, text="СТОРОНА:", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=5)
 
-        rb_kill = tk.Radiobutton(mode_frame, text="👹 МАНЬЯКИ", variable=self.mode_var, value="KILLER", bg="#121212",
-                                 fg="#ff3b30", selectcolor="#1c1c1e", font=("Segoe UI", 10, "bold"),
-                                 activebackground="#121212")
-        rb_kill.pack(side=tk.RIGHT, padx=10)
         rb_surv = tk.Radiobutton(mode_frame, text="👤 ВЫЖИВАЮЩИЕ", variable=self.mode_var, value="SURVIVOR",
                                  bg="#121212", fg="#5ac8fa", selectcolor="#1c1c1e", font=("Segoe UI", 10, "bold"),
-                                 activebackground="#121212")
-        rb_surv.pack(side=tk.RIGHT, padx=10)
+                                 activebackground="#121212", indicatoron=False, relief=tk.FLAT, padx=10, pady=3)
+        rb_surv.pack(side=tk.RIGHT, padx=5)
+        rb_kill = tk.Radiobutton(mode_frame, text="👹 МАНЬЯКИ", variable=self.mode_var, value="KILLER", bg="#121212",
+                                 fg="#ff3b30", selectcolor="#1c1c1e", font=("Segoe UI", 10, "bold"),
+                                 activebackground="#121212", indicatoron=False, relief=tk.FLAT, padx=10, pady=3)
+        rb_kill.pack(side=tk.RIGHT, padx=5)
+        self._mode_buttons = [rb_kill, rb_surv]
+        for rb in self._mode_buttons:
+            rb.bind("<Enter>", lambda e, w=rb: w.config(bg="#2c2c2c"))
+            rb.bind("<Leave>", lambda e, w=rb: w.config(bg="#121212"))
 
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
         self.tab_main = ttk.Frame(self.notebook)
+        self.tab_builds = ttk.Frame(self.notebook)
         self.tab_chars = ttk.Frame(self.notebook)
         self.tab_coords = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.tab_main, text=" 🎲 РАНДОМАЙЗЕР БИЛДОВ ")
+        self.notebook.add(self.tab_main, text=" 🎲 РАНДОМАЙЗЕР ")
+        self.notebook.add(self.tab_builds, text=" 🌍 БИЛДЫ ")
         self.notebook.add(self.tab_chars, text=" 🎭 ПЕРСОНАЖИ ")
-        self.notebook.add(self.tab_coords, text=" 🎯 НАСТРОЙКА КЛИКОВ ")
+        self.notebook.add(self.tab_coords, text=" 🎯 КООРДИНАТЫ ")
 
         # --- ГЛАВНЫЙ ЭКРАН (РАНДОМАЙЗЕР) ---
         self.res_frame = ttk.LabelFrame(self.tab_main, text=" ВАШ РАНДОМНЫЙ БИЛД ")
@@ -986,6 +1164,11 @@ class DBDUniversalRandomizer:
         self.btn_equip.config(state=tk.DISABLED)
         self.btn_equip.pack(fill=tk.X, padx=15, pady=5)
 
+        self.btn_publish = ttk.Button(self.tab_main, text="🌍 ОПУБЛИКОВАТЬ БИЛД (увидят все игроки)",
+                                      style="Pub.TButton", command=self.publish_current_build)
+        self.btn_publish.config(state=tk.DISABLED)
+        self.btn_publish.pack(fill=tk.X, padx=15, pady=5)
+
         self.status = ttk.Label(self.tab_main,
                                 text="Выберите персонажа в игре руками, затем запустите авто-экипировку.",
                                 font=("Segoe UI", 9, "italic"), foreground="#8e8e93", justify=tk.CENTER)
@@ -994,6 +1177,7 @@ class DBDUniversalRandomizer:
         # --- ИНИЦИАЛИЗАЦИЯ ОСТАЛЬНЫХ ВКЛАДОК ---
         self.setup_characters_tab()
         self.setup_coordinates_tab()
+        self.setup_builds_tab()
 
         # --- АВТО-ОБНОВЛЕНИЕ ---
         self._updating = False
@@ -1220,6 +1404,269 @@ class DBDUniversalRandomizer:
         save_config(self.config)
         messagebox.showinfo("Готово", "Все координаты успешно сохранены!")
 
+    # ================== ВКЛАДКА БИЛДОВ СООБЩЕСТВА ==================
+    def setup_builds_tab(self):
+        """Интерфейс вкладки общественных билдов + настройки токена."""
+        self.community_builds = []
+
+        top_bar = ttk.Frame(self.tab_builds)
+        top_bar.pack(fill=tk.X, padx=10, pady=(8, 2))
+        ttk.Button(top_bar, text="🔄 Обновить список", style="Sec.TButton",
+                   command=lambda: self.refresh_community_builds(manual=True)).pack(side=tk.LEFT)
+        ttk.Button(top_bar, text="📋 Скопировать выбранный", style="Sec.TButton",
+                   command=self.copy_selected_build).pack(side=tk.LEFT, padx=6)
+        ttk.Button(top_bar, text="⚡ Экипировать выбранный", style="Equip.TButton",
+                   command=self.equip_selected_build).pack(side=tk.LEFT, padx=6)
+        self.lbl_builds_info = ttk.Label(top_bar, text="", foreground="#8e8e93", font=("Segoe UI", 9, "italic"))
+        self.lbl_builds_info.pack(side=tk.RIGHT)
+
+        # Фильтры
+        filt = ttk.Frame(self.tab_builds)
+        filt.pack(fill=tk.X, padx=10, pady=2)
+        ttk.Label(filt, text="Фильтр:").pack(side=tk.LEFT)
+        self.builds_filter_var = tk.StringVar(value="ВСЕ")
+        for val, txt in [("ВСЕ", "Все"), ("KILLER", "👹 Маньяки"), ("SURVIVOR", "👤 Выжившие")]:
+            tk.Radiobutton(filt, text=txt, variable=self.builds_filter_var, value=val, bg="#121212", fg="#e0e0e0",
+                           selectcolor="#2c2c2c", activebackground="#121212", activeforeground="#ffffff",
+                           font=("Segoe UI", 9), command=self._render_builds_list).pack(side=tk.LEFT, padx=4)
+        ttk.Label(filt, text="Поиск:", font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(14, 2))
+        self.builds_search_entry = tk.Entry(filt, width=22, background="#2c2c2c", foreground="#ffffff",
+                                            insertbackground="white", bd=1, relief="solid")
+        self.builds_search_entry.pack(side=tk.LEFT)
+        self.builds_search_entry.bind("<KeyRelease>", lambda e: self._render_builds_list())
+
+        # Список билдов (Treeview)
+        list_frame = ttk.Frame(self.tab_builds)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        self.builds_tree = ttk.Treeview(list_frame, columns=("side", "author", "char", "main", "perks"),
+                                        show="headings", height=14)
+        for col, txt, w, anchor in [("side", "Сторона", 90, tk.CENTER), ("author", "Автор", 110, tk.W),
+                                    ("char", "Персонаж", 150, tk.W), ("main", "Сила / Предмет", 190, tk.W),
+                                    ("perks", "Навыки", 380, tk.W)]:
+            self.builds_tree.heading(col, text=txt)
+            self.builds_tree.column(col, width=w, anchor=anchor)
+        sb = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.builds_tree.yview)
+        self.builds_tree.configure(yscrollcommand=sb.set)
+        self.builds_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        try:
+            self.builds_tree.tag_configure("killer", foreground="#ff6961")
+            self.builds_tree.tag_configure("survivor", foreground="#7fd4ff")
+            self.builds_tree.tag_configure("mine", foreground="#ffd60a")
+        except tk.TclError:
+            pass
+        self.builds_tree.bind("<Double-1>", lambda e: self.copy_selected_build())
+
+        # Детали выбранного билда
+        det_frame = ttk.LabelFrame(self.tab_builds, text=" ДЕТАЛИ ВЫБРАННОГО БИЛДА ")
+        det_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
+        self.lbl_build_details = ttk.Label(det_frame, text="—", justify=tk.LEFT, font=("Segoe UI", 9),
+                                           foreground="#e0e0e0")
+        self.lbl_build_details.pack(anchor=tk.W, padx=10, pady=5)
+        self.builds_tree.bind("<<TreeviewSelect>>", lambda e: self._show_build_details())
+
+        # Настройки публикации
+        set_frame = ttk.LabelFrame(self.tab_builds, text=" 🔑 НАСТРОЙКА ПУБЛИКАЦИИ ")
+        set_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        row1 = ttk.Frame(set_frame)
+        row1.pack(fill=tk.X, padx=8, pady=4)
+        ttk.Label(row1, text="Ник для публикации:", width=18, anchor=tk.W).pack(side=tk.LEFT)
+        self.nick_entry = tk.Entry(row1, width=20, background="#2c2c2c", foreground="#ffffff",
+                                   insertbackground="white", bd=1, relief="solid")
+        self.nick_entry.insert(0, self.config.get("nickname", ""))
+        self.nick_entry.pack(side=tk.LEFT, padx=4)
+        row2 = ttk.Frame(set_frame)
+        row2.pack(fill=tk.X, padx=8, pady=4)
+        ttk.Label(row2, text="Токен GitHub (Contents: Write):", width=26, anchor=tk.W).pack(side=tk.LEFT)
+        self.token_entry = tk.Entry(row2, width=44, show="*", background="#2c2c2c", foreground="#ffffff",
+                                    insertbackground="white", bd=1, relief="solid")
+        self.token_entry.insert(0, self.config.get("gh_token", ""))
+        self.token_entry.pack(side=tk.LEFT, padx=4)
+        self.show_token_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(row2, text="показать", variable=self.show_token_var, bg="#121212", fg="#8e8e93",
+                       selectcolor="#2c2c2c", activebackground="#121212", font=("Segoe UI", 8),
+                       command=self._toggle_token_visibility).pack(side=tk.LEFT)
+        btn_row = ttk.Frame(set_frame)
+        btn_row.pack(fill=tk.X, padx=8, pady=(2, 8))
+        ttk.Button(btn_row, text="💾 Сохранить настройки", style="Sec.TButton",
+                   command=self.save_build_settings).pack(side=tk.LEFT)
+        ttk.Label(btn_row, text="Для публикации нужен токен с правом записи в репозиторий "
+                                "(fine-grained: Contents Read&Write или classic: repo).\n"
+                                "Билды хранятся в файле community_builds.json — их видят все пользователи программы.",
+                  font=("Segoe UI", 8, "italic"), foreground="#8e8e93", justify=tk.LEFT).pack(side=tk.LEFT, padx=12)
+
+        # Первая загрузка списка при старте
+        self.root.after(1500, lambda: self.refresh_community_builds(manual=False))
+
+    def _toggle_token_visibility(self):
+        self.token_entry.config(show="" if self.show_token_var.get() else "*")
+
+    def save_build_settings(self):
+        self.config["nickname"] = self.nick_entry.get().strip()
+        self.config["gh_token"] = self.token_entry.get().strip()
+        save_config(self.config)
+        messagebox.showinfo("Готово", "Настройки публикации сохранены.")
+
+    def refresh_community_builds(self, manual=False):
+        threading.Thread(target=self._load_builds_worker, args=(manual,), daemon=True).start()
+
+    def _load_builds_worker(self, manual):
+        builds, online = load_community_builds()
+        self.root.after(0, lambda: self._on_builds_loaded(builds, online, manual))
+
+    def _on_builds_loaded(self, builds, online, manual):
+        self.community_builds = builds if isinstance(builds, list) else []
+        self._render_builds_list()
+        if online:
+            self.lbl_builds_info.config(text=f"Загружено из GitHub: {len(self.community_builds)}",
+                                       foreground="#34c759")
+        else:
+            self.lbl_builds_info.config(text=f"Офлайн-кэш: {len(self.community_builds)} (нет связи с GitHub)",
+                                       foreground="#ffcc00")
+        if manual:
+            if not self.community_builds and online:
+                messagebox.showinfo("БИЛДЫ", "Пока никто ничего не опубликовал. Сгенерируйте билд и нажмите «Опубликовать»!")
+
+    def _filtered_builds(self):
+        flt = self.builds_filter_var.get()
+        q = self.builds_search_entry.get().strip().lower() if hasattr(self, "builds_search_entry") else ""
+        out = []
+        for b in self.community_builds:
+            if not isinstance(b, dict):
+                continue
+            if flt != "ВСЕ" and b.get("side") != flt:
+                continue
+            if q:
+                blob = " ".join([str(b.get("char", "")), str(b.get("power_or_item", "")),
+                                 str(b.get("author", "")), " ".join(map(str, b.get("perks", [])))]).lower()
+                if q not in blob:
+                    continue
+            out.append(b)
+        return out
+
+    def _render_builds_list(self, keep_selection=False):
+        tree = self.builds_tree
+        selected_id = tree.selection()[0] if keep_selection and tree.selection() else None
+        tree.delete(*tree.get_children())
+        for i, b in enumerate(self._filtered_builds()):
+            side_txt = "👹 Маньяк" if b.get("side") == "KILLER" else "👤 Выживший"
+            perks = " | ".join(b.get("perks", []))
+            tag = "mine" if b.get("local") else ("killer" if b.get("side") == "KILLER" else "survivor")
+            tree.insert("", tk.END, iid=str(i), values=(side_txt, b.get("author", "—"), b.get("char", "—"),
+                                                        b.get("power_or_item", "—"), perks), tags=(tag,))
+        if selected_id is not None and tree.exists(selected_id):
+            tree.selection_set(selected_id)
+
+    def _selected_build(self):
+        sel = self.builds_tree.selection()
+        if not sel:
+            return None
+        idx = int(sel[0])
+        filtered = self._filtered_builds()
+        return filtered[idx] if 0 <= idx < len(filtered) else None
+
+    def _show_build_details(self):
+        b = self._selected_build()
+        if not b:
+            self.lbl_build_details.config(text="—")
+            return
+        self.lbl_build_details.config(text=format_build_text(b))
+
+    def copy_selected_build(self):
+        b = self._selected_build()
+        if not b:
+            messagebox.showwarning("БИЛДЫ", "Сначала выберите билд из списка (клик по строке).")
+            return
+        pyperclip.copy(format_build_text(b))
+        self.status.config(text="Карточка билда скопирована в буфер обмена ✔", foreground="#34c759")
+
+    def equip_selected_build(self):
+        b = self._selected_build()
+        if not b:
+            messagebox.showwarning("БИЛДЫ", "Сначала выберите билд из списка.")
+            return
+        self._show_build_details()  # фиксируем карточку до перерисовки списка
+        addons = list(b.get("addons", ["—", "—"]))
+        while len(addons) < 2:
+            addons.append("—")
+        perks = list(b.get("perks", []))
+        if len(perks) < 4:
+            messagebox.showwarning("БИЛДЫ", "В билде меньше 4 навыков — экипировка невозможна.")
+            return
+        self.chosen_char = b.get("char", "")
+        self.chosen_power_or_item = b.get("power_or_item", "—")
+        self.chosen_addons = addons[:2]
+        self.current_generated_perks = perks[:4]
+        self.mode_var.set(b.get("side", "KILLER"))
+        icon = "👹 Убийца" if b.get("side") == "KILLER" else "👤 Выживающий"
+        color = "#ff3b30" if b.get("side") == "KILLER" else "#5ac8fa"
+        self.lbl_char.config(text=f"{icon}: {self.chosen_char} (билд от {b.get('author', '—')})", foreground=color)
+        self.lbl_item.config(text=f"⚡/📦 {self.chosen_power_or_item}")
+        self.lbl_addons.config(text=f"🔧 Аддоны:\n  • {self.chosen_addons[0]}\n  • {self.chosen_addons[1]}")
+        p = self.current_generated_perks
+        self.lbl_perks.config(text=f"🔮 Навыки:\n  1. {p[0]}\n  2. {p[1]}\n  3. {p[2]}\n  4. {p[3]}")
+        self.btn_equip.config(state=tk.NORMAL)
+        self.notebook.select(self.tab_main)
+        self.status.config(text="Чужой билд загружен! Откройте меню снаряжения и жмите «Запустить экипировку».",
+                           foreground="#34c759")
+
+    # ================== ПУБЛИКАЦИЯ БИЛДА ==================
+    def publish_current_build(self):
+        if not self.current_generated_perks or not self.chosen_char:
+            messagebox.showwarning("Публикация", "Сначала сгенерируйте билд на вкладке «РАНДОМАЙЗЕР».")
+            return
+        author = self.config.get("nickname", "").strip()
+        if not author:
+            author = simpledialog.askstring("Публикация", "Введите ваш ник (будет виден всем):",
+                                            parent=self.root)
+            if not author:
+                return
+            author = author.strip()[:30]
+            self.config["nickname"] = author
+            if hasattr(self, "nick_entry"):
+                self.nick_entry.delete(0, tk.END)
+                self.nick_entry.insert(0, author)
+            save_config(self.config)
+        token = self.config.get("gh_token", "").strip()
+        if not token:
+            token = simpledialog.askstring("Публикация",
+                                          "Введите токен GitHub (нужны права на запись в репозиторий).\n"
+                                          "Можно сохранить навсегда во вкладке «БИЛДЫ»:",
+                                          show="*", parent=self.root)
+            if not token:
+                return
+            token = token.strip()
+        build = {
+            "id": f"{int(time.time())}-{random.randint(1000, 9999)}",
+            "app_version": APP_VERSION,
+            "date": time.strftime("%d.%m.%Y"),
+            "author": author,
+            "side": self.mode_var.get(),
+            "char": self.chosen_char,
+            "power_or_item": self.chosen_power_or_item,
+            "addons": list(self.chosen_addons),
+            "perks": list(self.current_generated_perks),
+        }
+        self.btn_publish.config(state=tk.DISABLED)
+        self.status.config(text="Публикуем билд на GitHub...", foreground="#ffcc00")
+        threading.Thread(target=self._publish_worker, args=(build, token), daemon=True).start()
+
+    def _publish_worker(self, build, token):
+        ok, msg = publish_build_to_github(build, token)
+        def done():
+            self.btn_publish.config(state=tk.NORMAL)
+            if ok:
+                self.status.config(text="🌍 " + msg, foreground="#34c759")
+                build["local"] = True  # подсвечиваем свой билд жёлтым
+                self.community_builds.insert(0, build)
+                self._render_builds_list()
+                self.lbl_build_details.config(text=format_build_text(build))
+                messagebox.showinfo("Публикация", msg)
+            else:
+                self.status.config(text="🔴 " + msg, foreground="#ff3b30")
+                messagebox.showerror("Публикация не удалась", msg)
+        self.root.after(0, done)
+
     # ================== ЛОГИКА ГЕНЕРАЦИИ БИЛДОВ ==================
     def generate_new_build(self):
         side = self.mode_var.get()
@@ -1282,7 +1729,8 @@ class DBDUniversalRandomizer:
         self.lbl_addons.config(text=f"🔧 Аддоны:\n  • {self.chosen_addons[0]}\n  • {self.chosen_addons[1]}")
         self.lbl_perks.config(text=f"🔮 Навыки:\n  1. {self.current_generated_perks[0]}\n  2. {self.current_generated_perks[1]}\n  3. {self.current_generated_perks[2]}\n  4. {self.current_generated_perks[3]}")
         self.btn_equip.config(state=tk.NORMAL)
-        self.status.config(text="Билд сгенерирован! Зайдите в меню снаряжения персонажа в игре и нажмите запуск.", foreground="#34c759")
+        self.btn_publish.config(state=tk.NORMAL)
+        self.status.config(text="Билд сгенерирован! Можно опубликовать его для сообщества или сразу экипировать.", foreground="#34c759")
 
     # ================== НАДЕЖНАЯ АВТОМАТИЗАЦИЯ КЛИКОВ (ИСПРАВЛЕНО) ==================
     def dbd_click(self, coords):
