@@ -18,7 +18,7 @@ import os
 pyautogui.PAUSE = 0.05
 
 # ================== АВТО-ОБНОВЛЕНИЕ ==================
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 GITHUB_REPO = "yungspiderq/dbd-randomizer"
 UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000  # проверка каждые 30 минут
 BUILDS_FILE_NAME = "community_builds.json"          # файл билдов в репозитории GitHub
@@ -167,7 +167,7 @@ def publish_build_to_github(build, token):
             return True, "Такой билд уже опубликован."
         builds.insert(0, build)
         builds = builds[:MAX_COMMUNITY_BUILDS]
-        # 3. PUT (создание или обновление с актуальным sha)
+        # 3. Отправка: PUT (обновление) если файл существует, CREATE если файла ещё нет
         payload = {
             "message": f"community: +{build.get('author', 'anon')} '{build.get('char', '?')}'",
             "content": base64.b64encode(
@@ -176,7 +176,7 @@ def publish_build_to_github(build, token):
         if sha:
             payload["sha"] = sha
         try:
-            resp = _http_request(url, data=payload, method="PUT", headers=headers)
+            resp = _http_request(url, data=payload, method="PUT" if sha else "POST", headers=headers)
             json.loads(resp.decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code == 409:  # гонка — кто-то обновил файл, один повтор
