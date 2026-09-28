@@ -15,13 +15,16 @@ pyautogui.PAUSE = 0.05
 
 # ================== АВТО-ОБНОВЛЕНИЕ ==================
 APP_VERSION = "1.0.0"
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/yungspiderq/dbd-randomizer/main"
+GITHUB_REPO = "yungspiderq/dbd-randomizer"
 UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000  # проверка каждые 30 минут
 
 
-def _http_get(url, timeout=8):
-    req = urllib.request.Request(url + ("&" if "?" in url else "?_=") + str(int(time.time())),
-                                 headers={"User-Agent": "DBDRandomizer/" + APP_VERSION})
+def _http_get(url, timeout=8, headers=None):
+    h = {"User-Agent": "DBDRandomizer/" + APP_VERSION}
+    if headers:
+        h.update(headers)
+    sep = "&" if "?" in url else "?"
+    req = urllib.request.Request(url + sep + "_=" + str(int(time.time())), headers=h)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
@@ -30,7 +33,8 @@ def get_latest_release_info():
     """Возвращает (tag, notes) последнего релиза или None."""
     try:
         import json
-        data = json.loads(_http_get("https://api.github.com/repos/yungspiderq/dbd-randomizer/releases/latest").decode("utf-8"))
+        data = json.loads(_http_get(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+                              headers=_gh_api_headers()).decode("utf-8"))
         return data.get("tag_name", ""), data.get("body", "") or ""
     except Exception:
         return None
@@ -43,26 +47,57 @@ def version_tuple(v):
         return (0,)
 
 
-def update_script_in_place():
-    """Скачивает свежий dbd_randomizer.py поверх текущего файла. True = обновлено."""
+def _gh_api_headers():
+    h = {"User-Agent": "DBDRandomizer/" + APP_VERSION,
+         "Accept": "application/vnd.github+json"}
+    tok = os.environ.get("DBD_UPDATE_TOKEN", "")
+    if tok:
+        h["Authorization"] = "Bearer " + tok
+    return h
+
+
+def _get_remote_file_b64(path):
+    """Возвращает (content_bytes, sha) файла из main-ветки репозитория или (None, None)."""
+    try:
+        import json, base64
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}?ref=main"
+        raw = _http_get(url, headers=_gh_api_headers())
+        data = json.loads(raw.decode("utf-8"))
+        return base64.b64decode(data["content"]), data.get("sha")
+    except Exception as e:
+        print("Не удалось получить", path, ":", e)
+        return None, None
+
+
+def update_files_in_place():
+    """Скачивает свежие dbd_randomizer.py и requirements.txt. True = обновлено."""
     path = os.path.abspath(__file__)
+    content, _ = _get_remote_file_b64("dbd_randomizer.py")
+    if not content or len(content) < 1000:
+        return False
     tmp = path + ".tmp"
     try:
-        content = _http_get(GITHUB_RAW_BASE + "/dbd_randomizer.py")
         with open(tmp, "wb") as f:
             f.write(content)
-        if os.path.getsize(tmp) < 1000:
-            raise OSError("подозрительно маленький файл")
         os.replace(tmp, path)
-        return True
     except Exception as e:
+        print("Ошибка записи файла:", e)
         if os.path.exists(tmp):
             try:
                 os.remove(tmp)
             except OSError:
                 pass
-        print("Не удалось обновить скрипт:", e)
         return False
+    reqs, _ = _get_remote_file_b64("requirements.txt")
+    if reqs:
+        try:
+            rtmp = os.path.join(os.path.dirname(path), "requirements.txt.tmp")
+            with open(rtmp, "wb") as f:
+                f.write(reqs)
+            os.replace(rtmp, os.path.join(os.path.dirname(path), "requirements.txt"))
+        except OSError:
+            pass
+    return True
 
 
 class UpdateDialog(tk.Toplevel):
@@ -96,7 +131,7 @@ class UpdateDialog(tk.Toplevel):
                    command=self._dismiss).pack(side=tk.RIGHT, padx=4)
 
     def _do_update(self):
-        if update_script_in_place():
+        if update_files_in_place():
             self.result = "restart"
         else:
             messagebox.showerror("Обновление", "Не удалось скачать новую версию.\nПроверьте интернет и права на папку.")
@@ -987,7 +1022,8 @@ class DBDUniversalRandomizer:
         if not info:
             # Fallback: если релизов в репо ещё нет — сравниваем с APP_VERSION в файле на GitHub
             try:
-                raw = _http_get(GITHUB_RAW_BASE + "/dbd_randomizer.py").decode("utf-8")
+                content, _ = _get_remote_file_b64("dbd_randomizer.py")
+                raw = content.decode("utf-8") if content else ""
                 import re
                 m = re.search(r'APP_VERSION\s*=\s*"([\d.]+)"', raw)
                 if m and version_tuple(m.group(1)) > version_tuple(APP_VERSION):
