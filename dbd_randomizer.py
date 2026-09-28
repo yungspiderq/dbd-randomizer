@@ -3,12 +3,109 @@ from tkinter import ttk, messagebox
 import threading
 import time
 import random
+import urllib.request
+import subprocess
+import sys
 import pyautogui
 import pyperclip
 import pydirectinput
 import os
 
 pyautogui.PAUSE = 0.05
+
+# ================== АВТО-ОБНОВЛЕНИЕ ==================
+APP_VERSION = "1.0.0"
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/yungspiderq/dbd-randomizer/main"
+UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000  # проверка каждые 30 минут
+
+
+def _http_get(url, timeout=8):
+    req = urllib.request.Request(url + ("&" if "?" in url else "?_=") + str(int(time.time())),
+                                 headers={"User-Agent": "DBDRandomizer/" + APP_VERSION})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def get_latest_release_info():
+    """Возвращает (tag, notes) последнего релиза или None."""
+    try:
+        import json
+        data = json.loads(_http_get("https://api.github.com/repos/yungspiderq/dbd-randomizer/releases/latest").decode("utf-8"))
+        return data.get("tag_name", ""), data.get("body", "") or ""
+    except Exception:
+        return None
+
+
+def version_tuple(v):
+    try:
+        return tuple(int(x) for x in v.strip().lstrip("vV").split("."))
+    except Exception:
+        return (0,)
+
+
+def update_script_in_place():
+    """Скачивает свежий dbd_randomizer.py поверх текущего файла. True = обновлено."""
+    path = os.path.abspath(__file__)
+    tmp = path + ".tmp"
+    try:
+        content = _http_get(GITHUB_RAW_BASE + "/dbd_randomizer.py")
+        with open(tmp, "wb") as f:
+            f.write(content)
+        if os.path.getsize(tmp) < 1000:
+            raise OSError("подозрительно маленький файл")
+        os.replace(tmp, path)
+        return True
+    except Exception as e:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        print("Не удалось обновить скрипт:", e)
+        return False
+
+
+class UpdateDialog(tk.Toplevel):
+    """Модальное окно с описанием обновления и кнопками действий."""
+
+    def __init__(self, parent, new_tag, notes):
+        super().__init__(parent)
+        self.result = None
+        self.new_tag, self.notes = new_tag, notes
+        self.title(f"Доступно обновление {new_tag}")
+        self.geometry("520x420")
+        self.configure(bg="#1e1e1e")
+        self.attributes("-topmost", True)
+        self.transient(parent)
+        self.grab_set()
+
+        ttk.Label(self, text=f"Установлена версия v{APP_VERSION}, доступна {new_tag}",
+                  font=("Segoe UI", 11, "bold"), foreground="#ff9500").pack(pady=(14, 6))
+
+        txt = tk.Text(self, height=12, bg="#2c2c2c", fg="#e0e0e0", relief="flat", wrap=tk.WORD,
+                      font=("Segoe UI", 10))
+        txt.pack(fill=tk.BOTH, expand=True, padx=14)
+        txt.insert(tk.END, notes.strip() or "Описание отсутствует.")
+        txt.config(state=tk.DISABLED)
+
+        btns = ttk.Frame(self)
+        btns.pack(fill=tk.X, padx=14, pady=12)
+        ttk.Button(btns, text="🔄 Обновить и перезапустить", style="Gen.TButton",
+                   command=self._do_update).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=4)
+        ttk.Button(btns, text="Позже", style="Sec.TButton",
+                   command=self._dismiss).pack(side=tk.RIGHT, padx=4)
+
+    def _do_update(self):
+        if update_script_in_place():
+            self.result = "restart"
+        else:
+            messagebox.showerror("Обновление", "Не удалось скачать новую версию.\nПроверьте интернет и права на папку.")
+            self.result = None
+        self.destroy()
+
+    def _dismiss(self):
+        self.result = None
+        self.destroy()
 
 # ================== ПОЛНАЯ БАЗА ВЫЖИВАЮЩИХ (ПРЕДМЕТЫ И АДДОНЫ) ==================
 
@@ -727,7 +824,8 @@ def load_config():
         "addon2_slot_y": "",
         # ВСТАВИТЬ СЮДА ЭТИ ДВЕ СТРОКИ:
         "owned_killers": "",
-        "owned_surv_chars": ""
+        "owned_surv_chars": "",
+        "auto_update": "1"
     }
     for i in range(1, 5):
         config[f"slot{i}_x"] = ""
@@ -861,6 +959,73 @@ class DBDUniversalRandomizer:
         # --- ИНИЦИАЛИЗАЦИЯ ОСТАЛЬНЫХ ВКЛАДОК ---
         self.setup_characters_tab()
         self.setup_coordinates_tab()
+
+        # --- АВТО-ОБНОВЛЕНИЕ ---
+        self._updating = False
+        self.root.title(f"DBD Ultimate Search Randomizer v{APP_VERSION} (SURV & KILLER)")
+        self.root.protocol("WM_DELETE_WINDOW", self.on_app_close)
+        # Первая проверка через 2 секунды после запуска, далее каждые 30 минут
+        self.root.after(2000, self.check_for_updates)
+        self.root.after(UPDATE_CHECK_INTERVAL_MS, self.periodic_update_check)
+
+    def periodic_update_check(self):
+        # Уважаем настройку пользователя из config
+        if self.config.get("auto_update", "1") == "1":
+            self.check_for_updates(silent=True)
+        self.root.after(UPDATE_CHECK_INTERVAL_MS, self.periodic_update_check)
+
+    def check_for_updates(self, silent=False):
+        """Фоновая проверка релизов GitHub. silent=True — не показывать ошибки."""
+        if self._updating:
+            return
+        self._updating = True
+        threading.Thread(target=self._update_worker, args=(silent,), daemon=True).start()
+
+    def _update_worker(self, silent):
+        info = get_latest_release_info()
+        self._updating = False
+        if not info:
+            # Fallback: если релизов в репо ещё нет — сравниваем с APP_VERSION в файле на GitHub
+            try:
+                raw = _http_get(GITHUB_RAW_BASE + "/dbd_randomizer.py").decode("utf-8")
+                import re
+                m = re.search(r'APP_VERSION\s*=\s*"([\d.]+)"', raw)
+                if m and version_tuple(m.group(1)) > version_tuple(APP_VERSION):
+                    self.root.after(0, lambda: self._show_update_dialog("v" + m.group(1),
+                                                                        "Обновление найдено в основном репозитории."))
+            except Exception:
+                pass
+            return
+        tag, notes = info
+        if version_tuple(tag) > version_tuple(APP_VERSION):
+            self.root.after(0, lambda: self._show_update_dialog(tag, notes))
+        elif not silent:
+            self.root.after(0, lambda: messagebox.showinfo(
+                "Обновление", f"У вас уже установлена последняя версия (v{APP_VERSION})."))
+
+    def _show_update_dialog(self, tag, notes):
+        dlg = UpdateDialog(self.root, tag, notes)
+        self.root.wait_window(dlg.top if hasattr(dlg, "top") else dlg)
+        if dlg.result == "restart":
+            self.restart_app()
+
+    def restart_app(self):
+        """Перезапускает скрипт с обновлённым файлом."""
+        try:
+            subprocess.Popen([sys.executable, os.path.abspath(__file__)], cwd=os.path.dirname(os.path.abspath(__file__)))
+        except Exception as e:
+            messagebox.showerror("Перезапуск", f"Обновление скачано, но перезапустить не удалось:\n{e}\n\nЗапустите программу вручную.")
+            return
+        self.root.destroy()
+
+    def on_app_close(self):
+        save_config(self.config)
+        self.root.destroy()
+
+    def toggle_auto_update(self):
+        """Включает/выключает фоновую проверку обновлений и сохраняет настройку."""
+        self.config["auto_update"] = "1" if self.auto_update_var.get() else "0"
+        save_config(self.config)
 
     # ================== МЕТОДЫ ДЛЯ КООРДИНАТ ==================
     def get_coords(self, key):
@@ -999,6 +1164,18 @@ class DBDUniversalRandomizer:
         coord_buttons.pack(fill=tk.X, pady=10)
         ttk.Button(coord_buttons, text="💾 Сохранить координаты", style="Sec.TButton",
                    command=self.save_coordinates).pack(side=tk.LEFT, padx=10, expand=True, fill=tk.X)
+
+        # --- БЛОК АВТО-ОБНОВЛЕНИЯ ---
+        upd_frame = ttk.LabelFrame(self.tab_coords, text=" 🌐 АВТО-ОБНОВЛЕНИЕ ")
+        upd_frame.pack(fill=tk.X, padx=15, pady=10)
+        self.auto_update_var = tk.BooleanVar(value=(self.config.get("auto_update", "1") == "1"))
+        cb_auto = tk.Checkbutton(upd_frame, text="Проверять обновления автоматически (каждые 30 минут)",
+                                 variable=self.auto_update_var, bg="#121212", fg="#e0e0e0",
+                                 selectcolor="#2c2c2c", activebackground="#121212", activeforeground="#ffffff",
+                                 font=("Segoe UI", 10), command=self.toggle_auto_update)
+        cb_auto.pack(anchor=tk.W, padx=8, pady=4)
+        ttk.Button(upd_frame, text="🔍 Проверить обновления сейчас", style="Sec.TButton",
+                   command=lambda: self.check_for_updates(silent=False)).pack(fill=tk.X, padx=8, pady=4)
 
     def save_coordinates(self):
         for key, (ex, ey) in self.coord_entries.items():
@@ -1171,3 +1348,11 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = DBDUniversalRandomizer(root)
     root.mainloop()
+
+
+def main():
+    """Точка входа для pip-установки (запуск командой `dbd-randomizer`)."""
+    root = tk.Tk()
+    DBDUniversalRandomizer(root)
+    root.mainloop()
+    return 0
