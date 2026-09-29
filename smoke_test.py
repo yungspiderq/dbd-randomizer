@@ -56,6 +56,7 @@ def install_fake_tk():
     tk.LEFT = tk.RIGHT = tk.TOP = tk.BOTTOM = "side"
     tk.X = tk.Y = tk.BOTH = tk.NSEW = tk.NW = "fill"
     tk.HORIZONTAL = tk.VERTICAL = "orient"
+    tk.PhotoImage = mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock())
     tk.TclError = Exception
 
     ttk = types.ModuleType("tkinter.ttk")
@@ -933,6 +934,13 @@ class TestCommunityBuildsUI(unittest.TestCase):
         self.app._selected_build = lambda: None
         self.app._show_build_details()
         self.assertEqual(self.app.det_rows[0][1].config.call_args.kwargs["text"], "—")
+
+    def test_maker_combos_start_with_placeholder_icon(self):
+        app = make_app()
+        for cb in list(app.mk_perks) + list(app.mk_addons) + [app.mk_item]:
+            img_kw = cb.icon.config.call_args.kwargs.get("image")
+            self.assertTrue(img_kw not in (None, ""),
+                            "IconCombo создан без плейсхолдера — плитка растянется")
 
     def test_maker_dedupe_perks(self):
         app = make_app()

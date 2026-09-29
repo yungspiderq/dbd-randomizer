@@ -142,6 +142,8 @@ class IconCombo:
         self.btn.pack(side="right", fill="y", padx=(0, 2))
         for w in (self.frame, self.icon, self.text):
             w.bind("<Button-1>", lambda _e: self.toggle())
+        self.set("")          # иначе иконка-лейбл остаётся без картинки и
+                              # height=20 трактуется Tk как 20 СТРОК текста
 
     # -- API ------------------------------------------------------------------
     def get(self):
