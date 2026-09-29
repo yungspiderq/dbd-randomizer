@@ -1160,6 +1160,16 @@ SURVIVOR_PORTRAITS = {
     'Юи Кимура': 'SurvivorYui.png',
 }
 
+KILLER_PORTRAITS = {
+    'Аниматроник': 'K40_TheAnimatronic_Portrait.png',
+    'Гуль': 'K39_TheGhoul_Portrait.png',
+    'Егерь': 'K38_TheHoundmaster_Portrait.png',
+    'Красу': 'K41_TheKrasue_Portrait.png',
+    'Первый': 'K42_TheFirst_Portrait.png',
+    'Правосудие': 'K44_TheJudgment_Portrait.png',
+    'Слэшер': 'K43_TheSlasher_Portrait.png',
+}
+
 POWER_ICONS = {
     'UVX': 'IconPowers_uvx.png',
     'Бензопила': 'IconPowers_chainsaw.png',

@@ -81,3 +81,14 @@ ITEM_RU_EN = {
     "Китайская хлопушка": "Chinese Firecracker", "Новогодняя хлопушка": "Winter Party Starter",
     "Хлопушка третьей годовщины": "Third Year Party Starter",
 }
+
+# Убийцы K38+: портреты лежат отдельными файлами (в спрайт-лист не вошли).
+KILLER_RU_PORTRAIT = {
+    "Егерь": "K38 TheHoundmaster Portrait.png",
+    "Гуль": "K39 TheGhoul Portrait.png",
+    "Аниматроник": "K40 TheAnimatronic Portrait.png",
+    "Красу": "K41 TheKrasue Portrait.png",
+    "Первый": "K42 TheFirst Portrait.png",
+    "Слэшер": "K43 TheSlasher Portrait.png",
+    "Правосудие": "K44 TheJudgment Portrait.png",
+}

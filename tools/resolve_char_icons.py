@@ -28,7 +28,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from char_names_ru_en import SURVIVOR_RU_EN, KILLER_RU_SPRITE, ITEM_RU_EN  # noqa: E402
+from char_names_ru_en import (SURVIVOR_RU_EN, KILLER_RU_SPRITE, ITEM_RU_EN,
+                              KILLER_RU_PORTRAIT)  # noqa: E402
 import dbd_data as DATA                                                      # noqa: E402
 
 API = "https://deadbydaylight.wiki.gg/api.php"
@@ -72,7 +73,9 @@ def stored_file_names():
             return set(json.load(fh))
     out = set()
     for prefix in ("IconPowers", "iconItems", "IconItems", "Survivor",
-                   "T_UI_iconItems", "T_UI_iconPowers", "IconSkills"):
+                   "T_UI_iconItems", "T_UI_iconPowers", "IconSkills",
+                   "K38 ", "K38_", "K39 ", "K39_", "K40 ", "K40_", "K41 ", "K41_",
+                   "K42 ", "K42_", "K43 ", "K43_", "K44 ", "K44_"):
         cont = None
         while True:
             kw = dict(action="query", list="allimages", aiprefix=prefix, ailimit="500")
@@ -115,6 +118,7 @@ def main():
         powers_en[m.group(2).replace("\\'", "'")] = int(m.group(3))
     killers_order = list(DATA.KILLERS)
 
+    killer_ports = dict(KILLER_RU_PORTRAIT)
     power_icons, surv_ports, item_icons = {}, {}, {}
     for en, num in powers_en.items():
         if 1 <= num <= len(killers_order) and en in icons:
@@ -139,14 +143,17 @@ def main():
     ports = {ru: int(ids[sid]) for ru, sid in KILLER_RU_SPRITE.items() if sid in ids}
 
     # проверка существования файлов + подбор написания
-    candidates = list(surv_ports.values()) + list(item_icons.values()) + list(power_icons.values())
+    candidates = (list(surv_ports.values()) + list(item_icons.values())
+                  + list(power_icons.values()) + list(killer_ports.values()))
     resolved = resolve_files(candidates)
     miss = sorted({c for c in candidates if not resolved.get(c)})
     surv_ports = {k: resolved[v] for k, v in surv_ports.items() if resolved.get(v)}
     item_icons = {k: resolved[v] for k, v in item_icons.items() if resolved.get(v)}
     power_icons = {k: resolved[v] for k, v in power_icons.items() if resolved.get(v)}
-    print(f"портретов выживших {len(surv_ports)}, иконок предметов {len(item_icons)}, "
-          f"иконок сил {len(power_icons)}, кадров спрайта {len(ports)}")
+    killer_ports = {k: resolved[v] for k, v in killer_ports.items() if resolved.get(v)}
+    print(f"портретов выживших {len(surv_ports)}, портретов маньяков K38+ {len(killer_ports)}, "
+          f"иконок предметов {len(item_icons)}, иконок сил {len(power_icons)}, "
+          f"кадров спрайта {len(ports)}")
     if miss:
         print("файлы не найдены (пропущены):", miss)
 
@@ -162,7 +169,9 @@ def main():
         fh.write('по мере надобности и кэширует локально (см. IconStore в dbd_icons_store.py).\n"""\n\n')
         fh.write('ICON_BASE = "https://deadbydaylight.wiki.gg/images/"\n\n')
         for name, mapping in (("PERK_ICONS", perks), ("ADDON_ICONS", addons),
-                              ("SURVIVOR_PORTRAITS", surv_ports), ("POWER_ICONS", power_icons),
+                              ("SURVIVOR_PORTRAITS", surv_ports),
+                              ("KILLER_PORTRAITS", killer_ports),
+                              ("POWER_ICONS", power_icons),
                               ("ITEM_ICONS", item_icons)):
             fh.write(f"{name} = {{\n")
             for ru in sorted(mapping):

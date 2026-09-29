@@ -49,8 +49,8 @@ class IconStore:
         if not ICONS:
             return ()
         return (ICONS.PERK_ICONS, getattr(ICONS, "ADDON_ICONS", {}),
-                getattr(ICONS, "SURVIVOR_PORTRAITS", {}), getattr(ICONS, "POWER_ICONS", {}),
-                getattr(ICONS, "ITEM_ICONS", {}))
+                getattr(ICONS, "SURVIVOR_PORTRAITS", {}), getattr(ICONS, "KILLER_PORTRAITS", {}),
+                getattr(ICONS, "POWER_ICONS", {}), getattr(ICONS, "ITEM_ICONS", {}))
 
     @staticmethod
     def _sprite():

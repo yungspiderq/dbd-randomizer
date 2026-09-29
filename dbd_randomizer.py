@@ -211,6 +211,11 @@ class IconCombo:
         sb.pack(side="right", fill="y", pady=6)
         self._rows = {}
 
+        def _wheel(event):
+            canvas.yview_scroll(-1 if getattr(event, "delta", 0) > 0 or
+                                getattr(event, "num", 0) == 4 else 1, "units")
+            return "break"
+
         def fill(needle=""):
             for w in inner.winfo_children():
                 w.destroy()
@@ -225,12 +230,13 @@ class IconCombo:
                 lbl = tk.Label(row, text=v, bg="#151a21", fg="#dfe5ea", anchor="w",
                                font=("Segoe UI", 9))
                 lbl.pack(side="left", fill="x", expand=True, pady=3)
-                photo = self.app._icon_photo(v, 20)
-                if photo is not None:
-                    img.config(image=photo)
+                img.config(image=self.app._icon_photo(v, 20))
                 self._rows[v] = img
                 for w in (row, img, lbl):
                     w.bind("<Button-1>", lambda _e, val=v: self._choose(val))
+                    w.bind("<MouseWheel>", _wheel)
+                    w.bind("<Button-4>", _wheel)
+                    w.bind("<Button-5>", _wheel)
                     w.bind("<Enter>", lambda e, w=row: w.config(bg="#1c232c"))
                     w.bind("<Leave>", lambda e, w=row: w.config(bg="#151a21"))
             canvas.configure(scrollregion=canvas.bbox("all"))
@@ -244,10 +250,6 @@ class IconCombo:
         search.bind("<Down>", lambda _e: "break")
         fill("")
 
-        def _wheel(event):
-            canvas.yview_scroll(-1 if getattr(event, "delta", 0) > 0 or
-                                getattr(event, "num", 0) == 4 else 1, "units")
-            return "break"
         for w in (canvas, inner):
             w.bind("<MouseWheel>", _wheel)
             w.bind("<Button-4>", _wheel)
@@ -273,9 +275,7 @@ class IconCombo:
         if self._value:
             self.set(self._value)
         for name, img in getattr(self, "_rows", {}).items():
-            photo = self.app._icon_photo(name, 20)
-            if photo is not None:
-                img.config(image=photo)
+            img.config(image=self.app._icon_photo(name, 20))
 
 
 class _Input:

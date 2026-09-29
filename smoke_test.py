@@ -288,12 +288,13 @@ class TestIcons(unittest.TestCase):
                   if self.db["killers"][k]["power"] not in icons.POWER_ICONS]
         miss_i = [i for v in self.db["survivor_items"].values() for i in v["items"]
                   if i not in icons.ITEM_ICONS]
-        miss_k = [k for k in self.db["killers"] if k not in icons.KILLER_SPRITE["ports"]]
+        miss_k = [k for k in self.db["killers"]
+                  if k not in icons.KILLER_SPRITE["ports"]
+                  and k not in getattr(icons, "KILLER_PORTRAITS", {})]
         self.assertEqual(miss_s, [])
         self.assertEqual(set(miss_p), {"Одноглазый ужас", "Страх Фазбера", "Плоть без тела"})
         self.assertEqual(set(miss_i), {"Небрежная карта", "Карта с подписями"})
-        self.assertEqual(set(miss_k),
-                         {"Егерь", "Гуль", "Аниматроник", "Красу", "Первый", "Слэшер", "Правосудие"})
+        self.assertEqual(miss_k, [])          # все 44 маньяка с портретами
 
     def test_sprite_filename_and_crop(self):
         import os, tempfile
@@ -326,8 +327,10 @@ class TestIcons(unittest.TestCase):
             self.skipTest("Pillow недоступен")
         have, total = st.stats()
         self.assertEqual(total, len(R.ICONS.PERK_ICONS) + len(R.ICONS.ADDON_ICONS)
-                         + len(R.ICONS.SURVIVOR_PORTRAITS) + len(R.ICONS.POWER_ICONS)
-                         + len(R.ICONS.ITEM_ICONS) + len(R.ICONS.KILLER_SPRITE["ports"]))
+                         + len(R.ICONS.SURVIVOR_PORTRAITS)
+                         + len(getattr(R.ICONS, "KILLER_PORTRAITS", {}))
+                         + len(R.ICONS.POWER_ICONS) + len(R.ICONS.ITEM_ICONS)
+                         + len(R.ICONS.KILLER_SPRITE["ports"]))
         self.assertEqual(have, 0)
 
     def test_store_resolves_addon_icons(self):
