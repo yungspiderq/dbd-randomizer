@@ -1318,11 +1318,11 @@ class App:
         self.lbl_icons.config(text=f"Иконок в кэше: {have} из {total} · "
                                    f"докaчиваются автоматически в {os.path.basename(ICONS_DIR)}/")
 
-    def _icon_photo(self, name):
+    def _icon_photo(self, name, size=ICON_SIZE):
         """PhotoImage иконки: из кэша, иначе заглушка. Ссылки храним в self._photos."""
         if not self.icon_store.enabled or not name or name in (EMPTY, NO_ADDONS):
             return None
-        key = (name, ICON_SIZE)
+        key = (name, size)
         if key in self._photos:
             return self._photos[key]
         try:
@@ -1338,11 +1338,11 @@ class App:
             img = None
         if img is None:
             try:
-                img = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (40, 40, 44, 255))
+                img = Image.new("RGBA", (size, size), (28, 34, 42, 255))
             except Exception:
                 return None
         else:
-            img = img.resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
+            img = img.resize((size, size), Image.LANCZOS)
         try:
             photo = ImageTk.PhotoImage(img)
         except Exception:
@@ -1360,6 +1360,8 @@ class App:
         self._update_icon_hint()
         if self.build:
             self._render_build()
+        self._refresh_char_icons()
+        self._show_build_details()
 
     def download_all_icons(self):
         if not self.icon_store.enabled:
@@ -1385,6 +1387,8 @@ class App:
         self._update_icon_hint()
         if self.build:
             self._render_build()
+        self._refresh_char_icons()
+        self._show_build_details()
 
     # ---- вкладка «Конструктор» ----------------------------------------------
     def _build_maker_tab(self):
@@ -1682,27 +1686,39 @@ class App:
         paned.add(lf_s, weight=1)
         inner_s, _ = self._make_scrolled(lf_s)
 
+        self._char_icons = {}
+        self._lf_k, self._lf_s = lf_k, lf_s
         owned_k = set(self.cfg["owned"].get("killers") or [])
         owned_s = set(self.cfg["owned"].get("survivors") or [])
         for name in sorted(self.db["killers"].keys()):
             var = tk.BooleanVar(value=(name in owned_k) if owned_k else True)
-            self._char_widgets[("K", name)] = (var, self._add_char_cb(inner_k, name, var, "#e5534b"))
+            self._char_widgets[("K", name)] = (var, self._add_char_cb(inner_k, "K", name, var, "#ff7b72"))
         for name in sorted(self.db["survivors"].keys()):
             var = tk.BooleanVar(value=(name in owned_s) if owned_s else True)
-            self._char_widgets[("S", name)] = (var, self._add_char_cb(inner_s, name, var, "#58a6ff"))
+            self._char_widgets[("S", name)] = (var, self._add_char_cb(inner_s, "S", name, var, "#58a6ff"))
+        self._update_char_counts()
+        self._request_icons([n for (_s, n) in self._char_widgets])   # портреты фоном
 
         note = ("Подсказка: если снять все отметки и нажать «Сохранить», при следующем запуске "
                 "снова будут отмечены все.")
         ttk.Label(self.tab_chars, text=note, foreground="#7d8894",
                   font=("Segoe UI", 8, "italic")).pack(pady=(0, 8))
 
-    def _add_char_cb(self, parent, name, var, color):
-        cb = tk.Checkbutton(parent, text=name, variable=var, bg="#0e1116", fg="#dfe5ea",
+    def _add_char_cb(self, parent, side, name, var, color):
+        row = tk.Frame(parent, bg="#0e1116")
+        row.pack(fill="x", padx=4, pady=1)
+        img = tk.Label(row, bg="#0e1116", width=22, height=22)
+        img.pack(side="left", padx=(2, 6))
+        cb = tk.Checkbutton(row, text=name, variable=var, bg="#0e1116", fg="#dfe5ea",
                             selectcolor="#1c232c", activebackground="#0e1116",
                             activeforeground=color, anchor="w", font=("Segoe UI", 10),
-                            highlightthickness=0)
-        cb.pack(fill="x", padx=4, pady=1)
-        return cb
+                            highlightthickness=0, command=self._update_char_counts)
+        cb.pack(side="left", fill="x", expand=True)
+        self._char_icons[(side, name)] = img
+        photo = self._icon_photo(name, 22)
+        if photo is not None:
+            img.config(image=photo)
+        return row
 
     def _apply_char_filter(self):
         """Скрывает неподходящие чекбоксы и заново пакует видимые в алфавитном порядке."""
@@ -2008,7 +2024,6 @@ class App:
                 img.config(image="", text="▢")
             lbl.config(text=f"{i + 1}.  {perk}", fg="#3fb950")
             want.append(perk)
-        self._render_details_icons(want)
         self._request_icons(want + want_addons + want_extra)
 
     def get_coord(self, key):
@@ -2260,6 +2275,8 @@ class App:
             self.builds_tree.tag_configure("killer", foreground="#ff7b72")
             self.builds_tree.tag_configure("survivor", foreground="#79c0ff")
             self.builds_tree.tag_configure("mine", foreground="#e3b341")
+            self.builds_tree.tag_configure("even", background="#151a21")
+            self.builds_tree.tag_configure("odd", background="#12171f")
         except Exception:
             pass
         self.builds_tree.bind("<Double-1>", lambda e: self.copy_selected_build())
@@ -2267,18 +2284,44 @@ class App:
 
         det = ttk.LabelFrame(self.tab_builds, text=" ДЕТАЛИ ВЫБРАННОГО БИЛДА ")
         det.pack(fill="x", padx=10, pady=(0, 5))
-        row = ttk.Frame(det)
-        row.pack(fill="x", padx=10, pady=(5, 0))
-        self.lbl_build_details = ttk.Label(row, text="—", justify="left", font=("Consolas", 9),
-                                           foreground="#e6ebf0")
-        self.lbl_build_details.pack(side="left", anchor="n", pady=5)
-        self.det_icons_frame = tk.Frame(det, bg="#0e1116")
-        self.det_icons_frame.pack(anchor="e", padx=10, pady=5)
-        self.det_icons = []
+        inner = tk.Frame(det, bg="#151a21", highlightbackground="#2a323d",
+                         highlightthickness=1)
+        inner.pack(fill="x", padx=8, pady=8)
+        self.det_stripe = tk.Frame(inner, bg="#e5534b", height=2)
+        self.det_stripe.pack(fill="x")
+        head = tk.Frame(inner, bg="#151a21")
+        head.pack(fill="x", padx=10, pady=(8, 2))
+        self.det_char_img = tk.Label(head, bg="#151a21", width=30, height=30)
+        self.det_char_img.pack(side="left", padx=(0, 8))
+        self.det_title = tk.Label(head, anchor="w", fg="#e6ebf0", bg="#151a21",
+                                  font=("Segoe UI", 11, "bold"))
+        self.det_title.pack(side="left", fill="x", expand=True)
+        self.det_meta = tk.Label(head, anchor="e", fg="#8d99a6", bg="#151a21",
+                                 font=("Segoe UI", 8, "italic"))
+        self.det_meta.pack(side="right")
+        self.det_desc = tk.Label(inner, anchor="w", fg="#8d99a6", bg="#151a21",
+                                 font=("Segoe UI", 9, "italic"), justify="left",
+                                 wraplength=760)
+        self.det_desc.pack(fill="x", padx=10, pady=(0, 4))
+        self.det_rows = []
+        tile = self._tile(inner, wrap=520)
+        tile[0].pack(fill="x", padx=10, pady=2)
+        self.det_rows.append((tile[1], tile[2]))
+        arow = tk.Frame(inner, bg="#151a21")
+        arow.pack(fill="x", padx=10, pady=2)
+        arow.columnconfigure(0, weight=1)
+        arow.columnconfigure(1, weight=1)
+        for i in range(2):
+            tile = self._tile(arow, wrap=250)
+            tile[0].grid(row=0, column=i, sticky="nsew",
+                         padx=(0 if i == 0 else 3, 3 if i == 0 else 0))
+            self.det_rows.append((tile[1], tile[2]))
         for _ in range(4):
-            lbl = tk.Label(self.det_icons_frame, bg="#0e1116", width=ICON_SIZE, height=ICON_SIZE)
-            lbl.pack(side="left", padx=2)
-            self.det_icons.append(lbl)
+            tile = self._tile(inner, wrap=520)
+            tile[0].pack(fill="x", padx=10, pady=2)
+            tile[2].config(fg="#3fb950")
+            self.det_rows.append((tile[1], tile[2]))
+        tk.Frame(inner, bg="#151a21", height=6).pack(fill="x")
 
         sett = ttk.LabelFrame(self.tab_builds, text=" 🔑 НАСТРОЙКА ПУБЛИКАЦИИ ")
         sett.pack(fill="x", padx=10, pady=(0, 6))
@@ -2335,15 +2378,23 @@ class App:
 
         self.root.after(1500, lambda: self.refresh_community_builds(manual=False))
 
-    def _render_details_icons(self, names):
-        if not getattr(self, "det_icons", None):
-            return
-        for lbl, name in zip(self.det_icons, list(names) + [""] * 4):
-            photo = self._icon_photo(name) if name else None
-            if photo is not None:
-                lbl.config(image=photo, text="")
-            else:
-                lbl.config(image="", text="")
+    def _refresh_char_icons(self):
+        """Подставляет портреты в строки вкладки «Персонажи», когда они докачались."""
+        for (_side, _name), lbl in getattr(self, "_char_icons", {}).items():
+            photo = self._icon_photo(_name, 22)
+            lbl.config(image=photo if photo is not None else "", text="")
+
+    def _update_char_counts(self):
+        for side, lf in (("K", getattr(self, "_lf_k", None)),
+                         ("S", getattr(self, "_lf_s", None))):
+            if lf is None:
+                continue
+            total = sum(1 for (s, _n) in self._char_widgets if s == side)
+            on = sum(1 for (s, _n), (var, _w) in self._char_widgets.items()
+                     if s == side and var.get())
+            emoji = "👹" if side == "K" else "👤"
+            name = "МАНЬЯКИ" if side == "K" else "ВЫЖИВАЮЩИЕ"
+            lf.config(text=f" {emoji} {name} · {on}/{total} ")
 
     def _toggle_token_visibility(self):
         self.token_entry.config(show="" if self.show_token_var.get() else "*")
@@ -2419,7 +2470,7 @@ class App:
             side_txt = "👹 Маньяк" if b.get("side") == "KILLER" else "👤 Выживший"
             perks = " | ".join(str(x) for x in b.get("perks", []))
             tag = "mine" if b.get("local") else ("killer" if b.get("side") == "KILLER" else "survivor")
-            tree.insert("", "end", iid=str(i), tags=(tag,),
+            tree.insert("", "end", iid=str(i), tags=(tag, "odd" if i % 2 else "even"),
                         values=(side_txt, b.get("author", "—"), b.get("title") or "—",
                                 b.get("char", "—"), b.get("power_or_item", "—"), perks))
         if selected is not None and tree.exists(selected):
@@ -2437,11 +2488,41 @@ class App:
         return filtered[idx] if 0 <= idx < len(filtered) else None
 
     def _show_build_details(self):
+        pal = self._pal
         b = self._selected_build()
-        self.lbl_build_details.config(text=GH.format_build_text(b) if b else "—")
-        perks = [p for p in (b.get("perks") if b else []) or []][:4]
-        self._render_details_icons(perks)
-        self._request_icons(perks)
+        if not getattr(self, "det_rows", None):
+            return
+        if not b:
+            self.det_title.config(text="Выберите билд в списке", fg=pal["muted"])
+            self.det_meta.config(text="")
+            self.det_desc.config(text="")
+            self.det_char_img.config(image="", text="")
+            for img, txt in self.det_rows:
+                img.config(image="", text="")
+                txt.config(text="—", fg="#56606c")
+            return
+        side = b.get("side", "KILLER")
+        color = pal["killer"] if side == "KILLER" else pal["surv"]
+        self.det_stripe.config(bg=color)
+        self.det_title.config(text=(b.get("title") or b.get("char") or "Билд"), fg=color)
+        self.det_meta.config(text=f"{b.get('author', '—')} · {b.get('date', '')}")
+        self.det_desc.config(text=(b.get("description") or "").strip())
+        photo = self._icon_photo(b.get("char", ""), 30)
+        self.det_char_img.config(image=photo if photo is not None else "",
+                                 text="" if photo is not None else "▢")
+        values = ([b.get("power_or_item", "")] + list(b.get("addons") or [])
+                  + list(b.get("perks") or []))
+        names = [b.get("char", "")]
+        for (img, txt), val in zip(self.det_rows, values + [""] * 7):
+            if not val or val in (EMPTY, NO_ADDONS, "—"):
+                img.config(image="", text="")
+                txt.config(text="—", fg="#56606c")
+                continue
+            ph = self._icon_photo(val, 24)
+            img.config(image=ph if ph is not None else "", text="" if ph is not None else "▢")
+            txt.config(text=val, fg="#dfe5ea")
+            names.append(val)
+        self._request_icons([n for n in names if n])
 
     def copy_selected_build(self):
         b = self._selected_build()

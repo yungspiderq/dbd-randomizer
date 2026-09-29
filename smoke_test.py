@@ -44,13 +44,13 @@ def install_fake_tk():
     tk.StringVar = tk.BooleanVar = tk.IntVar = Var
     tk.Tk = mock.MagicMock()
     tk.Toplevel = mock.MagicMock()
-    tk.Canvas = mock.MagicMock()
-    tk.Text = mock.MagicMock()
-    tk.Label = mock.MagicMock()
-    tk.Checkbutton = mock.MagicMock()
-    tk.Button = mock.MagicMock()
-    tk.Radiobutton = mock.MagicMock()
-    tk.Frame = mock.MagicMock()
+    tk.Canvas = mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock())
+    tk.Text = mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock())
+    tk.Label = mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock())
+    tk.Checkbutton = mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock())
+    tk.Button = mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock())
+    tk.Radiobutton = mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock())
+    tk.Frame = mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock())
     tk.Entry = mock.MagicMock(side_effect=lambda *a, **kw: _fake_entry(kw.get("text", "")))
     tk.END = "end"
     tk.LEFT = tk.RIGHT = tk.TOP = tk.BOTTOM = "side"
@@ -62,7 +62,8 @@ def install_fake_tk():
     for name in ("Style", "Frame", "Label", "Button", "Checkbutton", "Radiobutton",
                  "Entry", "Combobox", "Spinbox", "Notebook", "LabelFrame", "Scrollbar",
                  "Progressbar", "Panedwindow", "Treeview", "Separator", "Menubutton"):
-        setattr(ttk, name, mock.MagicMock())
+        # каждый вызов конструктора виджета даёт НОВЫЙ мок (иначе все Label — один объект)
+        setattr(ttk, name, mock.MagicMock(side_effect=lambda *a, **kw: mock.MagicMock()))
     messagebox = types.ModuleType("tkinter.messagebox")
     messagebox.showinfo = mock.MagicMock()
     messagebox.showerror = mock.MagicMock()
@@ -908,6 +909,30 @@ class TestCommunityBuildsUI(unittest.TestCase):
         kind, payload = self.app.ui_q.get_nowait()
         self.assertEqual(kind, "warn")
         self.assertIn("меньше 4 навыков", payload)
+
+    def test_details_card_fills_rows(self):
+        drain(self.app)
+        self.app._selected_build = lambda: dict(V11_BUILD, title="Онрё",
+                                                description="Описание билда")
+        self.app._show_build_details()
+        self.assertEqual(self.app.det_title.config.call_args.kwargs["text"], "Онрё")
+        self.assertEqual(self.app.det_desc.config.call_args.kwargs["text"], "Описание билда")
+        texts = [txt.config.call_args.kwargs.get("text") for _i, txt in self.app.det_rows]
+        self.assertIn("Шквал ужаса", texts)
+        self.assertIn(V11_BUILD["perks"][0], texts)
+        self.app._selected_build = lambda: None
+        self.app._show_build_details()
+        self.assertEqual(self.app.det_rows[0][1].config.call_args.kwargs["text"], "—")
+
+    def test_char_counts_update(self):
+        app = make_app()
+        var, _w = app._char_widgets[("K", "Охотник")]
+        var.set(False)
+        app._update_char_counts()
+        self.assertIn("43/44", app._lf_k.config.call_args.kwargs["text"])
+        var.set(True)
+        app._update_char_counts()
+        self.assertIn("44/44", app._lf_k.config.call_args.kwargs["text"])
 
     def test_publish_requires_generated_build(self):
         drain(self.app)
