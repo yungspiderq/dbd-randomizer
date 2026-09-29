@@ -474,12 +474,17 @@ class TestPerkModes(unittest.TestCase):
                 self.assertEqual(len((set(b["perks"]) - own) & common), 1, b["perks"])
 
     def test_unique_gives_three_own_plus_foreign_unique(self):
-        for char in list(self.db["killers"])[:12]:
-            b = R.make_killer_build(self.db, [char], perk_mode="unique")
-            own = self._own("KILLER", char)
+        pool = sorted(self.db["killers"])
+        common = set(self.db["killer_common_perks"])
+        seen_chars = set()
+        for _ in range(40):
+            b = R.make_killer_build(self.db, pool, perk_mode="unique")
+            own = self._own("KILLER", b["char"])          # персонаж билда, не цикла
+            seen_chars.add(b["char"])
             self.assertEqual(len(own & set(b["perks"])), 3, b["perks"])
             rest = (set(b["perks"]) - own).pop()
-            self.assertNotIn(rest, self.db["killer_common_perks"], b["perks"])
+            self.assertNotIn(rest, common, b["perks"])    # 4-й — чужой уникальный
+        self.assertGreater(len(seen_chars), 5)
 
     def test_any_mode_draws_from_whole_pool(self):
         import random
@@ -488,14 +493,36 @@ class TestPerkModes(unittest.TestCase):
                  set(R.all_unique_perks(self.db, "KILLER")))
         saw_common = saw_foreign = False
         own = self._own("KILLER", "Каннибал")
+        pool = sorted(self.db["killers"])
         for _ in range(60):
-            b = R.make_killer_build(self.db, ["Каннибал"], perk_mode="any")
+            b = R.make_killer_build(self.db, pool, perk_mode="any")
             self.assertEqual(len(set(b["perks"])), 4)
             self.assertTrue(set(b["perks"]) <= all_k, b["perks"])
             common = set(self.db["killer_common_perks"])
             saw_common = saw_common or bool(set(b["perks"]) & common)
             saw_foreign = saw_foreign or bool(set(b["perks"]) - own - common)
         self.assertTrue(saw_common and saw_foreign, "режим any не перемешивает весь пул")
+
+    def test_modes_respect_checked_characters(self):
+        """Чужие уникальные перки берутся ТОЛЬКО у отмеченных персонажей."""
+        import random
+        random.seed(5)
+        avail = ["Каннибал", "Охотник"]
+        allowed = (set(self.db["killers"]["Каннибал"]["perks"])
+                   | set(self.db["killers"]["Охотник"]["perks"])
+                   | set(self.db["killer_common_perks"]))
+        for mode in ("any", "unique", "mixed"):
+            for _ in range(40):
+                b = R.make_killer_build(self.db, avail, perk_mode=mode)
+                self.assertTrue(set(b["perks"]) <= allowed, (mode, b["perks"]))
+        # выжившие тоже
+        avail_s = ["Мэг Томас", "Дуайт Фэйрфилд"]
+        allowed_s = (set(self.db["survivors"]["Мэг Томас"])
+                     | set(self.db["survivors"]["Дуайт Фэйрфилд"])
+                     | set(self.db["surv_common_perks"]))
+        for _ in range(40):
+            b = R.make_survivor_build(self.db, avail_s, perk_mode="any")
+            self.assertTrue(set(b["perks"]) <= allowed_s, b["perks"])
 
     def test_general_is_common_only(self):
         b = R.make_killer_build(self.db, ["Каннибал"], perk_mode="general")

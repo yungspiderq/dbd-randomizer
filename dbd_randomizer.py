@@ -655,13 +655,17 @@ def all_unique_perks(db, side):
     return list(dict.fromkeys(out))
 
 
-def pick_perks(db, side, char, perk_mode="mixed", respect_owned=False):
+def pick_perks(db, side, char, perk_mode="mixed", respect_owned=False, available=None):
     """Ровно 4 навыка без повторов по режиму:
 
     ``general`` — только общие (есть у всех);
     ``mixed``   — 3 своих уникальных + 1 общий;
     ``unique``  — 3 своих уникальных + 1 уникальный любого другого персонажа;
     ``any``     — полностью случайные 4 из всех навыков стороны.
+
+    ``available`` — список отмеченных персонажей (вкладка «ПЕРСОНАЖИ»): чужие
+    уникальные навыки в режимах ``unique``/``mixed``/``any`` берутся только из
+    него, чтобы генератор не предлагал перки неоткрытых персонажей.
 
     При respect_owned=True каждый подпул фильтруется белым списком, а недостающие
     слоты остаются EMPTY (автоэкипировка не будет тыкать в то, чего нет).
@@ -676,6 +680,16 @@ def pick_perks(db, side, char, perk_mode="mixed", respect_owned=False):
         owned = db.get("owned", {}).get("survivor_perks")
     foreign = [p for p in all_unique_perks(db, side)
                if p not in unique and p not in set(common)]
+    if available is not None:
+        # чужие уникальные берём ТОЛЬКО у отмеченных персонажей
+        src_chars = db["killers"] if side == "KILLER" else db["survivors"]
+        allowed = set()
+        for name in available:
+            entry = src_chars.get(name)
+            if entry is None:
+                continue
+            allowed.update(entry.get("perks", []) if isinstance(entry, dict) else entry)
+        foreign = [p for p in foreign if p in allowed]
 
     if perk_mode == "any":
         stages = ((common + unique + foreign, 4),)
@@ -710,7 +724,7 @@ def make_killer_build(db, available, perk_mode="mixed", respect_owned=False, add
         addons.append(NO_ADDONS if not addons else EMPTY)
 
 
-    perks = pick_perks(db, "KILLER", name, perk_mode, respect_owned)
+    perks = pick_perks(db, "KILLER", name, perk_mode, respect_owned, available)
 
     return {
         "side": "KILLER",
@@ -743,7 +757,7 @@ def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False, a
     while len(addons) < 2:
         addons.append(EMPTY)
 
-    perks = pick_perks(db, "SURVIVOR", name, perk_mode, respect_owned)
+    perks = pick_perks(db, "SURVIVOR", name, perk_mode, respect_owned, available)
 
     return {
         "side": "SURVIVOR",
@@ -1674,11 +1688,21 @@ class App:
         names = self.db["killers"] if self.mk_side_var.get() == "KILLER" else self.db["survivors"]
         return sorted(names)
 
-    def _mk_perk_pool(self):
+    def _mk_perk_pool(self, available=None):
         side = self.mk_side_var.get()
         common = (self.db.get("killer_common_perks") if side == "KILLER"
                   else self.db.get("surv_common_perks"))
-        return list(dict.fromkeys(list(common) + all_unique_perks(self.db, side)))
+        uniques = all_unique_perks(self.db, side)
+        if available is not None:
+            src_chars = self.db["killers"] if side == "KILLER" else self.db["survivors"]
+            allowed = set()
+            for name in available:
+                entry = src_chars.get(name)
+                if entry is None:
+                    continue
+                allowed.update(entry.get("perks", []) if isinstance(entry, dict) else entry)
+            uniques = [p for p in uniques if p in allowed]
+        return list(dict.fromkeys(list(common) + uniques))
 
     def _mk_addon_pool(self):
         side, char = self.mk_side_var.get(), self.mk_char.get()
@@ -1742,7 +1766,8 @@ class App:
         return [self.mk_item] + list(self.mk_addons) + list(self.mk_perks)
 
     def _mk_random_perks(self):
-        for cb, perk in zip(self.mk_perks, _pick(self._mk_perk_pool(), 4)):
+        pool = self._mk_perk_pool(self.available_characters(self.mk_side_var.get()))
+        for cb, perk in zip(self.mk_perks, _pick(pool, 4)):
             cb.set(perk)
 
     def _mk_collect(self):
@@ -2390,7 +2415,8 @@ class App:
             return
         b = self.build
         b["perks"] = pick_perks(self.db, b["side"], b["char"],
-                                self.perk_mode_var.get(), bool(self.owned_var.get()))
+                                self.perk_mode_var.get(), bool(self.owned_var.get()),
+                                self.available_characters(b["side"]))
         self._render_build()
         self.log("Перки перегенерированы: " + ", ".join(b["perks"]))
 
