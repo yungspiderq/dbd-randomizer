@@ -924,6 +924,29 @@ class TestCommunityBuildsUI(unittest.TestCase):
         self.app._show_build_details()
         self.assertEqual(self.app.det_rows[0][1].config.call_args.kwargs["text"], "—")
 
+    def test_maker_dedupe_perks(self):
+        app = make_app()
+        g = app.mk_perks
+        g[0].set("Нетерпимость")
+        g[1].set("Нетерпимость")
+        app._mk_dedupe(g, g[1], "Нетерпимость")
+        self.assertEqual(g[0].get(), "")          # дубль сброшен у ДРУГОГО поля
+        self.assertEqual(g[1].get(), "Нетерпимость")
+
+    def test_maker_rejects_same_addons(self):
+        app = make_app()
+        drain(app)
+        app.mk_char.set("Охотник")
+        app._mk_on_char()
+        app.mk_addons[0].set("Точильный камень")
+        app.mk_addons[1].set("Точильный камень")
+        for cb in app.mk_perks:
+            cb.set("Нетерпимость")
+        app.mk_perks[1].set("Зверская сила")
+        app.mk_perks[2].set("Пугающее присутствие")
+        app.mk_perks[3].set("Шепоты")
+        self.assertIsNone(app._mk_collect())      # одинаковые аддоны отклоняются
+
     def test_char_counts_update(self):
         app = make_app()
         var, _w = app._char_widgets[("K", "Охотник")]

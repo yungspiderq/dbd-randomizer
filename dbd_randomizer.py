@@ -116,6 +116,168 @@ class InputUnavailable(RuntimeError):
     pass
 
 
+class IconCombo:
+    """Комбобокс с иконками: кнопка-поле (иконка + текст) и выпадающий Toplevel
+    со списком «иконка + название» и строкой поиска. Значения уникальны в группе
+    через колбэк on_select. API совместим с тем, что использует конструктор:
+    get()/set()/configure(values=...)/pack()/grid()."""
+
+    def __init__(self, master, app, values=(), on_select=None, width=28):
+        self.app = app
+        self._values = list(values)
+        self._value = ""
+        self.on_select = on_select
+        self._popup = None
+        self.frame = tk.Frame(master, bg="#1c232c", highlightbackground="#2a323d",
+                              highlightthickness=1)
+        self.icon = tk.Label(self.frame, bg="#1c232c", width=20, height=20)
+        self.icon.pack(side="left", padx=(6, 4), pady=3)
+        self.text = tk.Label(self.frame, bg="#1c232c", fg="#dfe5ea", anchor="w",
+                             font=("Segoe UI", 9), width=width, justify="left")
+        self.text.pack(side="left", fill="x", expand=True, pady=3)
+        self.btn = tk.Button(self.frame, text="▾", bg="#1c232c", fg="#8d99a6",
+                             activebackground="#333c48", activeforeground="#e6ebf0",
+                             relief="flat", bd=0, font=("Segoe UI", 8),
+                             command=self.toggle)
+        self.btn.pack(side="right", fill="y", padx=(0, 2))
+        for w in (self.frame, self.icon, self.text):
+            w.bind("<Button-1>", lambda _e: self.toggle())
+
+    # -- API ------------------------------------------------------------------
+    def get(self):
+        return self._value
+
+    def set(self, value):
+        self._value = value or ""
+        self.text.config(text=self._value if self._value else "— не выбрано —",
+                         fg="#dfe5ea" if self._value else "#56606c")
+        photo = self.app._icon_photo(self._value, 20) if self._value else None
+        self.icon.config(image=photo if photo is not None else "",
+                         text="" if photo is not None else "")
+
+    def configure(self, values=None, **kw):
+        if values is not None:
+            self._values = list(values)
+            if self._value and self._value not in self._values:
+                self.set("")
+        if kw:
+            self.frame.config(**kw)
+        return self
+
+    config = configure
+
+    def pack(self, *a, **kw):
+        self.frame.pack(*a, **kw)
+        return self
+
+    def grid(self, *a, **kw):
+        self.frame.grid(*a, **kw)
+        return self
+
+    # -- попап ------------------------------------------------------------------
+    def toggle(self):
+        if self._popup is not None:
+            self._close()
+            return
+        self._open()
+
+    def _open(self):
+        self._close()
+        top = tk.Toplevel(self.app.root)
+        self._popup = top
+        top.overrideredirect(True)
+        top.configure(bg="#2a323d")
+        top.withdraw()
+        self.app.root.update_idletasks()
+        x = self.frame.winfo_rootx()
+        y = self.frame.winfo_rooty() + self.frame.winfo_height() + 2
+        top.geometry(f"340x300+{x}+{y}")
+        top.deiconify()
+
+        search = tk.Entry(top, bg="#1c232c", fg="#e6ebf0", insertbackground="#e6ebf0",
+                          bd=0, relief="flat", highlightthickness=1,
+                          highlightbackground="#2a323d", font=("Segoe UI", 9))
+        search.pack(fill="x", padx=6, pady=6)
+        search.focus_set()
+
+        canvas = tk.Canvas(top, bg="#151a21", highlightthickness=0, bd=0)
+        sb = ttk.Scrollbar(top, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg="#151a21")
+        win = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(0, 6))
+        sb.pack(side="right", fill="y", pady=6)
+        self._rows = {}
+
+        def fill(needle=""):
+            for w in inner.winfo_children():
+                w.destroy()
+            self._rows.clear()
+            needle = _norm(needle)
+            shown = [v for v in self._values if not needle or needle in _norm(v)]
+            for v in shown:
+                row = tk.Frame(inner, bg="#151a21")
+                row.pack(fill="x")
+                img = tk.Label(row, bg="#151a21", width=20, height=20)
+                img.pack(side="left", padx=(6, 6), pady=3)
+                lbl = tk.Label(row, text=v, bg="#151a21", fg="#dfe5ea", anchor="w",
+                               font=("Segoe UI", 9))
+                lbl.pack(side="left", fill="x", expand=True, pady=3)
+                photo = self.app._icon_photo(v, 20)
+                if photo is not None:
+                    img.config(image=photo)
+                self._rows[v] = img
+                for w in (row, img, lbl):
+                    w.bind("<Button-1>", lambda _e, val=v: self._choose(val))
+                    w.bind("<Enter>", lambda e, w=row: w.config(bg="#1c232c"))
+                    w.bind("<Leave>", lambda e, w=row: w.config(bg="#151a21"))
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            if shown:
+                self.app._request_icons(shown)
+
+        def on_key(_e=None):
+            fill(search.get())
+        search.bind("<KeyRelease>", on_key)
+        search.bind("<Escape>", lambda _e: self._close())
+        search.bind("<Down>", lambda _e: "break")
+        fill("")
+
+        def _wheel(event):
+            canvas.yview_scroll(-1 if getattr(event, "delta", 0) > 0 or
+                                getattr(event, "num", 0) == 4 else 1, "units")
+            return "break"
+        for w in (canvas, inner):
+            w.bind("<MouseWheel>", _wheel)
+            w.bind("<Button-4>", _wheel)
+            w.bind("<Button-5>", _wheel)
+        top.bind("<FocusOut>", lambda _e: self._close())
+
+    def _choose(self, value):
+        self._close()
+        self.set(value)
+        if self.on_select:
+            self.on_select(self, value)
+
+    def _close(self):
+        if self._popup is not None:
+            try:
+                self._popup.destroy()
+            except Exception:
+                pass
+            self._popup = None
+
+    def refresh_icon(self):
+        """Вызывается, когда иконки докачались фоном."""
+        if self._value:
+            self.set(self._value)
+        for name, img in getattr(self, "_rows", {}).items():
+            photo = self.app._icon_photo(name, 20)
+            if photo is not None:
+                img.config(image=photo)
+
+
 class _Input:
     def __init__(self):
         self.pyautogui = None
@@ -1362,6 +1524,8 @@ class App:
             self._render_build()
         self._refresh_char_icons()
         self._show_build_details()
+        for cb in self._mk_combos():
+            cb.refresh_icon()
 
     def download_all_icons(self):
         if not self.icon_store.enabled:
@@ -1389,6 +1553,8 @@ class App:
             self._render_build()
         self._refresh_char_icons()
         self._show_build_details()
+        for cb in self._mk_combos():
+            cb.refresh_icon()
 
     # ---- вкладка «Конструктор» ----------------------------------------------
     def _build_maker_tab(self):
@@ -1455,16 +1621,17 @@ class App:
         self.mk_cat.pack(side="left", padx=4)
         self.mk_cat.bind("<<ComboboxSelected>>", lambda e: self._mk_on_cat())
         ttk.Label(self.mk_row_item, text="Предмет:").pack(side="left", padx=(10, 2))
-        self.mk_item = ttk.Combobox(self.mk_row_item, state="readonly", width=26)
+        self.mk_item = IconCombo(self.mk_row_item, self, width=24)
         self.mk_item.pack(side="left", padx=4)
-        self.mk_item.bind("<<ComboboxSelected>>", lambda e: self._mk_on_cat())
 
         self.mk_row_addons = ttk.Frame(mk_right)
         self.mk_row_addons.grid(row=0, column=0, sticky="ew", pady=2)
         ttk.Label(self.mk_row_addons, text="Аддоны:", width=10, anchor="w").pack(side="left")
         self.mk_addons = []
         for _ in range(2):
-            cb = ttk.Combobox(self.mk_row_addons, width=28)
+            cb = IconCombo(self.mk_row_addons, self, width=24,
+                           on_select=lambda src_cb, _v, g=None: self._mk_dedupe(
+                               self.mk_addons if g is None else g, src_cb, _v))
             cb.pack(side="left", padx=4)
             self.mk_addons.append(cb)
 
@@ -1476,7 +1643,8 @@ class App:
             prow = ttk.Frame(mk_perk_box)
             prow.pack(fill="x", padx=8, pady=2)
             ttk.Label(prow, text=f"Навык {i + 1}:", width=10, anchor="w").pack(side="left")
-            cb = ttk.Combobox(prow, width=44)
+            cb = IconCombo(prow, self, width=38,
+                           on_select=lambda src_cb, _v: self._mk_dedupe(self.mk_perks, src_cb, _v))
             cb.pack(side="left", padx=4)
             self.mk_perks.append(cb)
 
@@ -1553,6 +1721,17 @@ class App:
             if cur not in pool:
                 cb.set("")
 
+    def _mk_dedupe(self, group, src, value):
+        """Не даёт выбрать один и тот же перк/аддон дважды: дубли сбрасываются."""
+        if not value:
+            return
+        for other in group:
+            if other is not src and other.get() == value:
+                other.set("")
+
+    def _mk_combos(self):
+        return [self.mk_item] + list(self.mk_addons) + list(self.mk_perks)
+
     def _mk_random_perks(self):
         for cb, perk in zip(self.mk_perks, _pick(self._mk_perk_pool(), 4)):
             cb.set(perk)
@@ -1575,6 +1754,9 @@ class App:
                                    "Заполните 4 РАЗНЫХ навыка (или нажмите «🎲 Случайные перки»).")
             return None
         addons = [cb.get().strip() or EMPTY for cb in self.mk_addons]
+        if addons[0] != EMPTY and addons[0] == addons[1]:
+            messagebox.showwarning("Конструктор", "Аддоны не должны повторяться.")
+            return None
         return {
             "side": side,
             "char": char,
@@ -2226,8 +2408,37 @@ class App:
             messagebox.showerror("Буфер обмена", str(exc))
 
     # ------------------------------------------------------- билды сообщества --
+    def _bind_wheel_region(self, region, canvas):
+        """Колесо мыши над любой частью региона листает страницу."""
+        def _wheel(event):
+            canvas.yview_scroll(-1 if getattr(event, "delta", 0) > 0 or
+                                getattr(event, "num", 0) == 4 else 1, "units")
+            return "break"
+
+        def walk(w):
+            w.bind("<MouseWheel>", _wheel)
+            w.bind("<Button-4>", _wheel)
+            w.bind("<Button-5>", _wheel)
+            for c in w.winfo_children():
+                walk(c)
+        walk(region)
+        for w in (canvas, region):
+            w.bind("<MouseWheel>", _wheel)
+            w.bind("<Button-4>", _wheel)
+            w.bind("<Button-5>", _wheel)
+
     def _build_builds_tab(self):
-        top_bar = ttk.Frame(self.tab_builds)
+        page = tk.Canvas(self.tab_builds, bg="#0e1116", highlightthickness=0, bd=0)
+        psb = ttk.Scrollbar(self.tab_builds, orient="vertical", command=page.yview)
+        page_inner = tk.Frame(page, bg="#0e1116")
+        win = page.create_window((0, 0), window=page_inner, anchor="nw")
+        page_inner.bind("<Configure>", lambda e: page.configure(scrollregion=page.bbox("all")))
+        page.bind("<Configure>", lambda e: page.itemconfigure(win, width=e.width))
+        page.configure(yscrollcommand=psb.set)
+        page.pack(side="left", fill="both", expand=True)
+        psb.pack(side="right", fill="y")
+        self._builds_page = page_inner
+        top_bar = ttk.Frame(page_inner)
         top_bar.pack(fill="x", padx=10, pady=(8, 2))
         ttk.Button(top_bar, text="🔄 Обновить список",
                    command=lambda: self.refresh_community_builds(manual=True)).pack(side="left")
@@ -2239,7 +2450,7 @@ class App:
                                          font=("Segoe UI", 9, "italic"))
         self.lbl_builds_info.pack(side="right")
 
-        filt = ttk.Frame(self.tab_builds)
+        filt = ttk.Frame(page_inner)
         filt.pack(fill="x", padx=10, pady=2)
         ttk.Label(filt, text="Фильтр:").pack(side="left")
         self.builds_filter_var = tk.StringVar(value="ВСЕ")
@@ -2255,11 +2466,11 @@ class App:
         self.builds_search_entry.pack(side="left")
         self.builds_search_entry.bind("<KeyRelease>", lambda e: self._render_builds_list())
 
-        list_frame = ttk.Frame(self.tab_builds)
-        list_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        list_frame = ttk.Frame(page_inner)
+        list_frame.pack(fill="x", padx=10, pady=5)
         self.builds_tree = ttk.Treeview(list_frame,
                                         columns=("side", "author", "title", "char", "main", "perks"),
-                                        show="headings", height=12)
+                                        show="headings", height=9)
         for col, text, width, anch in (("side", "Сторона", 84, "center"), ("author", "Автор", 96, "w"),
                                        ("title", "Название", 130, "w"),
                                        ("char", "Персонаж", 130, "w"),
@@ -2282,7 +2493,7 @@ class App:
         self.builds_tree.bind("<Double-1>", lambda e: self.copy_selected_build())
         self.builds_tree.bind("<<TreeviewSelect>>", lambda e: self._show_build_details())
 
-        det = ttk.LabelFrame(self.tab_builds, text=" ДЕТАЛИ ВЫБРАННОГО БИЛДА ")
+        det = ttk.LabelFrame(page_inner, text=" ДЕТАЛИ ВЫБРАННОГО БИЛДА ")
         det.pack(fill="x", padx=10, pady=(0, 5))
         inner = tk.Frame(det, bg="#151a21", highlightbackground="#2a323d",
                          highlightthickness=1)
@@ -2323,7 +2534,7 @@ class App:
             self.det_rows.append((tile[1], tile[2]))
         tk.Frame(inner, bg="#151a21", height=6).pack(fill="x")
 
-        sett = ttk.LabelFrame(self.tab_builds, text=" 🔑 НАСТРОЙКА ПУБЛИКАЦИИ ")
+        sett = ttk.LabelFrame(page_inner, text=" 🔑 НАСТРОЙКА ПУБЛИКАЦИИ ")
         sett.pack(fill="x", padx=10, pady=(0, 6))
         r1 = ttk.Frame(sett)
         r1.pack(fill="x", padx=8, pady=4)
@@ -2376,6 +2587,14 @@ class App:
                            "для чтения списка билдов токен не требуется.",
                   font=("Segoe UI", 8, "italic"), foreground="#8d99a6", justify="left").pack(side="left", padx=12)
 
+        self._bind_wheel_region(page_inner, page)
+        self.builds_tree.bind("<MouseWheel>", lambda e: (
+            self.builds_tree.yview_scroll(-1 if getattr(e, "delta", 0) > 0 or
+                                          getattr(e, "num", 0) == 4 else 1, "units"),
+            "break")[1])
+        for seq in ("<Button-4>", "<Button-5>"):
+            self.builds_tree.bind(seq, lambda e: (
+                self.builds_tree.yview_scroll(-1 if e.num == 4 else 1, "units"), "break")[1])
         self.root.after(1500, lambda: self.refresh_community_builds(manual=False))
 
     def _refresh_char_icons(self):
