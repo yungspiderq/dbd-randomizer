@@ -296,13 +296,17 @@ def load_firebase_builds(base=FIREBASE_BASE_DEFAULT, node=FIREBASE_NODE):
         data = json.loads(raw.decode("utf-8"))
     except Exception:
         return None
-    if not data:
+    return _parse_firebase(data)
+
+
+def _parse_firebase(data):
+    """Сторонний мусор (служебные/тестовые записи без id/char) в список не попадает."""
+    if not data or not isinstance(data, dict):
         return []
-    if isinstance(data, dict):
-        items = [v for v in data.values() if isinstance(v, dict)]
-        items.sort(key=lambda b: b.get("id", ""))
-        return items[::-1]                            # свежие сверху
-    return []
+    items = [v for v in data.values()
+             if isinstance(v, dict) and v.get("id") and v.get("char")]
+    items.sort(key=lambda b: str(b.get("id", "")))
+    return items[::-1]                                # свежие сверху
 
 
 def publish_build_firebase(build, base=FIREBASE_BASE_DEFAULT, node=FIREBASE_NODE, tries=2):

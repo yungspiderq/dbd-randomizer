@@ -347,6 +347,17 @@ class TestBuildPassport(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("не настроен", msg)
 
+    def test_parse_firebase_drops_garbage(self):
+        data = {"a": {"id": "1", "char": "Охотник"},
+                "b": {"author": "selftest", "char": "test"},      # без id — мусор
+                "c": {"id": "2"},                                  # без char — мусор
+                "d": "str",
+                "e": {"id": "0", "char": "Мэг Томас"}}
+        got = R.GH._parse_firebase(data)
+        self.assertEqual([b["id"] for b in got], ["1", "0"])       # свежие сверху по id
+        self.assertEqual(R.GH._parse_firebase(None), [])
+        self.assertEqual(R.GH._parse_firebase([1, 2]), [])
+
     def test_load_firebase_offline_is_none(self):
         self.assertIsNone(R.GH.load_firebase_builds(base="http://127.0.0.1:9"))
         self.assertIsNone(R.GH.load_firebase_builds(base=""))
