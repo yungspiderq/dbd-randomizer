@@ -728,12 +728,12 @@ class CoordinateGrabber:
         self.top = tk.Toplevel(parent)
         self.top.title(title)
         self.top.geometry("330x130")
-        self.top.configure(bg="#1e1e1e")
+        self.top.configure(bg="#151a21")
         self.top.attributes("-topmost", True)
         self.top.resizable(False, False)
         tk.Label(self.top, text="🎯 Наведите мышь на нужную точку\nи кликните ЛКМ в этом окне.\nEsc — отмена",
-                 bg="#1e1e1e", fg="#e0e0e0", font=("Segoe UI", 10), justify="center").pack(pady=10)
-        self.lbl = tk.Label(self.top, text="x: —   y: —", bg="#1e1e1e", fg="#ff9500",
+                 bg="#151a21", fg="#e6ebf0", font=("Segoe UI", 10), justify="center").pack(pady=10)
+        self.lbl = tk.Label(self.top, text="x: —   y: —", bg="#151a21", fg="#e5534b",
                             font=("Consolas", 11, "bold"))
         self.lbl.pack(pady=2)
         self.top.bind("<Button-1>", self._on_click)
@@ -778,25 +778,25 @@ class UpdateDialog:
         self.top = tk.Toplevel(parent)
         self.top.title(f"Доступно обновление {upd.get('tag', '')}")
         self.top.geometry("620x520")
-        self.top.configure(bg="#1e1e1e")
+        self.top.configure(bg="#151a21")
         self.top.attributes("-topmost", True)
         self.top.transient(parent)
         self.top.grab_set()
 
         ttk.Label(self.top, text=f"Установлена v{APP_VERSION} → доступна {upd.get('tag', '')}",
-                  font=("Segoe UI", 11, "bold"), foreground="#ff9500").pack(pady=(12, 4))
+                  font=("Segoe UI", 11, "bold"), foreground="#e5534b").pack(pady=(12, 4))
         ttk.Label(self.top, text=f"Источник: {GH.GITHUB_REPO} @ {upd.get('ref', '')}",
-                  font=("Segoe UI", 8), foreground="#8e8e93").pack()
+                  font=("Segoe UI", 8), foreground="#8d99a6").pack()
 
-        notes = tk.Text(self.top, height=8, bg="#2c2c2c", fg="#e0e0e0", relief="flat",
+        notes = tk.Text(self.top, height=8, bg="#2a323d", fg="#e6ebf0", relief="flat",
                         wrap="word", font=("Segoe UI", 10))
         notes.pack(fill="both", expand=True, padx=14, pady=8)
         notes.insert("end", (upd.get("notes") or "").strip() or "Описание отсутствует.")
         notes.configure(state="disabled")
 
         ttk.Label(self.top, text="Будут заменены файлы (старые сохранятся как .bak):",
-                  font=("Segoe UI", 9, "bold"), foreground="#e0e0e0").pack(anchor="w", padx=16)
-        rows = tk.Text(self.top, height=len(info) + 1, bg="#232323", fg="#9be29b", relief="flat",
+                  font=("Segoe UI", 9, "bold"), foreground="#e6ebf0").pack(anchor="w", padx=16)
+        rows = tk.Text(self.top, height=len(info) + 1, bg="#1c232c", fg="#7ee2a8", relief="flat",
                        font=("Consolas", 9))
         rows.pack(fill="x", padx=14, pady=(2, 8))
         for item in info:
@@ -863,7 +863,7 @@ class App:
 
         _set_dpi_awareness()
         root.title(f"DBD Ultimate Search Randomizer — SURV & KILLER v{APP_VERSION}")
-        root.configure(bg="#121212")
+        root.configure(bg="#0e1116")
         root.geometry("1080x780")
         root.minsize(900, 620)
 
@@ -894,96 +894,127 @@ class App:
 
     # ---------------------------------------------------------------- стиль --
     def _setup_style(self):
+        """Дизайн-система v2.6: тёмный «туман», кровавый акцент, боковая навигация."""
         style = ttk.Style(self.root)
         try:
             style.theme_use("clam")          # «default» на Windows игнорирует цвета
         except Exception:
             pass
-        bg, fg, acc = "#121212", "#e6e6e6", "#ff9500"
-        style.configure(".", background=bg, foreground=fg, font=("Segoe UI", 10), bordercolor="#2c2c2c")
+        bg, panel, surface = "#0e1116", "#151a21", "#1c232c"
+        line, fg, muted = "#2a323d", "#e6ebf0", "#8d99a6"
+        acc, killer, surv = "#e5534b", "#ff7b72", "#58a6ff"
+        ok, warn, danger = "#3fb950", "#e3b341", "#f85149"
+        F = "Segoe UI"
+        style.configure(".", background=bg, foreground=fg, font=(F, 10), bordercolor=line)
         style.configure("TLabel", background=bg, foreground=fg)
+        style.configure("Muted.TLabel", background=bg, foreground=muted, font=(F, 9))
+        style.configure("Head.TLabel", background=bg, foreground=fg, font=(F, 13, "bold"))
+        style.configure("Panel.TLabel", background=panel, foreground=fg)
+        style.configure("PanelMuted.TLabel", background=panel, foreground=muted, font=(F, 9))
         style.configure("TFrame", background=bg)
-        style.configure("TLabelframe", background=bg, bordercolor="#2c2c2c")
-        style.configure("TLabelframe.Label", background=bg, foreground=acc, font=("Segoe UI", 10, "bold"))
-        style.configure("TNotebook", background=bg, borderwidth=0)
-        style.configure("TNotebook.Tab", background="#232323", foreground="#9a9a9a", padding=(14, 6))
-        style.map("TNotebook.Tab", background=[("selected", acc)], foreground=[("selected", "#121212")])
-        style.configure("TCheckbutton", background=bg, foreground=fg)
-        style.map("TCheckbutton", background=[("active", bg)])
-        style.configure("TRadiobutton", background=bg, foreground=fg)
-        style.map("TRadiobutton", background=[("active", bg)])
-        style.configure("TButton", background="#2c2c2c", foreground="#ffffff", padding=5)
-        style.map("TButton", background=[("active", "#3a3a3a")])
-        style.configure("Gen.TButton", background=acc, foreground="#121212",
-                        font=("Segoe UI", 12, "bold"), padding=10)
-        style.map("Gen.TButton", background=[("active", "#ffb04d"), ("disabled", "#4a3a20")])
-        style.configure("Equip.TButton", background="#34c759", foreground="#0d1a10",
-                        font=("Segoe UI", 11, "bold"), padding=9)
-        style.map("Equip.TButton", background=[("active", "#4cd964"), ("disabled", "#24402c")])
-        style.configure("Stop.TButton", background="#ff3b30", foreground="#1a0d0c",
-                        font=("Segoe UI", 11, "bold"), padding=9)
-        style.map("Stop.TButton", background=[("active", "#ff6a5f")])
-        style.configure("Vertical.TScrollbar", background="#2c2c2c", troughcolor="#161616",
-                        bordercolor="#161616", arrowcolor="#9a9a9a", lightcolor="#2c2c2c",
-                        darkcolor="#2c2c2c", gripcolor="#3a3a3a")
-        style.configure("Horizontal.TScrollbar", background="#2c2c2c", troughcolor="#161616",
-                        bordercolor="#161616", arrowcolor="#9a9a9a", lightcolor="#2c2c2c",
-                        darkcolor="#2c2c2c", gripcolor="#3a3a3a")
-        style.map("Vertical.TScrollbar", background=[("active", "#3a3a3a"), ("disabled", "#232323")])
-        style.map("Horizontal.TScrollbar", background=[("active", "#3a3a3a"), ("disabled", "#232323")])
-        # Поля ввода: у clam свой белый fieldbackground — гасим явно.
-        style.configure("TEntry", fieldbackground="#232323", foreground="#ffffff",
-                        insertcolor="#ffffff", bordercolor="#3a3a3a", lightcolor="#3a3a3a",
-                        darkcolor="#3a3a3a", padding=3)
-        style.map("TEntry", fieldbackground=[("focus", "#2a2a2a"), ("disabled", "#1c1c1c")],
-                  bordercolor=[("focus", acc)], foreground=[("disabled", "#6e6e73")])
-        style.configure("TCombobox", fieldbackground="#232323", foreground="#ffffff",
-                        arrowcolor=acc, bordercolor="#3a3a3a", lightcolor="#3a3a3a",
-                        darkcolor="#3a3a3a", padding=3)
-        style.map("TCombobox", fieldbackground=[("readonly", "#232323"), ("focus", "#2a2a2a")],
-                  arrowcolor=[("focus", "#ffb04d")])
-        self.root.option_add("*TCombobox*Listbox.background", "#232323")
-        self.root.option_add("*TCombobox*Listbox.foreground", "#e6e6e6")
+        style.configure("Panel.TFrame", background=panel)
+        style.configure("TLabelframe", background=panel, bordercolor=line, relief="flat")
+        style.configure("TLabelframe.Label", background=panel, foreground=muted,
+                        font=(F, 9, "bold"))
+        # Навигация слева: notebook с вертикальными вкладками
+        style.configure("TNotebook", background=bg, borderwidth=0, tabmargins=(0, 8, 8, 0))
+        style.configure("TNotebook.Tab", background=bg, foreground=muted,
+                        padding=(16, 12), font=(F, 10, "bold"), borderwidth=0)
+        style.map("TNotebook.Tab",
+                  background=[("selected", surface), ("active", "#161b22")],
+                  foreground=[("selected", fg), ("active", fg)])
+        style.configure("TCheckbutton", background=panel, foreground=fg, font=(F, 10))
+        style.map("TCheckbutton", background=[("active", panel)],
+                  indicatorcolor=[("selected", acc), ("!selected", "#39424e")])
+        style.configure("TRadiobutton", background=panel, foreground=fg, font=(F, 10))
+        style.map("TRadiobutton", background=[("active", panel)],
+                  indicatorcolor=[("selected", acc), ("!selected", "#39424e")])
+        style.configure("TButton", background=surface, foreground=fg, padding=(10, 6),
+                        bordercolor=line, font=(F, 10))
+        style.map("TButton", background=[("active", "#333c48"), ("disabled", "#161b22")],
+                  foreground=[("disabled", "#56606c")])
+        style.configure("Gen.TButton", background=acc, foreground="#ffffff",
+                        font=(F, 12, "bold"), padding=(14, 10), bordercolor=acc)
+        style.map("Gen.TButton", background=[("active", "#f0716a"), ("disabled", "#4d2622")],
+                  foreground=[("disabled", "#8d99a6")])
+        style.configure("Equip.TButton", background=ok, foreground="#0f2b18",
+                        font=(F, 11, "bold"), padding=(12, 8), bordercolor=ok)
+        style.map("Equip.TButton", background=[("active", "#56d364"), ("disabled", "#1f4d2e")])
+        style.configure("Stop.TButton", background="#2b1110", foreground=danger,
+                        font=(F, 11, "bold"), padding=(12, 8), bordercolor=danger)
+        style.map("Stop.TButton", background=[("active", "#3d1512")])
+        # Поля ввода
+        for name in ("TEntry", "TCombobox", "TSpinbox"):
+            style.configure(name, fieldbackground=surface, foreground=fg,
+                            insertcolor=fg, bordercolor=line, lightcolor=line,
+                            darkcolor=line, padding=(8, 5), arrowcolor=muted)
+            style.map(name, fieldbackground=[("focus", "#202834"), ("disabled", "#161b22")],
+                      bordercolor=[("focus", acc)],
+                      foreground=[("disabled", "#56606c")])
+        self.root.option_add("*TCombobox*Listbox.background", surface)
+        self.root.option_add("*TCombobox*Listbox.foreground", fg)
         self.root.option_add("*TCombobox*Listbox.selectBackground", acc)
-        self.root.option_add("*TCombobox*Listbox.selectForeground", "#121212")
-        style.configure("TSpinbox", fieldbackground="#232323", foreground="#ffffff",
-                        arrowcolor=acc, bordercolor="#3a3a3a")
-        # Список билдов сообщества: Treeview в clam по умолчанию белый.
-        style.configure("Treeview", background="#161616", fieldbackground="#161616",
-                        foreground="#e6e6e6", bordercolor="#2c2c2c", lightcolor="#2c2c2c",
-                        darkcolor="#2c2c2c", rowheight=26, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background="#232323", foreground="#e6e6e6",
-                        bordercolor="#2c2c2c", relief="flat", font=("Segoe UI", 9, "bold"))
-        style.map("Treeview", background=[("selected", "#3a2a12")],
-                  foreground=[("selected", "#ffd60a")])
-        style.map("Treeview.Heading", background=[("active", "#2c2c2c")])
-        style.configure("TProgressbar", troughcolor="#232323", background=acc,
-                        bordercolor="#232323", lightcolor=acc, darkcolor=acc)
-        style.configure("Horizontal.TProgressbar", troughcolor="#232323", background=acc)
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+        # Список билдов сообщества
+        style.configure("Treeview", background=panel, fieldbackground=panel, foreground=fg,
+                        bordercolor=line, lightcolor=line, darkcolor=line,
+                        rowheight=30, font=(F, 9))
+        style.configure("Treeview.Heading", background=surface, foreground=muted,
+                        bordercolor=line, relief="flat", font=(F, 9, "bold"))
+        style.map("Treeview", background=[("selected", "#26364a")],
+                  foreground=[("selected", "#79c0ff")])
+        style.map("Treeview.Heading", background=[("active", "#232b36")])
+        # Полосы прокрутки и прогресс
+        for orient in ("Vertical", "Horizontal"):
+            style.configure(f"{orient}.TScrollbar", background=surface, troughcolor=bg,
+                            bordercolor=bg, arrowcolor=muted, lightcolor=surface,
+                            darkcolor=surface, gripcolor="#39424e")
+            style.map(f"{orient}.TScrollbar",
+                      background=[("active", "#39424e"), ("disabled", "#161b22")])
+        style.configure("TProgressbar", troughcolor=surface, background=acc,
+                        bordercolor=surface, lightcolor=acc, darkcolor=acc)
+        style.configure("Horizontal.TProgressbar", troughcolor=surface, background=acc)
         style.configure("TPanedwindow", background=bg)
-        style.configure("Sash", sashthickness=8, gripcolor="#3a3a3a", background="#2c2c2c")
-        style.configure("TSeparator", background="#2c2c2c")
-        style.configure("TMenubutton", background=bg, foreground=fg, arrowcolor=acc)
-        style.configure("Toolbutton", background="#2c2c2c", foreground="#ffffff")
-        style.map("Toolbutton", background=[("active", "#3a3a3a")])
+        style.configure("Sash", sashthickness=8, gripcolor="#39424e", background=line)
+        style.configure("TSeparator", background=line)
+        style.configure("TMenubutton", background=bg, foreground=fg, arrowcolor=muted)
+        style.configure("Toolbutton", background=surface, foreground=fg)
+        style.map("Toolbutton", background=[("active", "#333c48")])
+        self._pal = dict(bg=bg, panel=panel, surface=surface, line=line, fg=fg,
+                         muted=muted, acc=acc, killer=killer, surv=surv,
+                         ok=ok, warn=warn, danger=danger)
 
     # ------------------------------------------------------------- интерфейс --
     def _build_ui(self):
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
 
-        # --- переключатель стороны -------------------------------------------
+        # --- шапка: лого, название, переключатель стороны --------------------
+        pal = self._pal
+        head = tk.Frame(self.root, bg=pal["panel"], height=58,
+                        highlightbackground=pal["line"], highlightthickness=1)
+        head.grid(row=0, column=0, sticky="ew")
+        head.grid_propagate(False)
+        tk.Label(head, text="☠", bg=pal["panel"], fg=pal["acc"],
+                 font=("Segoe UI", 20, "bold")).pack(side="left", padx=(16, 0))
+        ttl = tk.Frame(head, bg=pal["panel"])
+        ttl.pack(side="left", padx=(10, 0))
+        tk.Label(ttl, text="DBD ULTIMATE SEARCH RANDOMIZER", bg=pal["panel"],
+                 fg=pal["fg"], font=("Segoe UI", 11, "bold"), anchor="w").pack(anchor="w")
+        tk.Label(ttl, text=f"SURV & KILLER · v{APP_VERSION}", bg=pal["panel"],
+                 fg=pal["muted"], font=("Segoe UI", 8), anchor="w").pack(anchor="w")
         self.mode_var = tk.StringVar(value=self.cfg["options"].get("side", "KILLER"))
-        top = ttk.Frame(self.root)
-        top.grid(row=0, column=0, sticky="ew", padx=12, pady=(8, 2))
-        ttk.Label(top, text="СТОРОНА:", font=("Segoe UI", 10, "bold")).pack(side="left")
-        for text, value, color in (("👹 МАНЬЯКИ", "KILLER", "#ff6b60"),
-                                   ("👤 ВЫЖИВАЮЩИЕ", "SURVIVOR", "#5ac8fa")):
-            rb = tk.Radiobutton(top, text=text, variable=self.mode_var, value=value,
-                                bg="#121212", fg=color, selectcolor="#1c1c1e",
-                                activebackground="#121212", activeforeground=color,
-                                font=("Segoe UI", 10, "bold"), command=self._on_mode_change)
-            rb.pack(side="left", padx=12)
+        seg = tk.Frame(head, bg=pal["panel"])
+        seg.pack(side="right", padx=16)
+        for text, value, color in (("👹 МАНЬЯКИ", "KILLER", pal["killer"]),
+                                   ("👤 ВЫЖИВАЮЩИЕ", "SURVIVOR", pal["surv"])):
+            rb = tk.Radiobutton(seg, text=text, variable=self.mode_var, value=value,
+                                bg=pal["surface"], fg=color, selectcolor=pal["panel"],
+                                activebackground=pal["surface"], activeforeground=color,
+                                font=("Segoe UI", 9, "bold"), command=self._on_mode_change,
+                                relief="flat", bd=0, highlightthickness=1,
+                                highlightbackground=pal["line"], padx=10, pady=3)
+            rb.pack(side="left", padx=(0, 6))
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.grid(row=1, column=0, sticky="nsew", padx=8, pady=4)
@@ -1005,9 +1036,10 @@ class App:
         self._build_coords_tab()
 
         # --- строка состояния -------------------------------------------------
+        tk.Frame(self.root, bg=pal["line"], height=1).grid(row=2, column=0, sticky="ew")
         bottom = ttk.Frame(self.root)
-        bottom.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 8))
-        self.status = ttk.Label(bottom, text="Готово. Сгенерируйте билд.", foreground="#8e8e93",
+        bottom.grid(row=3, column=0, sticky="ew", padx=12, pady=(6, 8))
+        self.status = ttk.Label(bottom, text="Готово. Сгенерируйте билд.", foreground="#8d99a6",
                                 font=("Segoe UI", 9), wraplength=760, justify="left")
         self.status.pack(side="left", fill="x", expand=True)
         self.btn_stop = ttk.Button(bottom, text="⏹ СТОП (F9)", style="Stop.TButton",
@@ -1087,7 +1119,7 @@ class App:
         logbox.grid(row=3, column=0, sticky="nsew", pady=(6, 0))
         logbox.rowconfigure(0, weight=1)
         logbox.columnconfigure(0, weight=1)
-        self.txt_log = tk.Text(logbox, bg="#141414", fg="#b8b8b8", font=("Consolas", 9),
+        self.txt_log = tk.Text(logbox, bg="#0b0e12", fg="#aab4bf", font=("Consolas", 9),
                                wrap="word", relief="flat", padx=6, pady=6, state="disabled", height=8)
         self.txt_log.grid(row=0, column=0, sticky="nsew")
         lsb = ttk.Scrollbar(logbox, orient="vertical", command=self.txt_log.yview)
@@ -1096,9 +1128,9 @@ class App:
 
     # ---- карточка билда с иконками -------------------------------------------
     def _build_card(self, parent):
-        canvas = tk.Canvas(parent, bg="#161616", highlightthickness=0, bd=0)
+        canvas = tk.Canvas(parent, bg="#151a21", highlightthickness=0, bd=0)
         sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        self.card = tk.Frame(canvas, bg="#161616")
+        self.card = tk.Frame(canvas, bg="#151a21")
         win = canvas.create_window((0, 0), window=self.card, anchor="nw")
         self.card.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
@@ -1115,30 +1147,32 @@ class App:
             w.bind("<Button-4>", _wheel)
             w.bind("<Button-5>", _wheel)
 
-        pad = dict(bg="#161616")
-        self.card_hint = tk.Label(self.card, justify="left", anchor="w", fg="#9a9a9a",
+        pad = dict(bg="#151a21")
+        self.card_stripe = tk.Frame(self.card, bg="#e5534b", height=3)
+        self.card_stripe.pack(fill="x")
+        self.card_hint = tk.Label(self.card, justify="left", anchor="w", fg="#8d99a6",
                                   font=("Segoe UI", 10), wraplength=420, **pad)
         self.card_hint.pack(fill="x", padx=14, pady=12)
 
-        self.card_author = tk.Label(self.card, anchor="w", fg="#ffd60a", bg="#161616",
+        self.card_author = tk.Label(self.card, anchor="w", fg="#e3b341", bg="#151a21",
                                     font=("Segoe UI", 9, "italic"))
         self.card_author.pack(fill="x", padx=14, pady=(2, 0))
         row_char = tk.Frame(self.card, **pad)
         row_char.pack(fill="x", padx=14, pady=(2, 0))
-        self.card_char_img = tk.Label(row_char, bg="#161616",
+        self.card_char_img = tk.Label(row_char, bg="#151a21",
                                       width=ICON_SIZE + 12, height=ICON_SIZE + 12)
         self.card_char_img.pack(side="left", padx=(0, 8))
-        self.card_char = tk.Label(row_char, anchor="w", fg="#ffffff", bg="#161616",
+        self.card_char = tk.Label(row_char, anchor="w", fg="#ffffff", bg="#151a21",
                                   font=("Segoe UI", 15, "bold"))
         self.card_char.pack(side="left", fill="x", expand=True)
         row_main = tk.Frame(self.card, **pad)
         row_main.pack(fill="x", padx=14, pady=(2, 0))
-        self.card_main_img = tk.Label(row_main, bg="#161616", width=ICON_SIZE, height=ICON_SIZE)
+        self.card_main_img = tk.Label(row_main, bg="#151a21", width=ICON_SIZE, height=ICON_SIZE)
         self.card_main_img.pack(side="left", padx=(0, 8))
-        self.card_main = tk.Label(row_main, anchor="w", fg="#ff9500", bg="#161616",
+        self.card_main = tk.Label(row_main, anchor="w", fg="#e5534b", bg="#151a21",
                                   font=("Segoe UI", 11, "bold"), wraplength=380, justify="left")
         self.card_main.pack(side="left", fill="x", expand=True)
-        self.card_sub = tk.Label(self.card, anchor="w", fg="#6e6e73", bg="#161616",
+        self.card_sub = tk.Label(self.card, anchor="w", fg="#7d8894", bg="#151a21",
                                  font=("Segoe UI", 9, "italic"))
         self.card_sub.pack(fill="x", padx=14, pady=(2, 0))
 
@@ -1147,9 +1181,9 @@ class App:
         for _ in range(2):
             row = tk.Frame(self.card, **pad)
             row.pack(fill="x", padx=20, pady=2)
-            img = tk.Label(row, bg="#161616", width=ICON_SIZE, height=ICON_SIZE)
+            img = tk.Label(row, bg="#151a21", width=ICON_SIZE, height=ICON_SIZE)
             img.pack(side="left", padx=(0, 8))
-            txt = tk.Label(row, anchor="w", fg="#dcdcdc", bg="#161616",
+            txt = tk.Label(row, anchor="w", fg="#dfe5ea", bg="#151a21",
                            font=("Segoe UI", 10), wraplength=340, justify="left")
             txt.pack(side="left", fill="x", expand=True)
             self.card_addons.append((img, txt))
@@ -1159,20 +1193,20 @@ class App:
         for _ in range(4):
             row = tk.Frame(self.card, **pad)
             row.pack(fill="x", padx=20, pady=2)
-            img = tk.Label(row, bg="#161616", width=ICON_SIZE, height=ICON_SIZE)
+            img = tk.Label(row, bg="#151a21", width=ICON_SIZE, height=ICON_SIZE)
             img.pack(side="left", padx=(0, 8))
-            txt = tk.Label(row, anchor="w", fg="#34c759", bg="#161616",
+            txt = tk.Label(row, anchor="w", fg="#3fb950", bg="#151a21",
                            font=("Segoe UI", 11), wraplength=340, justify="left")
             txt.pack(side="left", fill="x", expand=True)
             self.card_perks.append((img, txt))
 
         bar = tk.Frame(self.card, **pad)
         bar.pack(fill="x", padx=14, pady=(10, 14))
-        self.lbl_icons = tk.Label(bar, fg="#6e6e73", bg="#161616", font=("Segoe UI", 8),
+        self.lbl_icons = tk.Label(bar, fg="#7d8894", bg="#151a21", font=("Segoe UI", 8),
                                   anchor="w", justify="left")
         self.lbl_icons.pack(side="left", fill="x", expand=True)
-        self.btn_icons = tk.Button(bar, text="⬇ Все иконки", bg="#2c2c2c", fg="#e0e0e0",
-                                   activebackground="#3a3a3a", activeforeground="#ffffff",
+        self.btn_icons = tk.Button(bar, text="⬇ Все иконки", bg="#2a323d", fg="#e6ebf0",
+                                   activebackground="#333c48", activeforeground="#ffffff",
                                    relief="flat", font=("Segoe UI", 8), padx=8, pady=2,
                                    command=self.download_all_icons)
         self.btn_icons.pack(side="right")
@@ -1180,8 +1214,12 @@ class App:
         self._set_build_text(None)
 
     def _card_section(self, text):
-        tk.Label(self.card, text=text, anchor="w", fg="#8e8e93", bg="#161616",
-                 font=("Segoe UI", 9, "bold")).pack(fill="x", padx=14, pady=(12, 2))
+        row = tk.Frame(self.card, bg="#151a21")
+        row.pack(fill="x", padx=14, pady=(14, 4))
+        tk.Label(row, text=text, anchor="w", fg="#8d99a6", bg="#151a21",
+                 font=("Segoe UI", 9, "bold")).pack(side="left")
+        tk.Frame(row, bg="#2a323d", height=1).pack(side="left", fill="x",
+                                                    expand=True, padx=(10, 0), pady=(0, 4))
 
     def _update_icon_hint(self):
         have, total = self.icon_store.stats()
@@ -1267,7 +1305,7 @@ class App:
         top.pack(fill="x", padx=10, pady=(8, 2))
         ttk.Label(top, text="Соберите билд вручную: название, описание, персонаж, аддоны и навыки. "
                             "Готовый билд можно положить в карточку, скопировать, экипировать или опубликовать.",
-                  foreground="#ff9500", font=("Segoe UI", 9, "italic"),
+                  foreground="#e5534b", font=("Segoe UI", 9, "italic"),
                   justify="left", wraplength=940).pack(fill="x")
 
         box = ttk.LabelFrame(self.tab_maker, text=" ПАСПОРТ БИЛДА ")
@@ -1275,14 +1313,14 @@ class App:
         r = ttk.Frame(box)
         r.pack(fill="x", padx=8, pady=(6, 2))
         ttk.Label(r, text="Название:", width=10, anchor="w").pack(side="left")
-        self.mk_title = tk.Entry(r, width=52, bg="#232323", fg="#ffffff",
-                                 insertbackground="white", bd=1, relief="solid")
+        self.mk_title = tk.Entry(r, width=52, bg="#1c232c", fg="#e6ebf0",
+                                 insertbackground="#e6ebf0", bd=1, relief="flat", highlightthickness=1, highlightbackground="#2a323d")
         self.mk_title.pack(side="left", padx=4)
         r2 = ttk.Frame(box)
         r2.pack(fill="x", padx=8, pady=(0, 6))
         ttk.Label(r2, text="Описание:", width=10, anchor="w").pack(side="left")
-        self.mk_desc = tk.Text(r2, height=3, bg="#232323", fg="#ffffff",
-                               insertbackground="white", bd=1, relief="solid",
+        self.mk_desc = tk.Text(r2, height=3, bg="#1c232c", fg="#e6ebf0",
+                               insertbackground="#e6ebf0", bd=1, relief="solid",
                                font=("Segoe UI", 9), wrap="word")
         self.mk_desc.pack(side="left", fill="x", expand=True, padx=4)
 
@@ -1292,11 +1330,11 @@ class App:
         row.pack(fill="x", padx=8, pady=(6, 2))
         ttk.Label(row, text="Сторона:", width=10, anchor="w").pack(side="left")
         self.mk_side_var = tk.StringVar(value="KILLER")
-        for text, value, color in (("👹 Маньяк", "KILLER", "#ff6b60"),
-                                   ("👤 Выживший", "SURVIVOR", "#5ac8fa")):
+        for text, value, color in (("👹 Маньяк", "KILLER", "#ff7b72"),
+                                   ("👤 Выживший", "SURVIVOR", "#58a6ff")):
             tk.Radiobutton(row, text=text, variable=self.mk_side_var, value=value,
-                           bg="#121212", fg=color, selectcolor="#1c1c1e",
-                           activebackground="#121212", activeforeground=color,
+                           bg="#0e1116", fg=color, selectcolor="#1c232c",
+                           activebackground="#0e1116", activeforeground=color,
                            font=("Segoe UI", 9, "bold"),
                            command=self._mk_on_side).pack(side="left", padx=8)
 
@@ -1306,7 +1344,7 @@ class App:
         self.mk_char = ttk.Combobox(self.mk_row_char, state="readonly", width=22)
         self.mk_char.pack(side="left", padx=4)
         self.mk_char.bind("<<ComboboxSelected>>", lambda e: self._mk_on_char())
-        self.mk_power_lbl = ttk.Label(self.mk_row_char, text="", foreground="#ff9500",
+        self.mk_power_lbl = ttk.Label(self.mk_row_char, text="", foreground="#e5534b",
                                       font=("Segoe UI", 9))
         self.mk_power_lbl.pack(side="left", padx=10)
 
@@ -1462,7 +1500,7 @@ class App:
             return
         try:
             pyperclip.copy(build_to_clipboard_text(b))
-            self.set_status("Билд из конструктора скопирован.", "#34c759")
+            self.set_status("Билд из конструктора скопирован.", "#3fb950")
         except Exception as exc:
             messagebox.showerror("Буфер обмена", str(exc))
 
@@ -1494,7 +1532,7 @@ class App:
     def _make_scrolled(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        canvas = tk.Canvas(frame, bg="#121212", highlightthickness=0)
+        canvas = tk.Canvas(frame, bg="#0e1116", highlightthickness=0)
         sb = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
         inner = ttk.Frame(canvas)
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
@@ -1518,7 +1556,7 @@ class App:
     def _build_chars_tab(self):
         hint = ("Отметьте персонажей, которые у вас ОТКРЫТЫ — неотмеченные не выпадают.\n"
                 "Имя должно совпадать с тем, что написано в игре (его же можно вбить в поиск персонажа).")
-        ttk.Label(self.tab_chars, text=hint, foreground="#ff9500", justify="center",
+        ttk.Label(self.tab_chars, text=hint, foreground="#e5534b", justify="center",
                   font=("Segoe UI", 9, "italic")).pack(pady=(8, 2))
 
         toolbar = ttk.Frame(self.tab_chars)
@@ -1548,19 +1586,19 @@ class App:
         owned_s = set(self.cfg["owned"].get("survivors") or [])
         for name in sorted(self.db["killers"].keys()):
             var = tk.BooleanVar(value=(name in owned_k) if owned_k else True)
-            self._char_widgets[("K", name)] = (var, self._add_char_cb(inner_k, name, var, "#ff9500"))
+            self._char_widgets[("K", name)] = (var, self._add_char_cb(inner_k, name, var, "#e5534b"))
         for name in sorted(self.db["survivors"].keys()):
             var = tk.BooleanVar(value=(name in owned_s) if owned_s else True)
-            self._char_widgets[("S", name)] = (var, self._add_char_cb(inner_s, name, var, "#5ac8fa"))
+            self._char_widgets[("S", name)] = (var, self._add_char_cb(inner_s, name, var, "#58a6ff"))
 
         note = ("Подсказка: если снять все отметки и нажать «Сохранить», при следующем запуске "
                 "снова будут отмечены все.")
-        ttk.Label(self.tab_chars, text=note, foreground="#6e6e73",
+        ttk.Label(self.tab_chars, text=note, foreground="#7d8894",
                   font=("Segoe UI", 8, "italic")).pack(pady=(0, 8))
 
     def _add_char_cb(self, parent, name, var, color):
-        cb = tk.Checkbutton(parent, text=name, variable=var, bg="#121212", fg="#dcdcdc",
-                            selectcolor="#232323", activebackground="#121212",
+        cb = tk.Checkbutton(parent, text=name, variable=var, bg="#0e1116", fg="#dfe5ea",
+                            selectcolor="#1c232c", activebackground="#0e1116",
                             activeforeground=color, anchor="w", font=("Segoe UI", 10),
                             highlightthickness=0)
         cb.pack(fill="x", padx=4, pady=1)
@@ -1594,7 +1632,7 @@ class App:
         self.cfg["owned"]["killers"] = sorted(killers)
         self.cfg["owned"]["survivors"] = sorted(survs)
         save_config(self.cfg)
-        self.set_status(f"Сохранено: маньяков {len(killers)}, выживших {len(survs)}.", "#34c759")
+        self.set_status(f"Сохранено: маньяков {len(killers)}, выживших {len(survs)}.", "#3fb950")
         self.log(f"Сохранён список персонажей: {len(killers)} маньяков / {len(survs)} выживших.")
 
     # ---- вкладка «Клики и тайминги» -----------------------------------------
@@ -1621,14 +1659,14 @@ class App:
             saved = self.cfg["coords"].get(key, {})
             entries = {}
             for axis in ("x", "y"):
-                ent = tk.Entry(row, width=6, bg="#232323", fg="#ffffff", insertbackground="white",
+                ent = tk.Entry(row, width=6, bg="#1c232c", fg="#ffffff", insertbackground="#e6ebf0",
                                relief="solid", bd=1, justify="center")
                 ent.insert(0, str(saved.get(axis, "")))
                 ent.pack(side="left", padx=2)
                 entries[axis] = ent
             if key == "ocr_region":
                 for axis in ("w", "h"):
-                    ent = tk.Entry(row, width=6, bg="#232323", fg="#ffffff", insertbackground="white",
+                    ent = tk.Entry(row, width=6, bg="#1c232c", fg="#ffffff", insertbackground="#e6ebf0",
                                    relief="solid", bd=1, justify="center")
                     ent.insert(0, str(saved.get(axis, "")))
                     ent.pack(side="left", padx=2)
@@ -1652,7 +1690,7 @@ class App:
             row = ttk.Frame(tf)
             row.pack(fill="x", padx=6, pady=2)
             ttk.Label(row, text=desc, anchor="w").pack(side="left", fill="x", expand=True)
-            ent = tk.Entry(row, width=7, bg="#232323", fg="#ffffff", insertbackground="white",
+            ent = tk.Entry(row, width=7, bg="#1c232c", fg="#ffffff", insertbackground="#e6ebf0",
                            relief="solid", bd=1, justify="center")
             ent.insert(0, str(self.cfg["timings"].get(key, default)))
             ent.pack(side="right")
@@ -1697,11 +1735,11 @@ class App:
         ttk.Label(upf, text=f"Версия v{APP_VERSION}. Файлы берутся из ТЕГА РЕЛИЗА, перед заменой "
                             f"показываются размер и SHA-256, старые версии сохраняются как .bak. "
                             f"Конфиг и токен не перезаписываются никогда.",
-                  font=("Segoe UI", 8, "italic"), foreground="#8e8e93", justify="left",
+                  font=("Segoe UI", 8, "italic"), foreground="#8d99a6", justify="left",
                   wraplength=330).pack(anchor="w", padx=6, pady=(0, 6))
 
     def _make_scrolled_grid(self, parent):
-        canvas = tk.Canvas(parent, bg="#121212", highlightthickness=0)
+        canvas = tk.Canvas(parent, bg="#0e1116", highlightthickness=0)
         sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         inner = ttk.Frame(canvas)
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
@@ -1729,7 +1767,7 @@ class App:
     def log(self, message):
         self.ui_q.put(("log", str(message)))
 
-    def set_status(self, text, color="#8e8e93"):
+    def set_status(self, text, color="#8d99a6"):
         self.ui_q.put(("status", (str(text), color)))
 
     def _poll_ui_queue(self):
@@ -1783,10 +1821,10 @@ class App:
         self.card_main_img.config(image="", text="")
         for img, lbl in self.card_addons:
             img.config(image="", text="")
-            lbl.config(text=filler, fg="#4a4a4a")
+            lbl.config(text=filler, fg="#56606c")
         for img, lbl in self.card_perks:
             img.config(image="", text="" if not text else "")
-            lbl.config(text=filler, fg="#4a4a4a")
+            lbl.config(text=filler, fg="#56606c")
 
     def _render_build(self):
         b = self.build
@@ -1803,12 +1841,14 @@ class App:
         if title:
             head = (head + " · " if head else "") + f"«{title}»"
         self.card_author.config(text=head)
+        self.card_stripe.config(bg=self._pal["killer"] if b["side"] == "KILLER"
+                                else self._pal["surv"])
         if b["side"] == "KILLER":
-            self.card_char.config(text=f"👹 {b['char']}", fg="#ff6b60")
+            self.card_char.config(text=f"👹 {b['char']}", fg="#ff7b72")
             self.card_main.config(text=f"⚡ {b['power_or_item']}")
             self.card_sub.config(text="сила убийцы не экипируется — ставятся только аддоны и навыки")
         else:
-            self.card_char.config(text=f"👤 {b['char']}", fg="#5ac8fa")
+            self.card_char.config(text=f"👤 {b['char']}", fg="#58a6ff")
             self.card_main.config(text=f"📦 {b['power_or_item']}")
             self.card_sub.config(text=f"категория: {b.get('category', '')}")
 
@@ -1826,18 +1866,18 @@ class App:
         for (img, lbl), addon in zip(self.card_addons, list(b["addons"]) + ["", ""]):
             if not addon or addon == EMPTY:
                 img.config(image="", text="")
-                lbl.config(text="   •  —", fg="#4a4a4a")
+                lbl.config(text="   •  —", fg="#56606c")
                 continue
             if addon == NO_ADDONS:
                 img.config(image="", text="")
-                lbl.config(text="   •  🚫 аддон не подобран", fg="#6e6e73")
+                lbl.config(text="   •  🚫 аддон не подобран", fg="#7d8894")
                 continue
             photo = self._icon_photo(addon)
             if photo is not None:
                 img.config(image=photo, text="")
             else:
                 img.config(image="", text="▢")
-            lbl.config(text=f"   •  {addon}", fg="#dcdcdc")
+            lbl.config(text=f"   •  {addon}", fg="#dfe5ea")
             want_addons.append(addon)
 
         want = []
@@ -1845,14 +1885,14 @@ class App:
             perk = b["perks"][i] if i < len(b["perks"]) else EMPTY
             if not perk or perk == EMPTY:
                 img.config(image="", text="")
-                lbl.config(text=f"{i + 1}.  —  (слот пуст)", fg="#4a4a4a")
+                lbl.config(text=f"{i + 1}.  —  (слот пуст)", fg="#56606c")
                 continue
             photo = self._icon_photo(perk)
             if photo is not None:
                 img.config(image=photo, text="")
             else:
                 img.config(image="", text="▢")
-            lbl.config(text=f"{i + 1}.  {perk}", fg="#34c759")
+            lbl.config(text=f"{i + 1}.  {perk}", fg="#3fb950")
             want.append(perk)
         self._render_details_icons(want)
         self._request_icons(want + want_addons + want_extra)
@@ -1940,7 +1980,7 @@ class App:
     def save_settings(self):
         self.collect_settings()
         save_config(self.cfg)
-        self.set_status("Настройки сохранены.", "#34c759")
+        self.set_status("Настройки сохранены.", "#3fb950")
         self.log("Настройки (координаты, тайминги, опции) сохранены в dbd_randomizer_config.json")
         self._register_abort_hotkey()
 
@@ -2033,7 +2073,7 @@ class App:
         self._render_build()
         self.btn_equip.config(state="normal")
         self.set_status("Билд готов. Откройте в игре меню снаряжения этого персонажа и жмите «ЭКИПИРОВАТЬ».",
-                        "#34c759")
+                        "#3fb950")
         self.log("Сгенерирован билд: " + build_to_clipboard_text(self.build))
 
     def reroll_perks(self):
@@ -2052,7 +2092,7 @@ class App:
             return
         try:
             pyperclip.copy(build_to_clipboard_text(self.build))
-            self.set_status("Билд скопирован в буфер обмена.", "#34c759")
+            self.set_status("Билд скопирован в буфер обмена.", "#3fb950")
         except Exception as exc:
             messagebox.showerror("Буфер обмена", str(exc))
 
@@ -2066,7 +2106,7 @@ class App:
                    command=self.copy_selected_build).pack(side="left", padx=6)
         ttk.Button(top_bar, text="⚡ Экипировать выбранный", style="Equip.TButton",
                    command=self.equip_selected_build).pack(side="left", padx=6)
-        self.lbl_builds_info = ttk.Label(top_bar, text="", foreground="#8e8e93",
+        self.lbl_builds_info = ttk.Label(top_bar, text="", foreground="#8d99a6",
                                          font=("Segoe UI", 9, "italic"))
         self.lbl_builds_info.pack(side="right")
 
@@ -2076,13 +2116,13 @@ class App:
         self.builds_filter_var = tk.StringVar(value="ВСЕ")
         for value, text in (("ВСЕ", "Все"), ("KILLER", "👹 Маньяки"), ("SURVIVOR", "👤 Выжившие")):
             rb = tk.Radiobutton(filt, text=text, variable=self.builds_filter_var, value=value,
-                                bg="#121212", fg="#e0e0e0", selectcolor="#232323",
-                                activebackground="#121212", activeforeground="#ffffff",
+                                bg="#0e1116", fg="#e6ebf0", selectcolor="#1c232c",
+                                activebackground="#0e1116", activeforeground="#ffffff",
                                 font=("Segoe UI", 9), command=self._render_builds_list)
             rb.pack(side="left", padx=4)
         ttk.Label(filt, text="Поиск:", font=("Segoe UI", 9)).pack(side="left", padx=(14, 2))
-        self.builds_search_entry = tk.Entry(filt, width=22, bg="#232323", fg="#ffffff",
-                                            insertbackground="white", bd=1, relief="solid")
+        self.builds_search_entry = tk.Entry(filt, width=22, bg="#1c232c", fg="#e6ebf0",
+                                            insertbackground="#e6ebf0", bd=1, relief="flat", highlightthickness=1, highlightbackground="#2a323d")
         self.builds_search_entry.pack(side="left")
         self.builds_search_entry.bind("<KeyRelease>", lambda e: self._render_builds_list())
 
@@ -2103,9 +2143,9 @@ class App:
         self.builds_tree.pack(side="left", fill="both", expand=True)
         tsb.pack(side="right", fill="y")
         try:
-            self.builds_tree.tag_configure("killer", foreground="#ff6961")
-            self.builds_tree.tag_configure("survivor", foreground="#7fd4ff")
-            self.builds_tree.tag_configure("mine", foreground="#ffd60a")
+            self.builds_tree.tag_configure("killer", foreground="#ff7b72")
+            self.builds_tree.tag_configure("survivor", foreground="#79c0ff")
+            self.builds_tree.tag_configure("mine", foreground="#e3b341")
         except Exception:
             pass
         self.builds_tree.bind("<Double-1>", lambda e: self.copy_selected_build())
@@ -2116,13 +2156,13 @@ class App:
         row = ttk.Frame(det)
         row.pack(fill="x", padx=10, pady=(5, 0))
         self.lbl_build_details = ttk.Label(row, text="—", justify="left", font=("Consolas", 9),
-                                           foreground="#e0e0e0")
+                                           foreground="#e6ebf0")
         self.lbl_build_details.pack(side="left", anchor="n", pady=5)
-        self.det_icons_frame = tk.Frame(det, bg="#121212")
+        self.det_icons_frame = tk.Frame(det, bg="#0e1116")
         self.det_icons_frame.pack(anchor="e", padx=10, pady=5)
         self.det_icons = []
         for _ in range(4):
-            lbl = tk.Label(self.det_icons_frame, bg="#121212", width=ICON_SIZE, height=ICON_SIZE)
+            lbl = tk.Label(self.det_icons_frame, bg="#0e1116", width=ICON_SIZE, height=ICON_SIZE)
             lbl.pack(side="left", padx=2)
             self.det_icons.append(lbl)
 
@@ -2131,43 +2171,43 @@ class App:
         r1 = ttk.Frame(sett)
         r1.pack(fill="x", padx=8, pady=4)
         ttk.Label(r1, text="Ник для публикации:", width=26, anchor="w").pack(side="left")
-        self.nick_entry = tk.Entry(r1, width=22, bg="#232323", fg="#ffffff",
-                                   insertbackground="white", bd=1, relief="solid")
+        self.nick_entry = tk.Entry(r1, width=22, bg="#1c232c", fg="#e6ebf0",
+                                   insertbackground="#e6ebf0", bd=1, relief="flat", highlightthickness=1, highlightbackground="#2a323d")
         self.nick_entry.insert(0, self.cfg["publish"].get("nickname", ""))
         self.nick_entry.pack(side="left", padx=4)
         r2 = ttk.Frame(sett)
         r2.pack(fill="x", padx=8, pady=4)
         ttk.Label(r2, text="Токен GitHub (Contents: Write):", width=26, anchor="w").pack(side="left")
-        self.token_entry = tk.Entry(r2, width=44, show="*", bg="#232323", fg="#ffffff",
-                                    insertbackground="white", bd=1, relief="solid")
+        self.token_entry = tk.Entry(r2, width=44, show="*", bg="#1c232c", fg="#e6ebf0",
+                                    insertbackground="#e6ebf0", bd=1, relief="flat", highlightthickness=1, highlightbackground="#2a323d")
         self.token_entry.insert(0, self.cfg["publish"].get("gh_token", ""))
         self.token_entry.pack(side="left", padx=4)
         self.show_token_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(r2, text="показать", variable=self.show_token_var, bg="#121212", fg="#8e8e93",
-                       selectcolor="#232323", activebackground="#121212", font=("Segoe UI", 8),
+        tk.Checkbutton(r2, text="показать", variable=self.show_token_var, bg="#0e1116", fg="#8d99a6",
+                       selectcolor="#1c232c", activebackground="#0e1116", font=("Segoe UI", 8),
                        command=self._toggle_token_visibility).pack(side="left")
         rbx = ttk.LabelFrame(sett, text=" КАК ПУБЛИКОВАТЬ ")
         rbx.pack(fill="x", padx=8, pady=(6, 2))
         self.backend_var = tk.StringVar(value=self.cfg["publish"].get("backend", "github"))
         tk.Radiobutton(rbx, text="GitHub (нужен токен)", variable=self.backend_var,
-                       value="github", bg="#121212", fg="#e0e0e0", selectcolor="#232323",
-                       activebackground="#121212", activeforeground="#ffffff",
+                       value="github", bg="#0e1116", fg="#e6ebf0", selectcolor="#1c232c",
+                       activebackground="#0e1116", activeforeground="#ffffff",
                        font=("Segoe UI", 9), anchor="w",
                        command=self._on_backend_change).pack(fill="x", padx=8, pady=(4, 0))
         tk.Radiobutton(rbx, text="Облако Firebase (БЕЗ токена)",
-                       variable=self.backend_var, value="firebase", bg="#121212", fg="#e0e0e0",
-                       selectcolor="#232323", activebackground="#121212",
+                       variable=self.backend_var, value="firebase", bg="#0e1116", fg="#e6ebf0",
+                       selectcolor="#1c232c", activebackground="#0e1116",
                        activeforeground="#ffffff", font=("Segoe UI", 9), anchor="w",
                        command=self._on_backend_change).pack(fill="x", padx=8)
         brow = ttk.Frame(rbx)
         brow.pack(fill="x", padx=8, pady=(0, 6))
         ttk.Label(brow, text="URL БД:", font=("Segoe UI", 8)).pack(side="left")
-        self.firebase_entry = tk.Entry(brow, width=44, bg="#232323", fg="#ffffff",
-                                       insertbackground="white", bd=1, relief="solid")
+        self.firebase_entry = tk.Entry(brow, width=44, bg="#1c232c", fg="#e6ebf0",
+                                       insertbackground="#e6ebf0", bd=1, relief="flat", highlightthickness=1, highlightbackground="#2a323d")
         self.firebase_entry.insert(0, self.cfg["publish"].get("firebase_url", "")
                                    or GH.FIREBASE_BASE_DEFAULT)
         self.firebase_entry.pack(side="left", padx=4, fill="x", expand=True)
-        self.lbl_backend_hint = ttk.Label(rbx, text="", foreground="#8e8e93",
+        self.lbl_backend_hint = ttk.Label(rbx, text="", foreground="#8d99a6",
                                           font=("Segoe UI", 8), justify="left", wraplength=380)
         self.lbl_backend_hint.pack(fill="x", padx=8, pady=(0, 6))
         self._on_backend_change()
@@ -2177,7 +2217,7 @@ class App:
         ttk.Button(r3, text="💾 Сохранить настройки", command=self.save_publish_settings).pack(side="left")
         ttk.Label(r3, text="Токен нужен только для ПУБЛИКАЦИИ. Хранится в вашем конфиге;\n"
                            "для чтения списка билдов токен не требуется.",
-                  font=("Segoe UI", 8, "italic"), foreground="#8e8e93", justify="left").pack(side="left", padx=12)
+                  font=("Segoe UI", 8, "italic"), foreground="#8d99a6", justify="left").pack(side="left", padx=12)
 
         self.root.after(1500, lambda: self.refresh_community_builds(manual=False))
 
@@ -2200,7 +2240,7 @@ class App:
         self.cfg["publish"]["backend"] = self.backend_var.get()
         self.cfg["publish"]["firebase_url"] = self.firebase_entry.get().strip()
         save_config(self.cfg)
-        self.set_status("Настройки публикации сохранены.", "#34c759")
+        self.set_status("Настройки публикации сохранены.", "#3fb950")
         self.log("Сохранены ник и токен публикации (токен — только в локальном конфиге).")
 
     def refresh_community_builds(self, manual=False):
@@ -2226,10 +2266,10 @@ class App:
         self._render_builds_list()
         if online:
             self.lbl_builds_info.config(text=f"Загружено из GitHub: {len(self.community_builds)}",
-                                        foreground="#34c759")
+                                        foreground="#3fb950")
         else:
             self.lbl_builds_info.config(text=f"Офлайн-кэш: {len(self.community_builds)} (нет связи с GitHub)",
-                                        foreground="#ffcc00")
+                                        foreground="#e3b341")
         self.log(f"Билды сообщества: {len(self.community_builds)} "
                  f"({'онлайн' if online else 'кэш'}).")
         if manual and not self.community_builds and online:
@@ -2296,7 +2336,7 @@ class App:
             return
         try:
             pyperclip.copy(GH.format_build_text(b))
-            self.set_status("Карточка билда скопирована в буфер обмена ✔", "#34c759")
+            self.set_status("Карточка билда скопирована в буфер обмена ✔", "#3fb950")
         except Exception as exc:
             self.ui_q.put(("error", f"Не удалось скопировать: {exc}"))
 
@@ -2328,7 +2368,7 @@ class App:
         self.btn_equip.config(state="normal")
         self.notebook.select(self.tab_main)
         self.set_status(f"Билд от {self.build['author']} загружен. Откройте меню снаряжения "
-                        f"и нажмите «ЭКИПИРОВАТЬ».", "#34c759")
+                        f"и нажмите «ЭКИПИРОВАТЬ».", "#3fb950")
         self.log(f"Загружен чужой билд: {GH.format_build_text(b).splitlines()[2]}")
 
     def publish_current_build(self):
@@ -2373,7 +2413,7 @@ class App:
                                         b["perks"], author,
                                         title=b.get("title", ""), description=b.get("description", ""))
         self.btn_publish.config(state="disabled")
-        self.set_status("Публикуем билд…", "#ffcc00")
+        self.set_status("Публикуем билд…", "#e3b341")
         threading.Thread(target=self._publish_worker,
                          args=(payload, token, base), daemon=True).start()
 
@@ -2386,14 +2426,14 @@ class App:
         def done():
             self.btn_publish.config(state="normal")
             if ok:
-                self.set_status("🌍 " + msg, "#34c759")
+                self.set_status("🌍 " + msg, "#3fb950")
                 payload["local"] = True
                 self.community_builds.insert(0, payload)
                 self._render_builds_list()
                 self.lbl_build_details.config(text=GH.format_build_text(payload))
                 messagebox.showinfo("Публикация", msg)
             else:
-                self.set_status("🔴 " + msg, "#ff3b30")
+                self.set_status("🔴 " + msg, "#f85149")
                 self.log("Публикация не удалась: " + msg)
                 messagebox.showerror("Публикация не удалась", msg)
         self.root.after(0, done)
@@ -2418,7 +2458,7 @@ class App:
             return
         self._updating = True
         if not silent:
-            self.set_status("Проверяю обновления на GitHub…", "#ffcc00")
+            self.set_status("Проверяю обновления на GitHub…", "#e3b341")
         threading.Thread(target=self._update_worker, args=(silent,), daemon=True).start()
 
     def _update_worker(self, silent):
@@ -2507,7 +2547,7 @@ class App:
         if not self.abort.is_set():
             self.abort.set()
             self.log("⏹ Получена команда СТОП.")
-            self.set_status("Останавливаюсь…", "#ffcc00")
+            self.set_status("Останавливаюсь…", "#e3b341")
 
     def _sleep(self, seconds, abortable=True):
         end = time.time() + max(0.0, seconds)
@@ -2654,7 +2694,7 @@ class App:
                 if self.abort.is_set():
                     raise AbortError()
                 self.set_status(f"⚠ Приготовьтесь: старт через {i} с… (СТОП — {self.option('abort_key').upper()})",
-                                "#ffcc00")
+                                "#e3b341")
                 self.ui_q.put(("progress", (countdown - i) / max(1, total) * 100))
                 time.sleep(1)
 
@@ -2663,7 +2703,7 @@ class App:
             for done, (key, name, label) in enumerate(steps, start=1):
                 if self.abort.is_set():
                     raise AbortError()
-                self.set_status(f"{mode}: {label} — «{name}» ({done}/{len(steps)})", "#ff9500")
+                self.set_status(f"{mode}: {label} — «{name}» ({done}/{len(steps)})", "#e5534b")
                 self.log(f"→ {label}: кликаю слот «{key}»")
                 self._click(self.get_coord(key), key)
                 self._sleep(self.timing("after_slot_click"))
@@ -2673,16 +2713,16 @@ class App:
                 self.ui_q.put(("progress", done / max(1, total) * 100))
                 self._sleep(self.timing("between_steps"))
 
-            self.set_status("🎉 Готово: билд экипирован.", "#34c759")
+            self.set_status("🎉 Готово: билд экипирован.", "#3fb950")
             self.log("=== Автоэкипировка завершена ===")
         except AbortError:
-            self.set_status("⏹ Остановлено пользователем.", "#ffcc00")
+            self.set_status("⏹ Остановлено пользователем.", "#e3b341")
             self.log("Остановлено пользователем.")
         except InputUnavailable as exc:
-            self.set_status(f"🔴 Ввод недоступен: {exc}", "#ff3b30")
+            self.set_status(f"🔴 Ввод недоступен: {exc}", "#f85149")
             self.ui_q.put(("error", f"Автоматизация недоступна:\n{exc}"))
         except Exception as exc:
-            self.set_status(f"🔴 Ошибка: {exc}", "#ff3b30")
+            self.set_status(f"🔴 Ошибка: {exc}", "#f85149")
             self.log(f"Ошибка: {exc!r}")
             self.ui_q.put(("error", str(exc)))
         finally:
@@ -2707,8 +2747,8 @@ class App:
         win = tk.Toplevel(self.root)
         win.title("Проверка базы данных")
         win.geometry("900x620")
-        win.configure(bg="#121212")
-        txt = tk.Text(win, bg="#141414", fg="#dcdcdc", font=("Consolas", 10), wrap="word",
+        win.configure(bg="#0e1116")
+        txt = tk.Text(win, bg="#0b0e12", fg="#dfe5ea", font=("Consolas", 10), wrap="word",
                       relief="flat", padx=10, pady=10)
         txt.pack(fill="both", expand=True)
         txt.insert("end", report)
