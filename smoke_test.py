@@ -337,24 +337,19 @@ class TestBuildPassport(unittest.TestCase):
         old = R.GH.format_build_text({k: v for k, v in b.items() if k not in ("title", "description")})
         self.assertNotIn("Название:", old)          # старые билды читаются как раньше
 
-    def test_merge_builds_keeps_others_and_dedupes(self):
-        a = {"id": "a"}
-        b = {"id": "b"}
-        merged, dup = R.GH.merge_builds([a], b)
-        self.assertEqual([x["id"] for x in merged], ["b", "a"])
-        self.assertFalse(dup)
-        merged2, dup2 = R.GH.merge_builds(merged, b)
-        self.assertTrue(dup2)
-        self.assertEqual(len(merged2), 2)
-
-    def test_publish_anon_fails_gracefully_offline(self):
-        ok, msg = R.GH.publish_build_anon({"id": "x-1"}, bucket="nope",
-                                          base="http://127.0.0.1:9", tries=1)
+    def test_publish_firebase_fails_gracefully_offline(self):
+        ok, msg = R.GH.publish_build_firebase({"id": "x-1"}, base="http://127.0.0.1:9", tries=1)
         self.assertFalse(ok)
         self.assertTrue(msg)
 
-    def test_load_anon_offline_is_none(self):
-        self.assertIsNone(R.GH.load_anon_builds(bucket="nope", base="http://127.0.0.1:9"))
+    def test_publish_firebase_without_base_explains(self):
+        ok, msg = R.GH.publish_build_firebase({"id": "x-1"}, base="")
+        self.assertFalse(ok)
+        self.assertIn("не настроен", msg)
+
+    def test_load_firebase_offline_is_none(self):
+        self.assertIsNone(R.GH.load_firebase_builds(base="http://127.0.0.1:9"))
+        self.assertIsNone(R.GH.load_firebase_builds(base=""))
 
 
 class TestPerkModes(unittest.TestCase):

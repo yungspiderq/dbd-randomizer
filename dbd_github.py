@@ -34,17 +34,17 @@ import time
 import urllib.error
 import urllib.request
 
-APP_VERSION = "2.3.1"
+APP_VERSION = "2.4.0"
 GITHUB_REPO = "yungspiderq/dbd-randomizer"
 API = "https://api.github.com"
 
 BUILDS_FILE_NAME = "community_builds.json"
-# Анонимный канал публикации (без токена GitHub): key-value хранилище kvdb.io.
-# Корзина создана владельцем репозитория; любой клиент может читать и писать
-# ключ community_builds. Гонки разруливаются чтением-слиянием-повтором.
-KVDB_BASE = "https://kvdb.io"
-ANON_BUCKET_DEFAULT = "BeFWn1piWxbk42EndgZ7wg"
-ANON_BUILDS_KEY = "community_builds"
+# Анонимный канал публикации (без токена GitHub): Firebase Realtime Database.
+# Проект создаёт владелец (бесплатно, без карты); правила дают всем чтение и
+# СОЗДАНИЕ записей (create-only), поэтому чужие билды нельзя править или удалять.
+# Запись = append (POST с push-ключом) — гонок с перезаписью чужих данных нет.
+FIREBASE_BASE_DEFAULT = ""          # вшивается в релиз после создания проекта
+FIREBASE_NODE = "community_builds"
 BUILDS_LOCAL_CACHE = "community_builds_cache.json"
 MAX_COMMUNITY_BUILDS = 200
 UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
@@ -287,49 +287,53 @@ def publish_build_to_github(build, token):
         return False, f"Не удалось опубликовать: {exc}"
 
 
-def load_anon_builds(bucket=ANON_BUCKET_DEFAULT, key=ANON_BUILDS_KEY, base=KVDB_BASE):
-    """Читает список билдов из анонимного хранилища kvdb.io. None = сеть недоступна."""
+def load_firebase_builds(base=FIREBASE_BASE_DEFAULT, node=FIREBASE_NODE):
+    """Читает билды из анонимного канала Firebase. None = канал не настроен/сеть лежит."""
+    if not base:
+        return None
     try:
-        raw = _http_get(f"{base}/{bucket}/{key}", timeout=12)
+        raw = _http_get(f"{base.rstrip('/')}/{node}.json", timeout=12)
         data = json.loads(raw.decode("utf-8"))
     except Exception:
         return None
-    if isinstance(data, list):
-        return [b for b in data if isinstance(b, dict)]
+    if not data:
+        return []
+    if isinstance(data, dict):
+        items = [v for v in data.values() if isinstance(v, dict)]
+        items.sort(key=lambda b: b.get("id", ""))
+        return items[::-1]                            # свежие сверху
     return []
 
 
-def merge_builds(existing, new_build, limit=MAX_COMMUNITY_BUILDS):
-    """Слияние без потери чужих данных: дедупликация по id, новинка сверху."""
-    builds = [b for b in (existing or []) if isinstance(b, dict)]
-    if any(b.get("id") == new_build.get("id") for b in builds):
-        return builds, True                     # уже опубликован
-    builds.insert(0, new_build)
-    return builds[:limit], False
+def publish_build_firebase(build, base=FIREBASE_BASE_DEFAULT, node=FIREBASE_NODE, tries=2):
+    """Публикация БЕЗ токена: append-only POST в Firebase RTDB.
 
-
-def publish_build_anon(build, bucket=ANON_BUCKET_DEFAULT, key=ANON_BUILDS_KEY,
-                       base=KVDB_BASE, tries=3):
-    """Публикация БЕЗ токена: read → merge → write → проверка, с повторами при гонке."""
-    url = f"{base}/{bucket}/{key}"
+    Create-only правила не дают перезаписать чужие записи; повторная публикация
+    того же id отклоняется на клиенте после чтения списка.
+    """
+    if not base:
+        return False, ("Анонимный канал не настроен: владелец проекта должен создать "
+                       "бесплатный Firebase-проект и вписать его URL в настройки "
+                       "(или дождаться релиза с прошитым URL).")
+    url = f"{base.rstrip('/')}/{node}.json"
     last = ""
     for _ in range(max(1, tries)):
-        current = load_anon_builds(bucket, key, base)
-        if current is None:
-            current = []
-        merged, dup = merge_builds(current, build)
-        if dup:
+        existing = load_firebase_builds(base, node)
+        if existing and any(b.get("id") == build.get("id") for b in existing):
             return True, "Такой билд уже опубликован."
         try:
-            _http_request(url, data=merged, method="PUT",
-                          headers={"Content-Type": "application/json"})
+            resp = _http_request(url, data=build, method="POST")
+            key = json.loads(resp.decode("utf-8")).get("name")
         except Exception as exc:
             last = str(exc)
             continue
-        check = load_anon_builds(bucket, key, base) or []
+        if not key:
+            last = "Firebase не вернул ключ записи"
+            continue
+        check = load_firebase_builds(base, node) or []
         if any(b.get("id") == build.get("id") for b in check):
-            return True, ("Билд опубликован в анонимном облаке (kvdb.io). "
-                          "Он появится у всех, кто читает список из этого канала.")
+            return True, ("Билд опубликован в анонимном облаке (Firebase). "
+                          "Он виден всем, кто читает список из этого канала.")
         last = "запись не подтвердилась при повторном чтении"
     return False, f"Не удалось опубликовать анонимно: {last}"
 

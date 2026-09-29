@@ -286,7 +286,7 @@ def default_config():
         cfg["timings"][key] = val
     cfg["options"] = dict(OPTION_DEFAULTS)
     cfg["owned"] = {"killers": [], "survivors": []}
-    cfg["publish"] = {"nickname": "", "gh_token": "", "backend": "github", "anon_bucket": ""}
+    cfg["publish"] = {"nickname": "", "gh_token": "", "backend": "github", "firebase_url": ""}
     cfg["update"] = {"auto": True, "allow_branch": False, "skip_tag": ""}
     return cfg
 
@@ -365,6 +365,8 @@ def _migrate_options(cfg):
     if opts.get("perk_mode_mixed_default_v22"):
         return cfg, False
     opts["perk_mode_mixed_default_v22"] = True
+    if opts.get("backend") == "anon":            # kvdb умер (нужна карта) -> firebase
+        opts["backend"] = "firebase"
     if opts.get("perk_mode") == "general":
         opts["perk_mode"] = "mixed"
         return cfg, True
@@ -1464,12 +1466,11 @@ class App:
     def _on_backend_change(self):
         if not getattr(self, "backend_var", None):
             return
-        if self.backend_var.get() == "anon":
-            if not self.bucket_entry.get().strip():
-                self.bucket_entry.delete(0, "end")
-                self.bucket_entry.insert(0, GH.ANON_BUCKET_DEFAULT)
-            hint = ("Без токена: билд уходит в общую корзину kvdb.io и виден всем, кто читает "
-                    "этот канал. Запись анонимная, без паролей и писем.")
+        if self.backend_var.get() == "firebase":
+            hint = ("Без токена: билд дописывается в общую Firebase-базу проекта владельца "
+                    "(create-only). URL базы можно сменить выше.")
+            if not self.firebase_entry.get().strip() and GH.FIREBASE_BASE_DEFAULT:
+                self.firebase_entry.insert(0, GH.FIREBASE_BASE_DEFAULT)
         else:
             hint = ("Через GitHub Contents API: нужен токен с правом Contents: Write "
                     "(вкладка хранит его локально).")
@@ -2124,18 +2125,19 @@ class App:
                        activebackground="#121212", activeforeground="#ffffff",
                        font=("Segoe UI", 9), anchor="w",
                        command=self._on_backend_change).pack(fill="x", padx=8, pady=(4, 0))
-        tk.Radiobutton(rbx, text="Анонимное облако kvdb.io (БЕЗ токена)",
-                       variable=self.backend_var, value="anon", bg="#121212", fg="#e0e0e0",
+        tk.Radiobutton(rbx, text="Облако Firebase (БЕЗ токена)",
+                       variable=self.backend_var, value="firebase", bg="#121212", fg="#e0e0e0",
                        selectcolor="#232323", activebackground="#121212",
                        activeforeground="#ffffff", font=("Segoe UI", 9), anchor="w",
                        command=self._on_backend_change).pack(fill="x", padx=8)
         brow = ttk.Frame(rbx)
         brow.pack(fill="x", padx=8, pady=(0, 6))
-        ttk.Label(brow, text="Корзина:", font=("Segoe UI", 8)).pack(side="left")
-        self.bucket_entry = tk.Entry(brow, width=26, bg="#232323", fg="#ffffff",
-                                     insertbackground="white", bd=1, relief="solid")
-        self.bucket_entry.insert(0, self.cfg["publish"].get("anon_bucket", ""))
-        self.bucket_entry.pack(side="left", padx=4)
+        ttk.Label(brow, text="URL БД:", font=("Segoe UI", 8)).pack(side="left")
+        self.firebase_entry = tk.Entry(brow, width=44, bg="#232323", fg="#ffffff",
+                                       insertbackground="white", bd=1, relief="solid")
+        self.firebase_entry.insert(0, self.cfg["publish"].get("firebase_url", "")
+                                   or GH.FIREBASE_BASE_DEFAULT)
+        self.firebase_entry.pack(side="left", padx=4, fill="x", expand=True)
         self.lbl_backend_hint = ttk.Label(rbx, text="", foreground="#8e8e93",
                                           font=("Segoe UI", 8), justify="left", wraplength=380)
         self.lbl_backend_hint.pack(fill="x", padx=8, pady=(0, 6))
@@ -2167,7 +2169,7 @@ class App:
         self.cfg["publish"]["nickname"] = self.nick_entry.get().strip()
         self.cfg["publish"]["gh_token"] = self.token_entry.get().strip()
         self.cfg["publish"]["backend"] = self.backend_var.get()
-        self.cfg["publish"]["anon_bucket"] = self.bucket_entry.get().strip()
+        self.cfg["publish"]["firebase_url"] = self.firebase_entry.get().strip()
         save_config(self.cfg)
         self.set_status("Настройки публикации сохранены.", "#34c759")
         self.log("Сохранены ник и токен публикации (токен — только в локальном конфиге).")
@@ -2178,17 +2180,17 @@ class App:
     def _load_builds_worker(self, manual):
         builds, online = GH.load_community_builds(APP_DIR)
         builds = list(builds or [])
-        bucket = self.anon_bucket()
-        anon = GH.load_anon_builds(bucket=bucket) if bucket else None
+        base = self.firebase_url()
+        anon = GH.load_firebase_builds(base=base) if base else None
         if anon:
             have = {b.get("id") for b in builds if isinstance(b, dict)}
             builds += [b for b in anon if isinstance(b, dict) and b.get("id") not in have]
             online = True
         self.ui_q.put(("builds", (builds, online, manual)))
 
-    def anon_bucket(self):
-        return (str(self.cfg["publish"].get("anon_bucket") or "").strip()
-                or GH.ANON_BUCKET_DEFAULT)
+    def firebase_url(self):
+        return (str(self.cfg["publish"].get("firebase_url") or "").strip()
+                or GH.FIREBASE_BASE_DEFAULT)
 
     def _on_builds_loaded(self, builds, online, manual):
         self.community_builds = builds if isinstance(builds, list) else []
@@ -2324,7 +2326,7 @@ class App:
             save_config(self.cfg)
         backend = self.backend_var.get() if getattr(self, "backend_var", None) else \
             self.cfg["publish"].get("backend", "github")
-        token, bucket = None, self.anon_bucket()
+        token, base = None, self.firebase_url()
         if backend != "anon":
             token = GH.resolve_token(self.cfg)
             if not token:
@@ -2332,7 +2334,7 @@ class App:
                                                "Введите токен GitHub (нужны права на запись в репозиторий).\n"
                                                "Сохранить навсегда можно во вкладке «БИЛДЫ».\n"
                                                "Хотите публиковать БЕЗ токена? Отмените ввод и выберите\n"
-                                               "«Анонимное облако» в настройках вкладки «БИЛДЫ».",
+                                               "«Облако Firebase» в настройках вкладки «БИЛДЫ».",
                                                show="*", parent=self.root)
                 if not token:
                     return
@@ -2344,13 +2346,13 @@ class App:
         self.btn_publish.config(state="disabled")
         self.set_status("Публикуем билд…", "#ffcc00")
         threading.Thread(target=self._publish_worker,
-                         args=(payload, token, bucket), daemon=True).start()
+                         args=(payload, token, base), daemon=True).start()
 
-    def _publish_worker(self, payload, token, bucket=None):
+    def _publish_worker(self, payload, token, base=None):
         if token:
             ok, msg = GH.publish_build_to_github(payload, token)
         else:
-            ok, msg = GH.publish_build_anon(payload, bucket=bucket or self.anon_bucket())
+            ok, msg = GH.publish_build_firebase(payload, base=base or self.firebase_url())
 
         def done():
             self.btn_publish.config(state="normal")
