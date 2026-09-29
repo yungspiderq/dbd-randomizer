@@ -864,8 +864,13 @@ class App:
         _set_dpi_awareness()
         root.title(f"DBD Ultimate Search Randomizer — SURV & KILLER v{APP_VERSION}")
         root.configure(bg="#0e1116")
-        root.geometry("1080x780")
-        root.minsize(900, 620)
+        try:
+            sw = max(640, int(root.winfo_screenwidth()))
+            sh = max(480, int(root.winfo_screenheight()))
+        except Exception:
+            sw, sh = 1280, 800
+        root.geometry(f"{min(1120, sw - 60)}x{min(800, sh - 90)}")
+        root.minsize(min(900, sw - 20), min(620, sh - 20))
 
         self._setup_style()
         _set_dark_titlebar(root)
@@ -993,7 +998,7 @@ class App:
         pal = self._pal
         head = tk.Frame(self.root, bg=pal["panel"], height=58,
                         highlightbackground=pal["line"], highlightthickness=1)
-        head.grid(row=0, column=0, sticky="ew")
+        head.grid(row=0, column=0, columnspan=2, sticky="ew")
         head.grid_propagate(False)
         tk.Label(head, text="☠", bg=pal["panel"], fg=pal["acc"],
                  font=("Segoe UI", 20, "bold")).pack(side="left", padx=(16, 0))
@@ -1016,35 +1021,99 @@ class App:
                                 highlightbackground=pal["line"], padx=10, pady=3)
             rb.pack(side="left", padx=(0, 6))
 
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.grid(row=1, column=0, sticky="nsew", padx=8, pady=4)
-        self.tab_main = ttk.Frame(self.notebook)
-        self.tab_chars = ttk.Frame(self.notebook)
-        self.tab_coords = ttk.Frame(self.notebook)
-        self.tab_builds = ttk.Frame(self.notebook)
-        self.tab_maker = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_main, text=" 🎲 БИЛД ")
-        self.notebook.add(self.tab_maker, text=" 🛠 КОНСТРУКТОР ")
-        self.notebook.add(self.tab_builds, text=" 🌍 БИЛДЫ СООБЩЕСТВА ")
-        self.notebook.add(self.tab_chars, text=" 🎭 ПЕРСОНАЖИ ")
-        self.notebook.add(self.tab_coords, text=" 🎯 КЛИКИ И ТАЙМИНГИ ")
+        pal = self._pal
+        self.root.columnconfigure(1, weight=1)
+        self.nav = tk.Frame(self.root, bg="#0b0e12", width=218)
+        self.nav.grid(row=1, column=0, sticky="ns")
+        self.nav.grid_propagate(False)
+        tk.Label(self.nav, text="НАВИГАЦИЯ", bg="#0b0e12", fg="#56606c",
+                 font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=20, pady=(16, 6))
+        self._page = "main"
+        self._nav_items = {}
+        for key, icon, text in (("main", "🎲", "БИЛД"), ("maker", "🛠", "КОНСТРУКТОР"),
+                                ("builds", "🌍", "БИЛДЫ СООБЩЕСТВА"),
+                                ("chars", "🎭", "ПЕРСОНАЖИ"),
+                                ("coords", "🎯", "КЛИКИ И ТАЙМИНГИ")):
+            self._nav_items[key] = self._add_nav_item(key, icon, text)
+        tk.Frame(self.nav, bg="#2a323d", height=1).pack(fill="x", padx=16, pady=(10, 8))
+        tk.Label(self.nav, text="F5 билд · F6 перки · F7 копия", bg="#0b0e12",
+                 fg="#56606c", font=("Segoe UI", 8), anchor="w",
+                 justify="left").pack(anchor="w", padx=20)
+        self.content = tk.Frame(self.root, bg=pal["bg"])
+        self.content.grid(row=1, column=1, sticky="nsew")
+        self.content.columnconfigure(0, weight=1)
+        self.content.rowconfigure(0, weight=1)
+        self.tab_main = ttk.Frame(self.content)
+        self.tab_maker = ttk.Frame(self.content)
+        self.tab_builds = ttk.Frame(self.content)
+        self.tab_chars = ttk.Frame(self.content)
+        self.tab_coords = ttk.Frame(self.content)
+        for fr in (self.tab_main, self.tab_maker, self.tab_builds,
+                   self.tab_chars, self.tab_coords):
+            fr.grid(row=0, column=0, sticky="nsew")
 
         self._build_main_tab()
         self._build_maker_tab()
         self._build_builds_tab()
         self._build_chars_tab()
         self._build_coords_tab()
+        self._show_page("main")
+        for key, fn in (("<F5>", self.generate_build), ("<F6>", self.reroll_perks),
+                        ("<F7>", self.copy_build)):
+            self.root.bind(key, lambda _e, f=fn: f())
 
         # --- строка состояния -------------------------------------------------
-        tk.Frame(self.root, bg=pal["line"], height=1).grid(row=2, column=0, sticky="ew")
+        tk.Frame(self.root, bg=pal["line"], height=1).grid(row=2, column=0,
+                                                            columnspan=2, sticky="ew")
         bottom = ttk.Frame(self.root)
-        bottom.grid(row=3, column=0, sticky="ew", padx=12, pady=(6, 8))
+        bottom.grid(row=3, column=0, columnspan=2, sticky="ew", padx=12, pady=(6, 8))
+        self.status_dot = tk.Label(bottom, text="●", fg="#56606c",
+                                   font=("Segoe UI", 10))
+        self.status_dot.pack(side="left", padx=(0, 6))
         self.status = ttk.Label(bottom, text="Готово. Сгенерируйте билд.", foreground="#8d99a6",
                                 font=("Segoe UI", 9), wraplength=760, justify="left")
         self.status.pack(side="left", fill="x", expand=True)
         self.btn_stop = ttk.Button(bottom, text="⏹ СТОП (F9)", style="Stop.TButton",
                                    command=self.request_abort, width=14)
         self.btn_stop.pack(side="right", padx=(8, 0))
+
+    def _add_nav_item(self, key, icon, text):
+        pal = self._pal
+        wrap = tk.Frame(self.nav, bg="#0b0e12")
+        wrap.pack(fill="x")
+        bar = tk.Frame(wrap, bg="#0b0e12", width=3)
+        bar.pack(side="left", fill="y")
+        lbl = tk.Label(wrap, text=f"{icon}   {text}", bg="#0b0e12", fg=pal["muted"],
+                       font=("Segoe UI", 10, "bold"), anchor="w", padx=17, pady=10)
+        lbl.pack(side="left", fill="x", expand=True)
+
+        def enter(_e=None):
+            if self._page != key:
+                wrap.config(bg="#161b22"); bar.config(bg="#161b22")
+
+        def leave(_e=None):
+            if self._page != key:
+                wrap.config(bg="#0b0e12"); bar.config(bg="#0b0e12")
+
+        def click(_e=None):
+            self._show_page(key)
+        for w in (wrap, bar, lbl):
+            w.bind("<Enter>", enter)
+            w.bind("<Leave>", leave)
+            w.bind("<Button-1>", click)
+        return wrap, bar, lbl
+
+    def _show_page(self, key):
+        pal = self._pal
+        self._page = key
+        for k, (wrap, bar, lbl) in self._nav_items.items():
+            active = (k == key)
+            wrap.config(bg=pal["panel"] if active else "#0b0e12")
+            bar.config(bg=pal["acc"] if active else "#0b0e12")
+            lbl.config(bg=pal["panel"] if active else "#0b0e12",
+                       fg=pal["fg"] if active else pal["muted"])
+        {"main": self.tab_main, "maker": self.tab_maker, "builds": self.tab_builds,
+         "chars": self.tab_chars, "coords": self.tab_coords}[key].tkraise()
 
     # ---- вкладка «Билд» ------------------------------------------------------
     def _build_main_tab(self):
@@ -1125,15 +1194,22 @@ class App:
         lsb = ttk.Scrollbar(logbox, orient="vertical", command=self.txt_log.yview)
         lsb.grid(row=0, column=1, sticky="ns")
         self.txt_log.configure(yscrollcommand=lsb.set)
+        jbar = tk.Frame(logbox, bg=self._pal["panel"])
+        jbar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=4, pady=(4, 4))
+        ttk.Button(jbar, text="🧹 очистить", width=11,
+                   command=self._clear_log).pack(side="right")
+        ttk.Button(jbar, text="📋 копия", width=9,
+                   command=self._copy_log).pack(side="right", padx=(0, 4))
 
     # ---- карточка билда с иконками -------------------------------------------
     def _build_card(self, parent):
-        canvas = tk.Canvas(parent, bg="#151a21", highlightthickness=0, bd=0)
+        canvas = tk.Canvas(parent, bg="#0e1116", highlightthickness=0, bd=0)
         sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        self.card = tk.Frame(canvas, bg="#151a21")
+        self.card = tk.Frame(canvas, bg="#151a21", highlightbackground="#2a323d",
+                             highlightthickness=1)
         win = canvas.create_window((0, 0), window=self.card, anchor="nw")
         self.card.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width - 2))
         canvas.configure(yscrollcommand=sb.set)
         canvas.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=6)
         sb.grid(row=0, column=1, sticky="ns", pady=6)
@@ -1150,68 +1226,79 @@ class App:
         pad = dict(bg="#151a21")
         self.card_stripe = tk.Frame(self.card, bg="#e5534b", height=3)
         self.card_stripe.pack(fill="x")
-        self.card_hint = tk.Label(self.card, justify="left", anchor="w", fg="#8d99a6",
-                                  font=("Segoe UI", 10), wraplength=420, **pad)
-        self.card_hint.pack(fill="x", padx=14, pady=12)
 
-        self.card_author = tk.Label(self.card, anchor="w", fg="#e3b341", bg="#151a21",
-                                    font=("Segoe UI", 9, "italic"))
-        self.card_author.pack(fill="x", padx=14, pady=(2, 0))
-        row_char = tk.Frame(self.card, **pad)
-        row_char.pack(fill="x", padx=14, pady=(2, 0))
-        self.card_char_img = tk.Label(row_char, bg="#151a21",
-                                      width=ICON_SIZE + 12, height=ICON_SIZE + 12)
-        self.card_char_img.pack(side="left", padx=(0, 8))
-        self.card_char = tk.Label(row_char, anchor="w", fg="#ffffff", bg="#151a21",
+        head = tk.Frame(self.card, **pad)
+        head.pack(fill="x", padx=16, pady=(14, 4))
+        self.card_char_img = tk.Label(head, bg="#1c232c", width=ICON_SIZE + 14,
+                                      height=ICON_SIZE + 14, highlightbackground="#2a323d",
+                                      highlightthickness=1)
+        self.card_char_img.pack(side="left", padx=(0, 10))
+        col = tk.Frame(head, **pad)
+        col.pack(side="left", fill="x", expand=True)
+        self.card_char = tk.Label(col, anchor="w", fg="#e6ebf0", bg="#151a21",
                                   font=("Segoe UI", 15, "bold"))
-        self.card_char.pack(side="left", fill="x", expand=True)
-        row_main = tk.Frame(self.card, **pad)
-        row_main.pack(fill="x", padx=14, pady=(2, 0))
-        self.card_main_img = tk.Label(row_main, bg="#151a21", width=ICON_SIZE, height=ICON_SIZE)
-        self.card_main_img.pack(side="left", padx=(0, 8))
-        self.card_main = tk.Label(row_main, anchor="w", fg="#e5534b", bg="#151a21",
-                                  font=("Segoe UI", 11, "bold"), wraplength=380, justify="left")
-        self.card_main.pack(side="left", fill="x", expand=True)
-        self.card_sub = tk.Label(self.card, anchor="w", fg="#7d8894", bg="#151a21",
+        self.card_char.pack(fill="x")
+        self.card_sub = tk.Label(col, anchor="w", fg="#7d8894", bg="#151a21",
                                  font=("Segoe UI", 9, "italic"))
-        self.card_sub.pack(fill="x", padx=14, pady=(2, 0))
+        self.card_sub.pack(fill="x")
+        self.card_author = tk.Label(head, anchor="e", fg="#e3b341", bg="#151a21",
+                                    font=("Segoe UI", 9, "italic"), wraplength=150,
+                                    justify="right")
+        self.card_author.pack(side="right", padx=(8, 0))
+
+        self.card_hint = tk.Label(self.card, justify="left", anchor="w", fg="#8d99a6",
+                                  font=("Segoe UI", 10), wraplength=430, **pad)
+        self.card_hint.pack(fill="x", padx=16, pady=(8, 4))
+
+        self._card_section("⚡ СИЛА / ПРЕДМЕТ")
+        tile = self._tile(self.card, wrap=360)
+        tile[0].pack(fill="x", padx=16, pady=2)
+        self.card_main_img, self.card_main = tile[1], tile[2]
+        self.card_main.config(fg="#e5534b", font=("Segoe UI", 10, "bold"))
 
         self._card_section("🔧 АДДОНЫ")
+        arow = tk.Frame(self.card, **pad)
+        arow.pack(fill="x", padx=16, pady=2)
+        arow.columnconfigure(0, weight=1)
+        arow.columnconfigure(1, weight=1)
         self.card_addons = []
-        for _ in range(2):
-            row = tk.Frame(self.card, **pad)
-            row.pack(fill="x", padx=20, pady=2)
-            img = tk.Label(row, bg="#151a21", width=ICON_SIZE, height=ICON_SIZE)
-            img.pack(side="left", padx=(0, 8))
-            txt = tk.Label(row, anchor="w", fg="#dfe5ea", bg="#151a21",
-                           font=("Segoe UI", 10), wraplength=340, justify="left")
-            txt.pack(side="left", fill="x", expand=True)
-            self.card_addons.append((img, txt))
+        for i in range(2):
+            tile = self._tile(arow, wrap=150)
+            tile[0].grid(row=0, column=i, sticky="nsew",
+                         padx=(0 if i == 0 else 3, 3 if i == 0 else 0))
+            self.card_addons.append((tile[1], tile[2]))
 
         self._card_section("🔮 НАВЫКИ")
         self.card_perks = []
         for _ in range(4):
-            row = tk.Frame(self.card, **pad)
-            row.pack(fill="x", padx=20, pady=2)
-            img = tk.Label(row, bg="#151a21", width=ICON_SIZE, height=ICON_SIZE)
-            img.pack(side="left", padx=(0, 8))
-            txt = tk.Label(row, anchor="w", fg="#3fb950", bg="#151a21",
-                           font=("Segoe UI", 11), wraplength=340, justify="left")
-            txt.pack(side="left", fill="x", expand=True)
-            self.card_perks.append((img, txt))
+            tile = self._tile(self.card, wrap=360)
+            tile[0].pack(fill="x", padx=16, pady=2)
+            tile[2].config(fg="#3fb950")
+            self.card_perks.append((tile[1], tile[2]))
 
         bar = tk.Frame(self.card, **pad)
-        bar.pack(fill="x", padx=14, pady=(10, 14))
+        bar.pack(fill="x", padx=16, pady=(10, 14))
         self.lbl_icons = tk.Label(bar, fg="#7d8894", bg="#151a21", font=("Segoe UI", 8),
                                   anchor="w", justify="left")
         self.lbl_icons.pack(side="left", fill="x", expand=True)
-        self.btn_icons = tk.Button(bar, text="⬇ Все иконки", bg="#2a323d", fg="#e6ebf0",
+        self.btn_icons = tk.Button(bar, text="⬇ Все иконки", bg="#1c232c", fg="#e6ebf0",
                                    activebackground="#333c48", activeforeground="#ffffff",
-                                   relief="flat", font=("Segoe UI", 8), padx=8, pady=2,
+                                   relief="flat", bd=0, font=("Segoe UI", 8), padx=10, pady=3,
                                    command=self.download_all_icons)
         self.btn_icons.pack(side="right")
         self._update_icon_hint()
         self._set_build_text(None)
+
+    def _tile(self, parent, wrap=340):
+        """Плитка слота: рамка, иконка слева, текст справа."""
+        frame = tk.Frame(parent, bg="#1c232c", highlightbackground="#2a323d",
+                         highlightthickness=1)
+        img = tk.Label(frame, bg="#1c232c", width=ICON_SIZE, height=ICON_SIZE)
+        img.pack(side="left", padx=(8, 8), pady=6)
+        txt = tk.Label(frame, anchor="w", fg="#dfe5ea", bg="#1c232c",
+                       font=("Segoe UI", 10), wraplength=wrap, justify="left")
+        txt.pack(side="left", fill="x", expand=True, padx=(0, 10), pady=6)
+        return frame, img, txt
 
     def _card_section(self, text):
         row = tk.Frame(self.card, bg="#151a21")
@@ -1326,8 +1413,16 @@ class App:
 
         sel = ttk.LabelFrame(self.tab_maker, text=" СОСТАВ ")
         sel.pack(fill="both", expand=True, padx=10, pady=4)
-        row = ttk.Frame(sel)
-        row.pack(fill="x", padx=8, pady=(6, 2))
+        sel.columnconfigure(0, weight=1)
+        sel.columnconfigure(1, weight=1)
+        mk_left = ttk.Frame(sel)
+        mk_left.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=6)
+        mk_right = ttk.Frame(sel)
+        mk_right.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=6)
+        for fr in (mk_left, mk_right):
+            fr.columnconfigure(0, weight=1)
+        row = ttk.Frame(mk_left)
+        row.grid(row=0, column=0, sticky="ew")
         ttk.Label(row, text="Сторона:", width=10, anchor="w").pack(side="left")
         self.mk_side_var = tk.StringVar(value="KILLER")
         for text, value, color in (("👹 Маньяк", "KILLER", "#ff7b72"),
@@ -1338,8 +1433,8 @@ class App:
                            font=("Segoe UI", 9, "bold"),
                            command=self._mk_on_side).pack(side="left", padx=8)
 
-        self.mk_row_char = ttk.Frame(sel)
-        self.mk_row_char.pack(fill="x", padx=8, pady=2)
+        self.mk_row_char = ttk.Frame(mk_left)
+        self.mk_row_char.grid(row=1, column=0, sticky="ew", pady=2)
         ttk.Label(self.mk_row_char, text="Персонаж:", width=10, anchor="w").pack(side="left")
         self.mk_char = ttk.Combobox(self.mk_row_char, state="readonly", width=22)
         self.mk_char.pack(side="left", padx=4)
@@ -1348,7 +1443,9 @@ class App:
                                       font=("Segoe UI", 9))
         self.mk_power_lbl.pack(side="left", padx=10)
 
-        self.mk_row_item = ttk.Frame(sel)
+        self.mk_row_item = ttk.Frame(mk_left)
+        self.mk_row_item.grid(row=2, column=0, sticky="ew", pady=2)
+        self.mk_row_item.grid_remove()
         ttk.Label(self.mk_row_item, text="Категория:", width=10, anchor="w").pack(side="left")
         self.mk_cat = ttk.Combobox(self.mk_row_item, state="readonly", width=18)
         self.mk_cat.pack(side="left", padx=4)
@@ -1358,8 +1455,8 @@ class App:
         self.mk_item.pack(side="left", padx=4)
         self.mk_item.bind("<<ComboboxSelected>>", lambda e: self._mk_on_cat())
 
-        self.mk_row_addons = ttk.Frame(sel)
-        self.mk_row_addons.pack(fill="x", padx=8, pady=2)
+        self.mk_row_addons = ttk.Frame(mk_right)
+        self.mk_row_addons.grid(row=0, column=0, sticky="ew", pady=2)
         ttk.Label(self.mk_row_addons, text="Аддоны:", width=10, anchor="w").pack(side="left")
         self.mk_addons = []
         for _ in range(2):
@@ -1367,9 +1464,12 @@ class App:
             cb.pack(side="left", padx=4)
             self.mk_addons.append(cb)
 
+        mk_perk_box = ttk.LabelFrame(mk_right, text=" НАВЫКИ ")
+        mk_perk_box.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+        mk_perk_box.columnconfigure(0, weight=1)
         self.mk_perks = []
         for i in range(4):
-            prow = ttk.Frame(sel)
+            prow = ttk.Frame(mk_perk_box)
             prow.pack(fill="x", padx=8, pady=2)
             ttk.Label(prow, text=f"Навык {i + 1}:", width=10, anchor="w").pack(side="left")
             cb = ttk.Combobox(prow, width=44)
@@ -1415,9 +1515,9 @@ class App:
             self.mk_cat.configure(values=cats)
             if self.mk_cat.get() not in cats:
                 self.mk_cat.set(cats[0] if cats else "")
-            self.mk_row_item.pack(fill="x", padx=8, pady=2, before=self.mk_row_addons)
+            self.mk_row_item.grid()
         else:
-            self.mk_row_item.pack_forget()
+            self.mk_row_item.grid_remove()
         self._mk_on_char()
 
     def _mk_on_char(self):
@@ -1490,7 +1590,7 @@ class App:
         self.build = b
         self._render_build()
         self.btn_equip.config(state="normal")
-        self.notebook.select(self.tab_main)
+        self._show_page("main")
         if equip:
             self.start_equip()
 
@@ -1779,6 +1879,8 @@ class App:
                 elif kind == "status":
                     text, color = payload
                     self.status.config(text=text, foreground=color)
+                    if getattr(self, "status_dot", None):
+                        self.status_dot.config(fg=color)
                 elif kind == "progress":
                     self.progress["value"] = payload
                 elif kind == "error":
@@ -1805,6 +1907,18 @@ class App:
         self.txt_log.insert("end", f"[{stamp}] {line}\n")
         self.txt_log.see("end")
         self.txt_log.configure(state="disabled")
+
+    def _clear_log(self):
+        self.txt_log.configure(state="normal")
+        self.txt_log.delete("1.0", "end")
+        self.txt_log.configure(state="disabled")
+
+    def _copy_log(self):
+        try:
+            pyperclip.copy(self.txt_log.get("1.0", "end").strip())
+            self.set_status("Журнал скопирован.", "#3fb950")
+        except Exception as exc:
+            messagebox.showerror("Буфер обмена", str(exc))
 
     def _on_mode_change(self):
         self.cfg["options"]["side"] = self.mode_var.get()
@@ -2366,7 +2480,7 @@ class App:
         }
         self._render_build()
         self.btn_equip.config(state="normal")
-        self.notebook.select(self.tab_main)
+        self._show_page("main")
         self.set_status(f"Билд от {self.build['author']} загружен. Откройте меню снаряжения "
                         f"и нажмите «ЭКИПИРОВАТЬ».", "#3fb950")
         self.log(f"Загружен чужой билд: {GH.format_build_text(b).splitlines()[2]}")
@@ -2669,7 +2783,7 @@ class App:
         missing = [r for r in dict.fromkeys(required) if self.get_coord(r) is None]
         if missing:
             messagebox.showerror("Координаты", "Не заданы координаты:\n" + "\n".join(f"• {m}" for m in missing))
-            self.notebook.select(self.tab_coords)
+            self._show_page("coords")
             return
         if not self.dry_var.get() and not INPUT.available:
             messagebox.showerror("Автоматизация", f"Недоступен ввод: {INPUT.reason}\n"

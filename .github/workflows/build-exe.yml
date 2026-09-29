@@ -1,0 +1,50 @@
+name: build-exe
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Тег релиза, к которому прикрепить EXE (пусто = только артефакт)"
+        required: false
+        default: ""
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+      - name: Build EXE
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name DBDRandomizer
+          --hidden-import pydirectinput --hidden-import pyautogui
+          --hidden-import keyboard --hidden-import PIL
+          dbd_randomizer.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DBDRandomizer-exe
+          path: dist/DBDRandomizer.exe
+      - name: Attach EXE to release
+        if: ${{ github.event.inputs.tag != '' || startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag }}"
+          if (-not $tag) { $tag = "${{ github.ref_name }}" }
+          # релиз создаётся отдельным скриптом владельца; ждём его появления
+          for ($i = 0; $i -lt 15; $i++) {
+            gh release upload $tag dist/DBDRandomizer.exe --clobber
+            if ($LASTEXITCODE -eq 0) { Write-Host "EXE прикреплён к $tag"; exit 0 }
+            Write-Host "релиз $tag ещё не готов, повтор через 20 c..."
+            Start-Sleep -Seconds 20
+          }
+          exit 1
