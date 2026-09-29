@@ -1,1535 +1,1817 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
-import threading
-import time
-import random
-import re
+# -*- coding: utf-8 -*-
+"""
+DBD Ultimate Search Randomizer — SURV & KILLER  (v2, исправленная)
+=================================================================
+Рандомизатор билдов + автоэкипировка через поиск в инвентаре Dead by Daylight.
+
+Запуск:
+    python dbd_randomizer.py            # GUI
+    python dbd_randomizer.py --selftest # проверка базы и генератора без GUI
+
+Зависимости (Windows):
+    pip install pyautogui pydirectinput pyperclip keyboard
+    необязательно: pip install pytesseract   (проверка результата поиска по OCR)
+
+Горячие клавиши во время автоэкипировки:
+    F9  — немедленный СТОП (настраивается)
+    мышь в левый верхний угол экрана — аварийный стоп (pyautogui FAILSAFE)
+
+Что исправлено относительно v1 — см. README.md (полный аудит).
+"""
+
+import ctypes
+import copy
 import json
-import base64
-import urllib.request
-import urllib.error
+import os
+import queue
+import random
+import shutil
 import subprocess
 import sys
-import pyautogui
+import threading
+import time
+
 import pyperclip
-import pydirectinput
-import os
 
-pyautogui.PAUSE = 0.05
-
-# ================== АВТО-ОБНОВЛЕНИЕ ==================
-APP_VERSION = "1.1.1"
-GITHUB_REPO = "yungspiderq/dbd-randomizer"
-UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000  # проверка каждые 30 минут
-BUILDS_FILE_NAME = "community_builds.json"          # файл билдов в репозитории GitHub
-BUILDS_LOCAL_CACHE = "community_builds_cache.json"  # локальный кэш (работает офлайн)
-MAX_COMMUNITY_BUILDS = 200                          # защита от разрастания файла
+# tkinter импортируется лениво (в main()), чтобы `--selftest` работал и на машинах
+# без графической среды — например, в CI или на второй ОС.
+tk = ttk = messagebox = filedialog = simpledialog = None
 
 
-def _http_request(url, data=None, timeout=10, headers=None, method=None):
-    """Универсальный HTTP-запрос (GET без data, POST/PUT/PATCH с JSON data)."""
-    h = {"User-Agent": "DBDRandomizer/" + APP_VERSION}
-    if headers:
-        h.update(headers)
-    body = None
-    if data is not None:
-        body = json.dumps(data).encode("utf-8")
-        h["Content-Type"] = "application/json"
-    sep = "&" if "?" in url else "?"
-    req = urllib.request.Request(url + sep + "_=" + str(int(time.time() * 1000)),
-                                 data=body, headers=h, method=method)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+def _load_tk():
+    global tk, ttk, messagebox, filedialog, simpledialog
+    import tkinter as _tk
+    from tkinter import ttk as _ttk, messagebox as _mb, filedialog as _fd
+    from tkinter import simpledialog as _sd
+    tk, ttk, messagebox, filedialog, simpledialog = _tk, _ttk, _mb, _fd, _sd
+    return _tk
 
 
-def _http_get(url, timeout=8, headers=None):
-    return _http_request(url, timeout=timeout, headers=headers)
+try:
+    import dbd_data as DATA
+    import dbd_github as GH
+    import dbd_icons as ICONS
+    from dbd_icons_store import IconStore, pil_available
+except ImportError:                       # запуск из другой директории
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import dbd_data as DATA
+    import dbd_github as GH
+    import dbd_icons as ICONS
+    from dbd_icons_store import IconStore, pil_available
 
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_VERSION = GH.APP_VERSION
+ICONS_DIR = os.path.join(APP_DIR, "icons_cache")
+ICON_SIZE = 34
+CONFIG_FILE = os.path.join(APP_DIR, "dbd_randomizer_config.json")
+LEGACY_CONFIG = os.path.join(APP_DIR, "dbd_randomizer_config.txt")
+DB_FILE = os.path.join(APP_DIR, "dbd_database.json")
+BACKEND_NAME = "pydirectinput"            # DirectInput нужен для полноэкранного DBD
 
-def get_latest_release_info():
-    """Возвращает (tag, notes) последнего релиза или None."""
+# ----------------------------------------------------------------------------
+# Windows: DPI awareness ДО создания окон, иначе координаты мыши и координаты
+# игры разъезжаются при масштабе != 100%.
+# ----------------------------------------------------------------------------
+def _set_dpi_awareness():
+    if os.name != "nt":
+        return
     try:
-        import json
-        data = json.loads(_http_get(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
-                              headers=_gh_api_headers()).decode("utf-8"))
-        return data.get("tag_name", ""), data.get("body", "") or ""
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)          # PER_MONITOR_AWARE
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+# ----------------------------------------------------------------------------
+# Бэкенд ввода. pyautogui/pydirectinput импортируются только на Windows,
+# поэтому «сухой прогон» (--selftest, галка Dry-run) работает где угодно.
+# ----------------------------------------------------------------------------
+class InputUnavailable(RuntimeError):
+    pass
+
+
+class _Input:
+    def __init__(self):
+        self.pyautogui = None
+        self.pydirectinput = None
+        self.available = False
+        self.reason = ""
+        if os.name != "nt":
+            self.reason = "нужна Windows (pydirectinput/DirectInput)"
+            return
+        try:
+            import pyautogui
+            import pydirectinput
+        except Exception as exc:                                # pragma: no cover
+            self.reason = f"не установлены библиотеки: {exc}"
+            return
+        self.pyautogui, self.pydirectinput = pyautogui, pydirectinput
+        pyautogui.FAILSAFE = True
+        pyautogui.PAUSE = 0.0
+        for attr in ("PAUSE", "FAILSAFE"):
+            if hasattr(pydirectinput, attr):
+                setattr(pydirectinput, attr, 0.0 if attr == "PAUSE" else True)
+        self.available = True
+
+    # -- низкоуровневые примитивы -------------------------------------------
+    def position(self):
+        if not self.available:
+            raise InputUnavailable(self.reason)
+        return self.pyautogui.position()
+
+    def move(self, x, y, steps=6):
+        if not self.available:
+            raise InputUnavailable(self.reason)
+        pdi = self.pydirectinput
+        if steps <= 1 or not hasattr(pdi, "moveTo"):
+            pdi.moveTo(int(x), int(y))
+            return
+        try:
+            cx, cy = self.position()
+        except Exception:
+            cx, cy = x, y
+        for i in range(1, steps + 1):
+            t = i / steps
+            pdi.moveTo(int(cx + (x - cx) * t), int(cy + (y - cy) * t))
+            time.sleep(0.004)
+
+    def click(self, x, y, hold=0.06, steps=6):
+        if not self.available:
+            raise InputUnavailable(self.reason)
+        pdi = self.pydirectinput
+        self.move(x, y, steps=steps)
+        pdi.mouseDown()
+        time.sleep(max(0.02, hold))
+        pdi.mouseUp()
+
+    def key(self, name, hold=0.02):
+        if not self.available:
+            raise InputUnavailable(self.reason)
+        pdi = self.pydirectinput
+        if hasattr(pdi, "press"):
+            pdi.press(name)
+        else:
+            pdi.keyDown(name)
+            time.sleep(hold)
+            pdi.keyUp(name)
+
+    def hotkey(self, *keys, hold=0.02):
+        if not self.available:
+            raise InputUnavailable(self.reason)
+        pdi = self.pydirectinput
+        for k in keys:
+            pdi.keyDown(k)
+            time.sleep(hold)
+        time.sleep(hold)
+        for k in reversed(keys):
+            pdi.keyUp(k)
+            time.sleep(hold)
+
+    def paste(self, text, verify=True, retries=6, restore=False):
+        """Копирует текст в буфер и вставляет Ctrl+V. Возвращает True при успехе."""
+        if not self.available:
+            raise InputUnavailable(self.reason)
+        old = None
+        if restore:
+            try:
+                old = pyperclip.paste()
+            except Exception:
+                pass
+        ok = False
+        for _ in range(retries):
+            try:
+                pyperclip.copy(text)
+                time.sleep(0.03)
+                if not verify or pyperclip.paste() == text:
+                    ok = True
+                    break
+            except Exception:
+                time.sleep(0.05)
+        if not ok:                                              # последняя попытка вслепую
+            try:
+                pyperclip.copy(text)
+                time.sleep(0.06)
+                ok = True
+            except Exception:
+                ok = False
+        if ok:
+            self.hotkey("ctrl", "v")
+        if restore and ok:
+            # даём игре забрать текст из буфера, прежде чем вернуть прежнее содержимое
+            time.sleep(0.12)
+            try:
+                if old is not None and old != "":
+                    pyperclip.copy(old)
+            except Exception:
+                pass
+        return ok
+
+
+INPUT = _Input()
+
+
+# ----------------------------------------------------------------------------
+# Конфигурация
+# ----------------------------------------------------------------------------
+COORD_FIELDS = [
+    ("item_slot",       "👜 Слот предмета (выживший)"),
+    ("addon1_slot",     "🔧 Слот аддона №1"),
+    ("addon2_slot",     "🔧 Слот аддона №2"),
+    ("slot1",           "🔮 Слот навыка 1"),
+    ("slot2",           "🔮 Слот навыка 2"),
+    ("slot3",           "🔮 Слот навыка 3"),
+    ("slot4",           "🔮 Слот навыка 4"),
+    ("search",          "🔍 Поисковая строка инвентаря"),
+    ("clear",           "❌ Кнопка очистки поиска (необязательно)"),
+    ("first_result",    "✅ 1-я иконка в результатах поиска"),
+    ("char_search",     "🎭 Поиск персонажа (необязательно)"),
+    ("ocr_region",      "🔎 Область имени результата для OCR (необязательно)"),
+]
+
+TIMING_DEFAULTS = {
+    "search_settle":   (0.35, "Пауза после ввода поиска, сек (0.25–0.6)"),
+    "after_slot_click":(0.45, "Пауза после клика по слоту, сек"),
+    "hold":            (0.06, "Удержание кнопки мыши, сек"),
+    "between_steps":   (0.25, "Пауза между шагами, сек"),
+    "retries":         (2,    "Повторов поиска при неудаче"),
+    "countdown":       (5,    "Обратный отсчёт, сек"),
+    "move_steps":      (6,    "Шагов перемещения курсора (1 = мгновенно)"),
+    "result_step":     (84,   "Шаг сетки выдачи, px (для result_index > 1)"),
+}
+
+OPTION_DEFAULTS = {
+    "dry_run":         False,
+    "use_clear_button":False,
+    "verify_clipboard":True,
+    "ocr_verify":      False,
+    "restore_clipboard":True,
+    "result_index":    1,      # 1..9 — какую иконку выдачи считать нужной
+    "abort_key":       "f9",
+    "select_char":     False,       # искать персонажа по имени и выбирать его
+    "perk_mode":       "general",   # general | unique | mixed
+    "respect_owned":   False,       # учитывать белые списки OWNED_*
+    "addons_enabled":  True,
+}
+
+
+def default_config():
+    cfg = {"coords": {}, "timings": {}, "options": {}, "owned": {}}
+    for key, _ in COORD_FIELDS:
+        cfg["coords"][key] = {"x": "", "y": ""}
+    cfg["coords"]["ocr_region"].update({"w": "", "h": ""})
+    for key, (val, _) in TIMING_DEFAULTS.items():
+        cfg["timings"][key] = val
+    cfg["options"] = dict(OPTION_DEFAULTS)
+    cfg["owned"] = {"killers": [], "survivors": []}
+    cfg["publish"] = {"nickname": "", "gh_token": ""}
+    cfg["update"] = {"auto": True, "allow_branch": False, "skip_tag": ""}
+    return cfg
+
+
+def _migrate_legacy(path):
+    """Старый dbd_randomizer_config.txt -> coords-словарь нового формата."""
+    coords = {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                if "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                coords[key.strip()] = val.strip()
+    except Exception:
+        return {}, [], {}
+    out, owned = {}, []
+    for key, _ in COORD_FIELDS:
+        out[key] = {"x": coords.get(f"{key}_x", ""), "y": coords.get(f"{key}_y", "")}
+    out["ocr_region"].update({"w": coords.get("ocr_region_w", ""), "h": coords.get("ocr_region_h", "")})
+    for cfg_key, owned_key in (("owned_killers", "killers"), ("owned_surv_chars", "survivors")):
+        raw = coords.get(cfg_key, "")
+        if raw:
+            owned.append((owned_key, [x.strip() for x in raw.split(",") if x.strip()]))
+    return out, owned, coords
+
+
+def load_config():
+    cfg = default_config()
+    migrated = False
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as fh:
+                user = json.load(fh)
+            for section in ("coords", "timings", "options", "owned", "publish", "update"):
+                if isinstance(user.get(section), dict):
+                    if section == "coords":
+                        for key, val in user[section].items():
+                            if isinstance(val, dict):
+                                cfg["coords"].setdefault(key, {"x": "", "y": ""}).update(val)
+                    else:
+                        cfg[section].update(user[section])
+            return cfg, False
+        except Exception:
+            backup = CONFIG_FILE + ".broken"
+            try:
+                shutil.copy2(CONFIG_FILE, backup)
+            except Exception:
+                pass
+            migrated = True
+    if os.path.exists(LEGACY_CONFIG):
+        coords, owned, raw = _migrate_legacy(LEGACY_CONFIG)
+        if coords:
+            cfg["coords"].update(coords)
+            for key, names in owned:
+                cfg["owned"][key] = names
+            cfg["publish"]["nickname"] = raw.get("nickname", "")
+            cfg["publish"]["gh_token"] = raw.get("gh_token", "")
+            cfg["update"]["auto"] = raw.get("auto_update", "1") != "0"
+            migrated = True
+            try:
+                os.replace(LEGACY_CONFIG, LEGACY_CONFIG + ".migrated")
+            except Exception:
+                pass
+    return cfg, migrated
+
+
+def save_config(cfg):
+    """Атомарная запись: сначала временный файл, потом replace."""
+    tmp = CONFIG_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, CONFIG_FILE)
+
+
+# ----------------------------------------------------------------------------
+# База данных (JSON поверх дефолтов из dbd_data.py)
+# ----------------------------------------------------------------------------
+def db_defaults():
+    """Глубокая копия встроенной базы: правки в рантайме не должны менять dbd_data.py."""
+    return {
+        "version": DATA.VERSION,
+        "killers": copy.deepcopy(DATA.KILLERS),
+        "survivors": copy.deepcopy(DATA.SURVIVORS),
+        "survivor_items": copy.deepcopy(DATA.SURVIVOR_ITEMS),
+        "surv_common_perks": list(DATA.SURV_COMMON_PERKS),
+        "killer_common_perks": list(DATA.KILLER_COMMON_PERKS),
+        "owned": {
+            "survivor_perks": list(DATA.OWNED_SURVIVOR_PERKS),
+            "survivor_items": list(DATA.OWNED_SURVIVOR_ITEMS),
+            "survivor_addons": list(DATA.OWNED_SURVIVOR_ADDONS),
+            "killer_addons": list(DATA.OWNED_KILLER_ADDONS),
+            "killer_perks": list(DATA.OWNED_KILLER_PERKS),
+        },
+    }
+
+
+def load_db():
+    db = db_defaults()
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as fh:
+                user = json.load(fh)
+            for section in ("killers", "survivors", "survivor_items",
+                            "surv_common_perks", "killer_common_perks"):
+                if user.get(section):
+                    db[section] = user[section]
+            if isinstance(user.get("owned"), dict):
+                db["owned"].update(user["owned"])
+            db["_loaded_from_file"] = True
+        except Exception:
+            db["_load_error"] = True
+    else:
+        try:
+            dump_db(db)
+        except Exception:
+            pass
+    return db
+
+
+def dump_db(db):
+    out = {k: v for k, v in db.items() if not k.startswith("_")}
+    tmp = DB_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(out, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, DB_FILE)
+
+
+# ----------------------------------------------------------------------------
+# Чистая логика генерации (без tkinter — тестируется в --selftest)
+# ----------------------------------------------------------------------------
+NO_ADDONS = "🚫 аддон не подобран"
+EMPTY = "—"
+
+
+def _filter_owned(pool, owned, respect):
+    """respect=False или пустой белый список -> считаем, что открыто всё.
+
+    respect=True -> строго только то, что есть в белом списке; если совпадений нет,
+    возвращаем пустой список (слоты останутся пустыми), а НЕ «всё подряд».
+    """
+    if not respect or not owned:
+        return list(pool)
+    allowed_set = set(owned)
+    return [x for x in pool if x in allowed_set]
+
+
+def _pick(pool, n):
+    pool = list(dict.fromkeys(pool))          # убираем дубли, сохраняя порядок
+    if len(pool) <= n:
+        return pool[:]
+    return random.sample(pool, n)
+
+
+def _fill_perks(perks, pools, respect_owned=False):
+    """Добирает навыки до 4 слотов, не допуская повторов.
+
+    pools — список пулов в порядке приоритета (например, [уникальные, общие, всё вместе]).
+    При respect_owned=True недостающие слоты остаются пустыми (EMPTY),
+    чтобы автоэкипировка не тыкала в то, чего у вас нет.
+    """
+    perks = list(perks)
+    if respect_owned:
+        while len(perks) < 4:
+            perks.append(EMPTY)
+        return perks[:4]
+    for pool in pools:
+        if len(perks) >= 4:
+            break
+        candidates = [p for p in dict.fromkeys(pool) if p not in perks]
+        for perk in _pick(candidates, 4 - len(perks)):
+            perks.append(perk)
+    return perks[:4]
+
+
+def make_killer_build(db, available, perk_mode="general", respect_owned=False, addons_enabled=True):
+    owned = db.get("owned", {})
+    name = random.choice(sorted(available))
+    info = db["killers"][name]
+
+    if addons_enabled:
+        addon_pool = _filter_owned(info.get("addons", []), owned.get("killer_addons"), respect_owned)
+        addons = _pick(addon_pool, 2)
+    else:
+        addons = []
+    while len(addons) < 2:
+        addons.append(NO_ADDONS if not addons else EMPTY)
+
+
+    unique = list(info.get("perks", []))
+    common = list(db.get("killer_common_perks", []))
+    if perk_mode == "unique":
+        pool = _filter_owned(unique, owned.get("killer_perks"), respect_owned)
+    elif perk_mode == "mixed":
+        pool = _filter_owned(unique + common, owned.get("killer_perks"), respect_owned)
+    else:
+        pool = _filter_owned(common, owned.get("killer_perks"), respect_owned)
+    perks = _pick(pool, 4)
+    if len(perks) < 4:                        # уникальных всего 3 — добираем общими
+        perks = _fill_perks(perks, [common, unique + common], respect_owned)
+
+
+    return {
+        "side": "KILLER",
+        "char": name,
+        "power_or_item": info.get("power", EMPTY),
+        "power_is_item": False,
+        "addons": addons,
+        "perks": perks[:4],
+    }
+
+
+def make_survivor_build(db, available, perk_mode="general", respect_owned=False, addons_enabled=True):
+    owned = db.get("owned", {})
+    name = random.choice(sorted(available))
+
+    categories = list(db["survivor_items"].keys())
+    cat = random.choice(categories)
+    entry = db["survivor_items"][cat]
+
+    item_pool = _filter_owned(entry.get("items", []), owned.get("survivor_items"), respect_owned)
+    item = random.choice(item_pool) if item_pool else EMPTY
+
+    if addons_enabled:
+        addon_pool = _filter_owned(entry.get("addons", []), owned.get("survivor_addons"), respect_owned)
+        addons = _pick(addon_pool, 2)
+        if not addons:
+            addons = [NO_ADDONS if not entry.get("addons") else EMPTY]
+    else:
+        addons = [EMPTY]
+    while len(addons) < 2:
+        addons.append(EMPTY)
+
+    unique = list(db["survivors"].get(name, []))
+    common = list(db.get("surv_common_perks", []))
+    if perk_mode == "unique":
+        pool = _filter_owned(unique, owned.get("survivor_perks"), respect_owned)
+    elif perk_mode == "mixed":
+        pool = _filter_owned(unique + common, owned.get("survivor_perks"), respect_owned)
+    else:
+        pool = _filter_owned(common, owned.get("survivor_perks"), respect_owned)
+    perks = _pick(pool, 4)
+    if len(perks) < 4:
+        perks = _fill_perks(perks, [common, unique + common], respect_owned)
+
+    return {
+        "side": "SURVIVOR",
+        "char": name,
+        "power_or_item": item,
+        "category": cat,
+        "power_is_item": True,
+        "addons": addons,
+        "perks": perks[:4],
+    }
+
+
+def build_to_text(b):
+    if b["side"] == "KILLER":
+        lines = [f"👹 Убийца: {b['char']}", f"⚡ Сила: {b['power_or_item']}  (не экипируется)"]
+    else:
+        lines = [f"👤 Выживший: {b['char']}",
+                 f"📦 Предмет: {b['power_or_item']}  [{b.get('category', '')}]"]
+    lines.append("🔧 Аддоны:")
+    for a in b["addons"]:
+        lines.append(f"   • {a}")
+    lines.append("🔮 Навыки:")
+    for i, p in enumerate(b["perks"], 1):
+        lines.append(f"   {i}. {p}")
+    return "\n".join(lines)
+
+
+def build_to_clipboard_text(b):
+    """Компактный вариант для копирования/чата."""
+    head = b["char"]
+    item = b["power_or_item"]
+    addons = " + ".join(a for a in b["addons"] if a not in (EMPTY, NO_ADDONS)) or "без аддонов"
+    perks = ", ".join(b["perks"])
+    return f"{head} | {item} | {addons} | Перки: {perks}"
+
+
+# ----------------------------------------------------------------------------
+# Валидация базы
+# ----------------------------------------------------------------------------
+def _norm(s):
+    return (s or "").strip().lower().replace("ё", "е")
+
+
+def _entry_text(entry):
+    """Текст из Entry; всё, что не строка (например, заглушка в тестах), -> ''."""
+    try:
+        val = entry.get()
+    except Exception:
+        return ""
+    return val.strip() if isinstance(val, str) else ""
+
+
+def validate_db(db):
+    errors, warnings = [], []
+
+    killers = db.get("killers", {})
+    survivors = db.get("survivors", {})
+    items = db.get("survivor_items", {})
+
+    if len(killers) < 44:
+        warnings.append(f"Убийц в базе: {len(killers)} (в игре 44 на патче {db.get('version')}).")
+    if len(survivors) < 50:
+        warnings.append(f"Выживших в базе: {len(survivors)}.")
+
+    for name, info in killers.items():
+        if not isinstance(info, dict):
+            errors.append(f"[{name}] запись убийцы должна быть словарём")
+            continue
+        perks = info.get("perks", [])
+        if len(perks) != 3:
+            warnings.append(f"[{name}] навыков: {len(perks)} (ожидается 3)")
+        if not info.get("addons"):
+            warnings.append(f"[{name}] список аддонов пуст — автоэкипировка пропустит этот шаг")
+        if not info.get("power"):
+            errors.append(f"[{name}] не указана сила")
+        dupes = {x for x in perks if perks.count(x) > 1}
+        if dupes:
+            errors.append(f"[{name}] дубли навыков: {', '.join(sorted(dupes))}")
+        adds = info.get("addons", [])
+        dupes = {x for x in adds if adds.count(x) > 1}
+        if dupes:
+            errors.append(f"[{name}] дубли аддонов: {', '.join(sorted(dupes))}")
+        if info.get("_todo"):
+            warnings.append(f"[{name}] TODO: {info['_todo']}")
+
+    for name, perks in survivors.items():
+        if len(perks) != 3:
+            warnings.append(f"[{name}] (выж.) навыков: {len(perks)} (ожидается 3)")
+
+    # одинаковые имена в разных списках -> поиск может выбрать не то
+    def collect():
+        bag = {}
+        for kname, info in killers.items():
+            for a in info.get("addons", []):
+                bag.setdefault(_norm(a), set()).add(f"аддон {kname}")
+        for cat, entry in items.items():
+            for a in entry.get("addons", []):
+                bag.setdefault(_norm(a), set()).add(f"аддон предмета «{cat}»")
+            for it in entry.get("items", []):
+                bag.setdefault(_norm(it), set()).add(f"предмет «{cat}»")
+        for kname, info in killers.items():
+            bag.setdefault(_norm(info.get("power", "")), set()).add(f"сила {kname}")
+        return bag
+
+    bag = collect()
+    for key, where in sorted(bag.items()):
+        if len(where) > 1:
+            warnings.append(f"Одно имя в разных разделах: «{key}» -> {', '.join(sorted(where))}")
+
+    # имена-префиксы: «Фонарик» находится и внутри «Маскарадный фонарик»
+    names = sorted(bag.keys())
+    for a in names:
+        if len(a) < 5:
+            continue
+        for b in names:
+            if a != b and a in b:
+                warnings.append(f"Поиск по «{a}» может выдать «{b}» — проверьте порядок выдачи "
+                                f"(или настройте result_index / OCR).")
+                break
+
+    # «подозрительные» переводы
+    for kname, info in killers.items():
+        for p in info.get("perks", []):
+            if _norm(p).endswith(("ое", "ее")) and not _norm(p).startswith("порча"):
+                warnings.append(f"[{kname}] навык «{p}» выглядит как прилагательное — сверьте с игрой")
+
+    return errors, warnings
+
+
+# ----------------------------------------------------------------------------
+# Захват координат
+# ----------------------------------------------------------------------------
+class CoordinateGrabber:
+    """Отдельное окно: ЛКМ — записать координату, Esc — отмена.
+
+    Ссылка на объект ОБЯЗАТЕЛЬНО хранится у родителя (в v1 её съедал сборщик
+    мусора, и окно иногда закрывалось само).
+    """
+
+    def __init__(self, parent, title="Захват координаты"):
+        self.coords = None
+        self.top = tk.Toplevel(parent)
+        self.top.title(title)
+        self.top.geometry("330x130")
+        self.top.configure(bg="#1e1e1e")
+        self.top.attributes("-topmost", True)
+        self.top.resizable(False, False)
+        tk.Label(self.top, text="🎯 Наведите мышь на нужную точку\nи кликните ЛКМ в этом окне.\nEsc — отмена",
+                 bg="#1e1e1e", fg="#e0e0e0", font=("Segoe UI", 10), justify="center").pack(pady=10)
+        self.lbl = tk.Label(self.top, text="x: —   y: —", bg="#1e1e1e", fg="#ff9500",
+                            font=("Consolas", 11, "bold"))
+        self.lbl.pack(pady=2)
+        self.top.bind("<Button-1>", self._on_click)
+        self.top.bind("<Motion>", self._on_motion)
+        self.top.bind("<Escape>", lambda e: self.top.destroy())
+        self.top.protocol("WM_DELETE_WINDOW", self.top.destroy)
+
+    def _screen_pos(self):
+        try:
+            return self.top.winfo_pointerxy()          # физические пиксели
+        except Exception:
+            pass
+        if INPUT.available:
+            try:
+                p = INPUT.position()
+                return int(p[0]), int(p[1])
+            except Exception:
+                pass
+        return None
+
+    def _on_motion(self, _event):
+        pos = self._screen_pos()
+        if pos:
+            self.lbl.config(text=f"x: {pos[0]}   y: {pos[1]}")
+
+    def _on_click(self, _event):
+        pos = self._screen_pos()
+        if pos:
+            self.coords = pos
+        self.top.destroy()
+
+
+# ----------------------------------------------------------------------------
+# Диалог обновления: показывает, ЧТО именно будет записано на диск
+# ----------------------------------------------------------------------------
+class UpdateDialog:
+    """Файлы уже скачаны и проверены, но на диск НЕ записаны — решение за пользователем."""
+
+    def __init__(self, parent, upd, info):
+        self.result = None
+        self.upd, self.info = upd, info
+        self.top = tk.Toplevel(parent)
+        self.top.title(f"Доступно обновление {upd.get('tag', '')}")
+        self.top.geometry("620x520")
+        self.top.configure(bg="#1e1e1e")
+        self.top.attributes("-topmost", True)
+        self.top.transient(parent)
+        self.top.grab_set()
+
+        ttk.Label(self.top, text=f"Установлена v{APP_VERSION} → доступна {upd.get('tag', '')}",
+                  font=("Segoe UI", 11, "bold"), foreground="#ff9500").pack(pady=(12, 4))
+        ttk.Label(self.top, text=f"Источник: {GH.GITHUB_REPO} @ {upd.get('ref', '')}",
+                  font=("Segoe UI", 8), foreground="#8e8e93").pack()
+
+        notes = tk.Text(self.top, height=8, bg="#2c2c2c", fg="#e0e0e0", relief="flat",
+                        wrap="word", font=("Segoe UI", 10))
+        notes.pack(fill="both", expand=True, padx=14, pady=8)
+        notes.insert("end", (upd.get("notes") or "").strip() or "Описание отсутствует.")
+        notes.configure(state="disabled")
+
+        ttk.Label(self.top, text="Будут заменены файлы (старые сохранятся как .bak):",
+                  font=("Segoe UI", 9, "bold"), foreground="#e0e0e0").pack(anchor="w", padx=16)
+        rows = tk.Text(self.top, height=len(info) + 1, bg="#232323", fg="#9be29b", relief="flat",
+                       font=("Consolas", 9))
+        rows.pack(fill="x", padx=14, pady=(2, 8))
+        for item in info:
+            rows.insert("end", f"  {item['name']:<22} {item['bytes']:>8} байт   sha256:{item['sha256'][:16]}\n")
+        rows.configure(state="disabled")
+
+        btns = ttk.Frame(self.top)
+        btns.pack(fill="x", padx=14, pady=(0, 12))
+        ttk.Button(btns, text="🔄 Обновить и перезапустить", style="Gen.TButton",
+                   command=self._do_update).pack(side="left", expand=True, fill="x", padx=4)
+        ttk.Button(btns, text="Позже", command=self._dismiss).pack(side="right", padx=4)
+        self.top.protocol("WM_DELETE_WINDOW", self._dismiss)
+
+    def _do_update(self):
+        self.result = "restart"
+        self.top.destroy()
+
+    def _dismiss(self):
+        self.result = None
+        self.top.destroy()
+
+
+# ----------------------------------------------------------------------------
+# OCR-проверка (необязательно)
+# ----------------------------------------------------------------------------
+def ocr_read(x, y, w, h, lang="rus"):
+    try:
+        import pytesseract
+        from PIL import ImageGrab
+    except Exception:
+        return None
+    try:
+        img = ImageGrab.grab(bbox=(int(x), int(y), int(x) + int(w), int(y) + int(h)))
+        img = img.convert("L").point(lambda p: 0 if p < 140 else 255)
+        txt = pytesseract.image_to_string(img, lang=lang)
+        return " ".join(txt.split())
     except Exception:
         return None
 
 
-def version_tuple(v):
-    try:
-        return tuple(int(x) for x in v.strip().lstrip("vV").split("."))
-    except Exception:
-        return (0,)
-
-
-def _gh_api_headers():
-    h = {"User-Agent": "DBDRandomizer/" + APP_VERSION,
-         "Accept": "application/vnd.github+json"}
-    tok = get_saved_token()
-    if tok:
-        h["Authorization"] = "Bearer " + tok
-    return h
-
-
-def get_saved_token():
-    """Токен из переменной окружения или из конфига (вкладка «БИЛДЫ»)."""
-    tok = os.environ.get("DBD_UPDATE_TOKEN", "")
-    if tok:
-        return tok
-    try:
-        try:
-            cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILE)
-        except NameError:  # __file__ недоступен (например, интерпретатор без файла)
-            cfg_path = CONFIG_FILE
-        for p in (cfg_path, CONFIG_FILE):
-            if os.path.exists(p):
-                with open(p, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.startswith("gh_token="):
-                            return line.split("=", 1)[1].strip()
-                break
-    except OSError:
-        pass
-    return ""
-
-
-def _get_remote_file_b64(path):
-    """Возвращает (content_bytes, sha) файла из main-ветки репозитория или (None, None)."""
-    try:
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}?ref=main"
-        raw = _http_get(url, headers=_gh_api_headers())
-        data = json.loads(raw.decode("utf-8"))
-        return base64.b64decode(data["content"]), data.get("sha")
-    except Exception as e:
-        print("Не удалось получить", path, ":", e)
-        return None, None
-
-
-# ================== СООБЩЕСТВО: ОБЩИЕ БИЛДЫ ==================
-def load_community_builds():
-    """Читает общий файл билдов из GitHub; при сетевой ошибке — локальный кэш."""
-    try:
-        content, _ = _get_remote_file_b64(BUILDS_FILE_NAME)
-        if content:
-            builds = json.loads(content.decode("utf-8"))
-            if isinstance(builds, list):
-                try:
-                    with open(BUILDS_LOCAL_CACHE, "w", encoding="utf-8") as f:
-                        json.dump(builds, f, ensure_ascii=False)
-                except OSError:
-                    pass
-                return builds, True
-        else:
-            # 404 — файла ещё нет, это нормально (никто ещё ничего не опубликовал)
-            return [], True
-    except Exception:
-        pass
-    # Офлайн / ошибка сети — отдаём кэш
-    try:
-        if os.path.exists(BUILDS_LOCAL_CACHE):
-            with open(BUILDS_LOCAL_CACHE, "r", encoding="utf-8") as f:
-                return json.load(f), False
-    except (OSError, ValueError):
-        pass
-    return [], False
-
-
-def publish_build_to_github(build, token):
-    """
-    Публикует билд в общий файл community_builds.json через GitHub Contents API.
-    Читает текущий файл, добавляет билд и делает PUT с sha (защита от перезаписи чужих данных).
-    Возвращает (ok: bool, message: str).
-    """
-    if not token:
-        return False, "Не указан токен GitHub. Сохраните его в настройках вкладки «БИЛДЫ»."
-    headers = {"User-Agent": "DBDRandomizer/" + APP_VERSION,
-               "Accept": "application/vnd.github+json",
-               "Authorization": "Bearer " + token}
-    try:
-        # 1. Читаем текущий файл (и его sha)
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{BUILDS_FILE_NAME}"
-        builds = []
-        sha = None
-        try:
-            raw = _http_get(url, headers=headers)
-            data = json.loads(raw.decode("utf-8"))
-            builds = json.loads(base64.b64decode(data["content"]).decode("utf-8"))
-            sha = data.get("sha")
-            if not isinstance(builds, list):
-                builds = []
-        except urllib.error.HTTPError as e:
-            if e.code != 404:
-                raise
-        # 2. Добавляем новый билд (с защитой от дублей и лимитом)
-        if any(b.get("id") == build.get("id") for b in builds):
-            return True, "Такой билд уже опубликован."
-        builds.insert(0, build)
-        builds = builds[:MAX_COMMUNITY_BUILDS]
-        # 3. Отправка: PUT (обновление) если файл существует, CREATE если файла ещё нет
-        payload = {
-            "message": f"community: +{build.get('author', 'anon')} '{build.get('char', '?')}'",
-            "content": base64.b64encode(
-                json.dumps(builds, ensure_ascii=False, indent=1).encode("utf-8")).decode("ascii"),
-        }
-        if sha:
-            payload["sha"] = sha
-        try:
-            resp = _http_request(url, data=payload, method="PUT" if sha else "POST", headers=headers)
-            json.loads(resp.decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            if e.code == 409:  # гонка — кто-то обновил файл, один повтор
-                raw = _http_get(url, headers=headers)
-                data = json.loads(raw.decode("utf-8"))
-                builds = json.loads(base64.b64decode(data["content"]).decode("utf-8"))
-                if any(b.get("id") == build.get("id") for b in builds):
-                    return True, "Такой билд уже опубликован."
-                builds.insert(0, build)
-                builds = builds[:MAX_COMMUNITY_BUILDS]
-                payload = {
-                    "message": payload["message"],
-                    "content": base64.b64encode(
-                        json.dumps(builds, ensure_ascii=False, indent=1).encode("utf-8")).decode("ascii"),
-                    "sha": data.get("sha"),
-                }
-                resp = _http_request(url, data=payload, method="PUT", headers=headers)
-                json.loads(resp.decode("utf-8"))
-            elif e.code == 401:
-                return False, "Токен недействителен или отозван. Создайте новый с правами Contents: Write."
-            elif e.code == 403:
-                return False, "У токена нет прав на запись (нужен scope repo / Contents: Read and Write)."
-            else:
-                return False, f"Ошибка GitHub API: HTTP {e.code}"
-        return True, "Билд опубликован! Он появится у всех пользователей после обновления списка."
-    except Exception as e:
-        return False, f"Не удалось опубликовать: {e}"
-
-
-def update_files_in_place():
-    """Скачивает свежие dbd_randomizer.py и requirements.txt. True = обновлено."""
-    path = os.path.abspath(__file__)
-    content, _ = _get_remote_file_b64("dbd_randomizer.py")
-    if not content or len(content) < 1000:
-        return False
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "wb") as f:
-            f.write(content)
-        os.replace(tmp, path)
-    except Exception as e:
-        print("Ошибка записи файла:", e)
-        if os.path.exists(tmp):
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-        return False
-    reqs, _ = _get_remote_file_b64("requirements.txt")
-    if reqs:
-        try:
-            rtmp = os.path.join(os.path.dirname(path), "requirements.txt.tmp")
-            with open(rtmp, "wb") as f:
-                f.write(reqs)
-            os.replace(rtmp, os.path.join(os.path.dirname(path), "requirements.txt"))
-        except OSError:
-            pass
-    return True
-
-
-class UpdateDialog(tk.Toplevel):
-    """Модальное окно с описанием обновления и кнопками действий."""
-
-    def __init__(self, parent, new_tag, notes):
-        super().__init__(parent)
-        self.result = None
-        self.new_tag, self.notes = new_tag, notes
-        self.title(f"Доступно обновление {new_tag}")
-        self.geometry("520x420")
-        self.configure(bg="#1e1e1e")
-        self.attributes("-topmost", True)
-        self.transient(parent)
-        self.grab_set()
-
-        ttk.Label(self, text=f"Установлена версия v{APP_VERSION}, доступна {new_tag}",
-                  font=("Segoe UI", 11, "bold"), foreground="#ff9500").pack(pady=(14, 6))
-
-        txt = tk.Text(self, height=12, bg="#2c2c2c", fg="#e0e0e0", relief="flat", wrap=tk.WORD,
-                      font=("Segoe UI", 10))
-        txt.pack(fill=tk.BOTH, expand=True, padx=14)
-        txt.insert(tk.END, notes.strip() or "Описание отсутствует.")
-        txt.config(state=tk.DISABLED)
-
-        btns = ttk.Frame(self)
-        btns.pack(fill=tk.X, padx=14, pady=12)
-        ttk.Button(btns, text="🔄 Обновить и перезапустить", style="Gen.TButton",
-                   command=self._do_update).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=4)
-        ttk.Button(btns, text="Позже", style="Sec.TButton",
-                   command=self._dismiss).pack(side=tk.RIGHT, padx=4)
-
-    def _do_update(self):
-        if update_files_in_place():
-            self.result = "restart"
-        else:
-            messagebox.showerror("Обновление", "Не удалось скачать новую версию.\nПроверьте интернет и права на папку.")
-            self.result = None
-        self.destroy()
-
-    def _dismiss(self):
-        self.result = None
-        self.destroy()
-
-# ================== ПОЛНАЯ БАЗА ВЫЖИВАЮЩИХ (ПРЕДМЕТЫ И АДДОНЫ) ==================
-
-ALL_KILLER_PERKS = [
-    # Охотник
-    "Нетерпимость", "Зверская сила", "Пугающее присутствие",
-    # Призрак
-    "Детище тьмы", "Ищейка", "Хищник",
-    # Деревенщина
-    "Стойкий", "Детище света", "Умелец",
-    # Медсестра
-    "Стридор", "Танатофобия", "Зов медсестры",
-    # Тень (Майкл Майерс)
-    "Оставьте лучшее напоследок", "Угасающий свет", "Поиграть со своей жертвой",
-    # Ведьма
-    "Порча: погибель", "Порча: пожирание надежды", "Порча: третья печать",
-    # Доктор
-    "Слежка и наказание", "Перегрузка", "Невыносимое присутствие",
-    # Охотница
-    "Территориальный императив", "Порча: колыбельная охотницы", "Хищный зверь",
-    # Каннибал
-    "Барбекю и чили", "Гибель Франклина", "Нокаут",
-    # Кошмар
-    "Яркое пламя", "Помни меня", "Кровавый смотритель",
-    # Свинья
-    "Выбор за тобой", "Наблюдение", "Секущий крюк: секрет палача",
-    # Клоун
-    "Чертик из табакерки", "Клоунофобия", "Розыгрыш",
-    # Дух
-    "Ненависть", "Порча: проклятая земля", "Ярость духа",
-    # Легион
-    "Разлад", "Железная дева", "Безумное упорство",
-    # Чума
-    "Тёмная преданность", "Вмешательство скверны", "Заразительный ужас",
-    # Гоуст Фейс
-    "Скрытная погоня", "Чуткий слух", "Пугающая тряска",
-    # Демогоргон
-    "Жестокая изоляция", "Разрушитель разума", "Выброс",
-    # Они
-    "Тактика зансин", "Отзвук крови", "Возмездие",
-    # Стрелок
-    "Порча: кара", "Аварийная кнопка", "Знаток техники",
-    # Палач
-    "Тропа терзаний", "Принудительная мера", "Смертельные узы",
-    # Мор
-    "Порча: благоволение крови", "Порча: не-смерть", "Драконья хватка",
-    # Близнецы
-    "Добивание", "Скопидом", "Притеснение",
-    # Трюкач
-    "Фанатение", "Порча: контроль толпы", "Выхода нет",
-    # Немезис
-    "Подрыв", "Истерия", "Преследователь-убийца",
-    # Сенобит
-    "Мёртвая хватка", "Порча: игрушка", "Секущий крюк: дар боли",
-    # Художница
-    "Мрачные объятья", "Секущий крюк: резонанс боли", "Порча: пентименто",
-    # Онрё
-    "Соленое море", "Секущий крюк: пучина ярости", "Безжалостный шторм",
-    # Грязь
-    "Растворение", "Явление мрака", "Тлетворное касание",
-    # Кукловод
-    "Лучшая анатомия", "Развитая внимательность", "Последний этап",
-    # Рыцарь
-    "Им не укрыться", "Порча: лик мрака", "Свирепая гордыня",
-    # Торговка черепами
-    "Бац!", "Рычаг влияния", "Догонялки",
-    # Сингулярность
-    "Генетические ограничения", "Вынужденная нерешительность", "Машинное обучение",
-    # Ксеноморф
-    "Совершенное оружие", "Быстрая жестокость", "Инстинкт чужого",
-    # Хороший парень
-    "Порча: игра для двоих", "Друзья до гроба", "Батарейки в комплекте",
-    # Неведомое
-    "Свободное", "Непредвиденное", "Незавершенное",
-    # Лич (Векна)
-    "Связь с плетением", "Безжизненное касание", "Тёмное высокомерие",
-    # Тёмный Властелин (Дракула)
-    "Алчность", "Владычество", "Порча: горькая участь",
-    # Егерь
-    "Оглушительный гром", "Секущий крюк: щербатый компас", "Без пощады",
-    # Гуль
-    "Порча: только отчаяние", "Переплетенные навсегда", "Все несвободны",
-    # Аниматроник (Спрингтрап)
-    "Требуются работники", "Фантомный страх", "Неполадки",
-    # Красу
-    "Голод", "Блуждающий взгляд", "Порча: предвестие рока",
-    # Первый (Подопытный 001)
-    "Перевести часы назад", "Секретный проект", "Порча: разум улья",
-    # Слэшер (Опытный Слэшер)                                           
-    "Порча: смертельный испуг", "Безмолвная тень","Неистовство",
-]
-
-SURV_ITEMS_DATABASE = {
-    "Фонарики": {
-        "items": ["Маскарадный фонарик", "Фонарик годовщины", "Блуждающий огонек", "Фонарик", "Спортивный фонарик",
-                  "Тяжелый фонарь","Банкетный фонарик"],
-        "addons": [
-            "Аккумулятор с мощным зарядом", "Сверхмощная батарейка", "Батарейка",
-            "Тонкая нить накаливания", "Странная лампочка", "Кожаная рукоять",
-            "Фокусирующая линза", "Электролампа", "Tir оптика", "Резиновая рукоятка", "Интенсивный галоген",
-            "Высококлассные сапфировые линзы"
-        ]
-    },
-    "Аптечки": {
-        "items": ["Маскарадная аптечка", "Аптечка годовщины", "Походная аптечка", "Ланчбокс всех святых", "Аптечка",
-                  "Аптечка первой помощи", "Аптечка лесничего","Банкетная аптечка"],
-        "addons": [
-            "Очищенная сыворотка", "Самоклеющиеся бинты", "Бинты", "Повязки", "Гелевые повязки",
-            "Иголка и нитка", "Пластырь-бабочка", "Резиновые перчатки", "Медицинские ножницы",
-            "Кровоостанавливающий препарат", "Укол от усталости", "Губка", "Брюшные повязки", "Хирургическая игла"
-        ]
-    },
-    "Ящики с инструментами": {
-        "items": ["Изношенные инструменты", "Ящик с инструментами", "Инструменты механика",
-                  "Вместительный ящик с инструментами", "Инструменты инженера", "Инструменты Алекса",
-                  "Праздничный ящик с инструментами", "Юбилейный ящик с инструментами",
-                  "Маскарадный ящик с инструментами","Банкетный ящик с инструментами"],
-        "addons": [
-            "Катушка проволоки", "Старые запчасти", "Режущая проволока", "Ножовка", "Защитные перчатки",
-            "Разводной ключ", "Шарнирный ключ", "Руководство", "Чистая тряпка", "Новая деталь", "Пружинный зажим"
-        ]
-    },
-    "Карты": {
-        "items": ["Загадочная карта", "Небрежная карта", "Карта с подписями",
-                  "Карта кровавого чувства"],
-        "addons": [
-            "Багровая печать", "Заостренная щепка", "Потрепанная лента", "Погрызенный компас", "Светящиеся чернила"
-        ]
-    },
-    "Ключи": {
-        "items": ["Сломанный ключ", "Потертый ключ", "Ключ скелета"],
-        "addons": [
-            "Кровавый янтарь", "Уникальное обручальное кольцо", "Плетеная безделушка", "Пронзительный свист",
-            "Амулет дружбы"
-        ]
-    },
-    "Предметы с туманом": {
-        "items": ["Флакон подмастерья с туманом", "Флакон мастерового с туманом", "Флакон Виго с туманом",
-                  "Туманный кристалл"],
-        "addons": [
-            "Мощная вытяжка", "Грибная смесь", "Маслянистый сок", "Реактивное соединение", "Вулканический камень"
-        ]
-    },
-    "Хлопушки": {
-        "items": ["Китайская хлопушка", "Новогодняя хлопушка", "Хлопушка третьей годовщины"],
-        "addons": []
-    }
-}
-
-# ================== ПОЛНАЯ БАЗА УБИЙЦ (СИЛА И АДДОНЫ) ==================
-KILLERS_DATABASE = {
-    "Охотник": {
-        "power": "Медвежий капкан",
-        "addons": ["Кровавая пружина", "Радужный камень", "Маслянистая пружина", "Натяжная пружина", "Охотничий мешок",
-                   "Точильный камень", "Дополнительная пружина", "Крепежные инструменты", "Охотничья сумка",
-                   "Ржавые челюсти", "Смоляная бутылка", "Зазубренные челюсти", "Комплект из 4-х спиральных пружин",
-                   "Кофейная гуща", "Кусок воска", "Удлиненная челюсть", "Медвежий жир", "Мягкие челюсти",
-                   "Охотничьи перчатки", "Самодельный бандаж"]
-    },
-    "Призрак": {
-        "power": "Плачущий колокол",
-        "addons": ["Всевидящий - дух", "Всевидящий - кровь", "Стремительная охота - кровь",
-                   "Стремительная охота - белая краска", "Стремительная охота - грязь", "Танец теней - кровь",
-                   "Танец теней - белая краска", "Ураган - кровь", "Ураган - белая краска", "Ураган - грязь",
-                   "Скачок - белая краска", "Скачок - грязь", "Слепой воин - белая краска", "Слепой воин - грязь",
-                   "Костяной язычок колокола", "Гоуст Фейс - сажа", "Зверь - сажа", "Змей - сажа", "Ищейка - сажа"]
-    },
-    "Деревенщина": {
-        "power": "Бензопила",
-        "addons": [
-            "Переливчатый кирпич", "Шипастые сапоги", "Радужные гравюры", "Кукурузный самогон", "Низкой отдачей",
-            "Самонастраивающийся карбюратор", "Свеча зажигания", "Грязные цепи", "Ржавая цепь",
-            "Универсальная смазка", "Ботинки с железными мысками", "Маленькая отвертка", "Глубокая гравировка"
-        ]
-    },
-    "Медсестра": {
-        "power": "Последнее дыхание Спенсера",
-        "addons": [
-            "Порванная закладка", "Спичечный коробок", "Последний вздох «Плохиша»", "Последний вздох Кэмпбелла",
-            "Последний вздох Дженнер", "Последний вздох Каваны", "Судорожный вздох", "Карманные часы",
-            "Белый шумовой генератор", "Крепкая швейная игла", "Тяжелый ремень", "Деревянная лошадка",
-            "Ржавый щипцы"
-        ]
-    },
-    "Тень": {
-        "power": "Чистое зло",
-        "addons": [
-            "Надгробие Джудит", "Поцарапанное зеркало", "Дамское зеркало", "Кусок надгробия", "Прядь волос",
-            "Светоотражающий осколок", "Бант для волос", "В память о Дж. Майерс", "Дневник Джудит",
-            "Коробка с бижутерией",
-            "Осколок зеркала", "Ароматный клок волос", "Бижутерия", "Мертвый кролик", "Осколок стекла",
-            "Расческа для волос", "Безвкусные серьги", "Записка от парня", "Мемориальный цветок", "Светлый волос"
-        ]
-    },
-    "Ведьма": {
-        "power": "Проклятая грязь",
-        "addons": [
-            "Вымокший ботинок", "Зеленая тряпка", "Бабушкино сердце", "Обезображенное ухо", "Ржавые кандалы",
-            "Рука со шрамом", "Ивовый венок", "Кровавая грязь", "Ожерелье из болотной орхидеи",
-            "Разбитое яйцо черепахи", "Сушеная цикада", "Кипарисовое ожерелье"
-        ]
-    },
-    "Доктор": {
-        "power": "Искра Картера",
-        "addons": [
-            "Радужный король", "Радужный ферзь",
-            "«Дисциплина» — заметки Картера", "«Порядок» — заметки Картера",
-            "«Спокойствие» — заметки Картера", "«Усмирение» — заметки Картера"
-        ]
-    },
-    "Охотница": {
-        "power": "Охотничьи топоры",
-        "addons": [
-            "Радужный топор", "Солдатские портянки", "Деревянная лиса", "Испачканный топор",
-            "Разгрузочный пояс", "Светящаяся смесь", "Бабушкин платок", "Перчатки из оленевой кожи",
-            "Ржавый топор", "Розовый корень", "Ядовитая смесь", "Венок из манника",
-            "Дубовое топорище", "Кожаная петля", "Сияющая брошь", "Утяжеленный топор",
-            "Грубый оселок"
-        ]
-    },
-    "Каннибал": {
-        "power": "Бензопила Буббы",
-        "addons": [
-            "Переливчатая плоть", "Руководство по настройке карбюратора", "Облегченное шасси",
-            "Ограничитель для заточки цепи", "Ржавая цепь", "Чили-победитель состязания",
-            "Грязные цепи", "Метки зверя", "Производственная смазка", "Смазка",
-            "Ужасная цепь", "Длинное реле для бензопилы", "Метки ножом", "Самодельный глушитель",
-            "Сжимной насос", "Чили", "Напильник для бензопилы"
-        ]
-    },
-    "Кошмар": {
-        "power": "Демон снов",
-        "addons": [
-            "Красная кисть", "Черная коробка", "Групповое фото", "Кубик с буквой «Z»",
-            "Пузырек для лекарства", "Цепь от качелей", "Голубое платье", "Кубик с единорогом",
-            "Растворитель для краски", "Скакалка", "Шедевр Нэнси", "Зеленое платье",
-            "Крепкая веревка", "Кубик с кошкой", "Прототип перчатки с лезвиями", "Эскиз Нэнси",
-            "Детский рисунок", "Кубик с овцами", "Садовые грабли", "Шерстяная рубашка"
-        ]
-    },
-    "Свинья": {
-        "power": "Обратный медвежий капкан",
-        "addons": [
-            "Видеокассета", "Письмо Аманды", "Модифицированный таймер", "Набросок Пилы",
-            "Секрет Аманды", "Ящик с шестеренками", "Мешок с шестеренками", "Набор правил №2",
-            "Подробный план Пилы", "Ржавые клыки", "Токсин медленного действия", "Завещание",
-            "Колючая проволока", "Лезвия", "Лицевая маска"
-        ]
-    },
-    "Клоун": {
-        "power": "Добивающий тоник",
-        "addons": [
-            "Мизинец рыжей девушки", "Татуированный средний палец", "15-процентный эфир",
-            "Бутылка дешевого джина", "Коробка из-под сигар", "Набор яркого грима",
-            "Бутылка хлороформа", "Вонючие стельки", "Мензурка с отбеливателем",
-            "Нашатырный спирт", "Пробирка с серной кислотой", "Канистра керосина",
-            "Липкая бутылка из-под газировки", "Перо скворца", "Сосуд с растворителем",
-            "Толстая пробка", "Бутылка для вечеринки", "Клоунские перчатки без пальцев",
-            "Перо малиновки", "Порнуха на кассете"
-        ]
-    },
-    "Дух": {
-        "power": "Преследование Ямаоки",
-        "addons": [
-            "Кольцо от мамы", "Чашка кинцуги", "Амулет Якуёкэ",
-            "Высушенный цветок вишни", "Сая вакидзаси", "Фурин",
-            "Очки матери", "Ржавая флейта", "Сэнко ханаби", "Утива",
-            "Цуба катаны", "Белый бант", "Грязная бейсболка", "Можжевеловый бонсай",
-            "Сломанные часы Рин", "Талисман каиун", "Амулет сиавасэ", "Дзори",
-            "Журавль оригами", "Подаренная бамбуковая расческа"
-        ]
-    },
-    "Легион": {
-        "power": "Дикое бешенство",
-        "addons": [
-            "Радужная кнопка", "Дымящаяся кассета",
-            "Грязный нож", "Дружба на века", "Исследование колотых ран", "Кассета Фрэнка",
-            "Значок Легиона", "Кассета Джо", "Кассета Сузи", "Стильные темные очки",
-            "Украденный альбом", "Безликий значок-смайлик", "Кассета Джули", "Линейка с гравировкой",
-            "Рисунок на стене", "Таблетки от сна",
-            "Браслет дружбы", "Значок-смайлик", "Поцарапанная линейка", "Список непослушных"
-        ]
-    },
-    "Чума": {
-        "power": "Очищение от мерзости",
-        "addons": [
-            "Радужная печать", "Черный фимиам", "Амулет ревнителя", "Зловещее рвотное",
-            "Отрезанный палец", "Скрижаль поклонения", "Амулет экзорцизма", "Благовонная мазь",
-            "Зараженное рвотное", "Масло для растираний", "Яблоко праха", "Амулет предотвращения",
-            "Гематитовая пломба", "Освященное яблоко", "Рвотное", "Сильная микстура",
-            "Пломба из песчаника", "Смолистое яблоко"
-        ]
-    },
-    "Гоуст Фейс": {
-        "power": "Ночной саван",
-        "addons": [
-            "«Гоуст Фейс пойман на камеру»", "Наружная камера наблюдения", "Водительские права",
-            "Монокуляр ночного видения", "Набедренные ножны", "Распорядок дня жертвы",
-            "Зажим для ремня", "Кожаные ножны", "Кошелек Олсена", "Погрызенная ручка",
-            "Стойкий парфюм", "Адресная книга Олсена", "Дневник Олсена", "Карта с метками",
-            "Ремешки", "Телеобъектив", "«Филадельфия»", "Вырезки из газет",
-            "Дешевый одеколон", "Спичечный коробок из «Судака»"
-        ]
-    },
-    "Демогоргон": {
-        "power": "Из бездны",
-        "addons": [
-            "Красный мох", "Чешуйчатый лишайник", "Киноварный паутинник", "Свисток спасателя",
-            "Смола с изнанки", "Странное яйцо", "Банка одиннадцатой", "Легкое оленя",
-            "Медная зажигалка", "Пурпурная влажноголовка", "Шипастые лозы", "Кишки мяуса",
-            "Клейкая паутина", "Липкая слизь", "Очки Барб", "Протухшая требуха"
-        ]
-    },
-    "Они": {
-        "power": "Гнев Ямаоки",
-        "addons": [
-            "Окровавленная перчатка Рендзиро", "Переливчатый семейный герб", "Костыль Акито",
-            "Львиный клык", "Мокрое от слез тэнугуи", "Разбитый корпус", "Деревянная маска Они",
-            "Расколотый вакидзаси", "Сасимоно семьи Ямаока", "Скальп с пучком волос",
-            "Талисман Канай Андзэн", "Блестящий маэдатэ", "Детский деревянный меч",
-            "Лев, нарисованный тушью", "Окровавленная повязка"
-        ]
-    },
-    "Стрелок": {
-        "power": "Искупитель",
-        "addons": [
-            "Радужная монета", "Хелширское клеймо", "Виски «Голд Крик»", "Колючая проволока",
-            "Сигара Бейшора", "Тюремная цепь", "Жестяная масленка", "Золотой зуб Бейшора",
-            "Ключи начальника тюрьмы", "Колючки гледичии", "Плакат «В розыске»",
-            "Жевательный табак", "Значок шерифа", "Зубодробилка"
-        ]
-    },
-    "Палач": {
-        "power": "Обряды осуждения",
-        "addons": [
-            "Обсидиановый кубок", "Радужная печать Метатрона", "Алое яйцо",
-            "Книга «Багровая церемония»", "Книга «Потерянные воспоминания»", "Яйцо цвета ржавчины",
-            "Рисунок «Горящий человек»", "Стопа манекена", "Табличка угнетателя",
-            "Туманный день, останки правосудия", "Фотография секты Валтиэля",
-            "Восковая кукла", "Забытая видеокассета", "Леопардовая ткань",
-            "Музыкальная шкатулка с золушкой"
-        ]
-    },
-    "Мор": {
-        "power": "Моровая скверна",
-        "addons": [
-            "Переливчатая бирка Мора", "Состав №33", "Вещество души", "Дневник Виго",
-            "Камень призыва", "Кольцо алхимика", "Изуродованная ворона", "Розовый тоник",
-            "Состав №21", "Теневые соли", "Флакон с адреналином", "Желчь чумы",
-            "Изуродованная крыса", "Порванные записи", "Порошок гнойника", "Шип язвенника",
-            "Монокль со сколами"
-        ]
-    },
-    "Близнецы": {
-        "power": "Узы крови",
-        "addons": [
-            "Переливчатый кулон", "Тряпичный кляп", "Волчок", "Капля парфюма",
-            "Лесное рагу", "Солдатик Виктора", "Канализационная слякоть", "Ржавая иголка",
-            "Увесистая погремушка", "Черствый хлебец", "Шарф Мадлен", "Кошачий глаз",
-            "Молочные зубы", "Перчатка Мадлен"
-        ]
-    },
-    "Трюкач": {
-        "power": "Коронный номер",
-        "addons": [
-            "Переливающийся снимок", "Сборник «Предсмертные муки»", "Альбом «Край возрождения»",
-            "Бриллиантовые запонки", "Сингл «Сквозь тебя»", "Трюковые ножи",
-            "Мелодичное убийство", "Напульсник из «Потрошителя»", "Сингл «Вижу цель»",
-            "Часы-реквизит", "Шипучка без прикрас", "Автограф Чиуна"
-        ]
-    },
-    "Немезис": {
-        "power": "Т-вирус",
-        "addons": [
-            "Переливчатый значок Umbrella", "Расколотый значок S.T.A.R.S.",
-            "Израсходованная чернильная лента", "Паразит NE-A (NE-альфа)", "Сломанная монета восстановления",
-            "Сэндвич Джилл", "Лианы образца 43", "Образец Т-вируса", "Останки Тирана",
-            "Шприц с серотонином", "Язык лизуна", "Браслет администратора", "Глаз Михаила",
-            "Кровь Марвина", "Сердце зомби", "Шприц с адреналином", "Гостевой браслет",
-            "Кишки Брайана", "Поврежденный шприц", "Полевой справочник S.T.A.R.S."
-        ]
-    },
-    "Сенобит": {
-        "power": "Зов боли",
-        "addons": [
-            "Клык инженера", "Переливчатая Конфигурация Плача", "Зуб щелкунчика", "Исходная боль",
-            "Пронзающая проволока", "Сальная черная линза", "Колонна терзаний", "Кровь Ларри",
-            "Останки Ларри", "Ошметок Фрэнка", "Сердце Фрэнка", "Мерцающий телевизор",
-            "Пронзенная крыса", "Сгнившая еда", "Сжиженные останки", "Шевелящиеся личинки",
-            "Бодрые сверчки"
-        ]
-    },
-    "Художница": {
-        "power": "Терзающие птицы",
-        "addons": ["Автопортрет", "Масляные краски", "Палитра", "Растворитель",
-"Бархатная ткань", "Вороний натюрморт", "Кисть", "Отрубленные руки",
-"Агония без названия", "Колючее гнездо", "О горечь и любовь моя", "Серебряный колокольчик",
-"Темнейшая тушь", "Угольная палочка",
-"Ботиночки Матиаса", "Отрезанный язык", "Сад гнили",
-"Переливчатое перо", "Чернильное яйцо",
-"Гниющие останки", "Живописная прихоть", "Густое варево", "Красочный некролог", "Кукуруза чокло"
-        ]
-    },
-    "Онрё": {
-        "power": "Шквал ужаса",
-        "addons": [
-            "Пульт от видика", "Радужная кассета", "Видеомагнитофон", "Искаженное фото",
-            "Монтажный пульт", "Телефон", "Вода из колодца", "Окровавленные ногти",
-            "Расческа матери", "Рисунок кольца", "Хлипкая игрушка", "Колодезный камень",
-            "Лохмы", "Просоленная ткань"
-        ]
-    },
-    "Грязь": {
-        "power": "Царство мрака",
-        "addons": [
-            "Жертвенный нож", "Радужная деревянная доска", "Диктофон", "Ключ от судна",
-            "Пахотный инструмент", "Петличный микрофон", "Камушек беспокойства",
-            "Оттомарские записи", "Разодранная подушка", "Сломанная кукла",
-            "Солдатский шлем", "Календарь Хэдди", "Освежитель воздуха",
-            "Сожженные письма", "Упавшая дранка"
-        ]
-    },
-    "Кукловод": {
-        "power": "Заразный порыв",
-        "addons": [
-            "Радужная склянка «Уробороса»", "Фото из лаборатории",
-            "Вертолетный руль", "Вирус «Уроборос»", "Темные очки", "Красная трава",
-            "Медальон с дамой", "Переносной сейф", "Устройство видеосвязи",
-            "Зеленая трава", "Златка", "Медальон со львом", "Отвалившаяся ручка",
-            "Рупор", "Яйцо (золотое)", "Кожаные перчатки", "Кубок (золотой)",
-            "Медальон с единорогом", "Ошметок «Уробороса»", "Полицейская рация"
-        ]
-    },
-    "Рыцарь": {
-        "power": "Отряд Гуардия",
-        "addons": [
-            "Радужное знамя отряда", "Рыцарский договор", "Исцеляющая припарка",
-            "Колокольчики тюремщика", "Кремень и сталь", "Кузнечный молот",
-            "Заостренная опора", "Караульный факел", "Кузнечные щипцы",
-            "Мрачная железная маска", "Сломанная рукоять", "Вяленая конина",
-            "Лезвие боевого топора", "Призыв к оружию", "Протравленный клинок",
-            "Стальные кандалы"
-        ]
-    },
-    "Торговка черепами": {
-        "power": "Глаза в небесах",
-        "addons": [
-            "Радужная неопубликованная рукопись", "Разряженные аккумуляторы",
-            "Расширенный прогноз перемещений", "Случайные импульсы", "Считывание геоданных",
-            "Экспериментальный винт", "Анализатор уязвимостей", "Генератор красного шума",
-            "Инфракрасный модуль", "Ослабленные винты", "Толченое стекло", "Адаптивное освещение",
-            "Оглушающие динамики", "Режим энергосбережения", "Сверхнапряжение",
-            "Стереорадиомикрофон", "Ади Валенте №1", "Высокоамперный усилитель",
-            "Мощный прожектор", "Ультразвуковой динамик"
-        ]
-    },
-    "Сингулярность": {
-        "power": "Квантовая реализация",
-        "addons": [
-            "Радужный осколок кристалла", "Форма заявки с отказом", "Волокна неизвестных растений",
-            "Инструмент диагностики (строительство)", "Семейная фотография Сома",
-            "Список экипажа", "Гель с наномашинами", "Генератор голограмм",
-            "Провода под напряжением", "Пустой кислородный баллон", "Спрей гипервнимательности",
-            "Детская бейсбольная перчатка", "Кремированные останки", "Криогель",
-            "Рука андроида"
-        ]
-    },
-    "Ксеноморф": {
-        "power": "Скрытная погоня",
-        "addons": [
-            "Импровизированный электрохлыст", "Кислотная кровь", "Болт самоуничтожения",
-            "Гарпун", "Кошачья переноска", "Семиотическая клавиатура", "Аварийный шлем",
-            "Повязка Паркера", "Растекшаяся шкурка", "Универсальный топор", "Шлем Кейна",
-            "Внутренности Эша", "Гарнитура экипажа", "Звездная карта Ламберт",
-            "Кепка Бретта"
-        ]
-    },
-    "Хороший Парень": {
-        "power": "Игры кончились",
-        "addons": [
-            "Жесткая шляпа", "Радужный амулет", "Кучка гвоздей", "Опасная бритва",
-            "Осколки зеркала", "Пластиковый мешок", "Беговая обувь", "Крысиный яд",
-            "Линейка", "Переносной телик", "Шелковая подушка", "Перфоратор",
-            "Разделочный электронож", "Свечка и лак для волос", "Скакалка",
-            "Шуруповерт", "Коробка «Хороший парень»", "Крошечный скальпель",
-            "Кукольные глаза", "Мерцающий свет"
-        ]
-    },
-    "Неведомое": {
-        "power": "UVX",
-        "addons": [
-            "В ловушке мрака", "Радужный доклад УСС",
-            "Иссеченный рюкзак", "Проткнутый глаз", "Картридж с жуткой игрой",
-            "Исчезающая шкатулка", "Самодельная маска", "Часы гипнотизера",
-            "Пустой пакет из-под молока", "Склянка с сывороткой", "Карта жертвы",
-            "Афиша второсортного фильма", "Блокнот с предложениями", "Последние звуки",
-            "Размытое фото", "Кроличья лапка", "Передовица", "Слепок следа",
-            "Устройство неизвестного назначения", "Неаккуратный набросок"
-        ]
-    },
-    "Лич": {
-        "power": "Гнусная тьма",
-        "addons": [
-            "Вострый меч", "Радужная книга гнусной тьмы", "Бездонная сумка",
-            "Глазастая мантия", "Кинжал из зуба дракона", "Плащ невидимости",
-            "Жемчужина силы", "Посох увядания", "Сапоги скорости", "Украшенный рог",
-            "Эльфийский плащ", "Зелье скорости", "Кольцо телекинеза",
-            "Кольцо хранения заклинаний", "Стеклянный глаз", "Фонарь разоблачения"
-        ]
-    },
-    "Темный Властелин": {
-        "power": "Облики вампира",
-        "addons": [
-            "Радужное кольцо Влада", "Щит Алукарда",
-            "Волосы медузы", "Клык Варга", "Куб Зои", "Ляпис-Лазурь",
-            "Карманные часы", "Кукла-убийца", "Перо сильфы", "Сила эха",
-            "Солнцезащитные очки", "Волшебный билет", "Крылатая обувь",
-            "Медальон белого волка", "Ожерелье с лунным камнем",
-            "Чаша с кровью", "Коготь цербера",
-            "Рубиновый венец", "Снаряжение «Часовая башня»", "Шляпа путника"
-        ]
-    },
-    "Егерь": {
-        "power": "Запах крови",
-        "addons": [
-            "Порванная книга", "Радужный штурвал", "Банка пороха", "Кожаная сбруя",
-            "Носовая фигура", "Свайка", "Бурдюк", "Жирное мясо",
-            "Незаконченная карта", "Ошейник с шипами", "Тренировочный колокольчик",
-            "Веревка с узлами", "Копченый окунь", "Кофель-нагели",
-            "Подзорная труба", "Ячменная мука", "Книга по дрессировке", "Кость существа"
-        ]
-    },
-    "Гуль": {
-        "power": "Одноглазый ужас",
-        "addons": [
-            "Маска Ямори", "Радужная повязка на глаз", "Инструмент пыток",
-            "Красноголовая сколопендра", "Свежий кофе", "Удостоверение CCG",
-            "Галстук Амона", "Ликорис лучистый", "Одежда «Дерево Аогири»",
-            "Очки Ридзэ", "Перчатка Мадо", "Зонтик Хинами",
-            "Мешочек Канэки", "Наушники Хидэ", "Окровавленный носовой платок",
-            "Разованная цепь", "Бумажник Канэки", "Тайяки",
-            "Фартук «Антэйку»", "Яйцо черного козла"
-        ]
-    },
-    "Аниматроник": {
-        "power": "Страх Фазбера",
-        "addons": [
-            "Фаз-монета", "Радужная «оболочка»", "Панель доступа",
-            "Все на праздник! Плакат", "Процессор Эндо", "Сумка с добычей",
-            "Гитарные струны Бонни", "Слюнявчик Чики", "Крюк Фокси",
-            "Шляпа Фредди", "Рисунок фиолетового", "Офисный телефон",
-            "Колпак для вечеринок", "Порванная занавеска", "Значок охранника",
-            "Цветные ленты"
-        ]
-    },
-    "Красу": {
-        "power": "Плоть без тела",
-        "addons": [
-            "Изодранное платье", "Цыплячья голова", "Гнилая свинья",
-            "Загадочный эликсир", "Остатки лоренцы", "Скипетр королевы",
-            "Газета в рамке", "Забрызганный носовой платок", "Затупленный нож",
-            "Рука Джанджиры", "Театральный бинокль", "Извивающийся паразит",
-            "Испорченный метроном", "Ошметок Малай", "Свиной глаз",
-            "Скомканные ноты", "Липкая пастилка"
-        ]
-    },
-    "Первый": {
-        "power": "Подопытный 001",
-        "addons": [
-            "Радужный чип подавления", "Шахматная фигурка", "Останки кролика", "Ошейник-электрошокер",
-            "Сломанный скейт", "Черная вдова", "Бритва Виктора", "Колпак с электродами",
-            "Очки из пиццерии", "Поддельное свидетельство о смерти", "Шейное щупальце", "Окровавленный конек",
-            "Раздолбанный кассетник", "Разобранный суперком", "Сломанная Ракета", "Стрелки часов",
-            "Бейдж санитара", "Бисерный лабиринт", "Винтажный радиоприемник", "Витражная роспись"
-        ]
-    },
-"Слэшер": {
-    "power": "Вездесущее зло",
-    "addons": [
-        "Грязные деньги", "Радужный лодочный мотор", "Жетон помощника шерифа", "Кровавый журнал", "Пропавший штопор",
-        "Сгоревший предохранитель", "Глазная слизь", "Два гвоздя", "Камень для сауны", "Осколки зеркала",
-        "Рельефный алюминий", "Кофе коронера", "Кровавая улыбка", "Праздничная шумелка", "Спальный мешок",
-        "Токсичные отходы", "Вязальная спица", "Погнутое колесо", "Ручной культиватор", "Туфля санитарки"
-        ]
-    }
-}
-
-# ================== БАЗЫ НАВЫКОВ ==================
-SURVIVOR_PERKS = {
-    "Орела Роуз": ["Не навреди", "Врачебный долг", "Быстрое реагирование"],
-    "Рик Граймс": ["Командная работа: собраться с силами", "Апокалиптическая смекалка", "Эй, я здесь!"],
-    "Мишон Граймс": ["Убежденность", "Последний рубеж", "Командная работа: скромная победа"],
-    "Ви Бунясак": ["Жизнь в дороге", "Раз, два, три, четыре!", "Записки о призраке"],
-    "Дастин Хендерсон": ["Бада-бада-бум", "Изменение плана", "Командная работа: полная схема"],
-    "Одиннадцать": ["Восприятие экстрасенса", "Мы тебя видим", "Командная работа: приглушение"],
-    "Квон Тхэён": ["Место для нас", "На пять шагов впереди", "Состояние потока"],
-    "Ренато Лира": ["Запасной игрок", "Командная работа: общая скрытность", "Выше головы"],
-    "Габриэль Сома": ["Ремонтник", "Призвание", "Утилизатор"],
-    "Николас Кейдж": ["Драматургия", "Партнер по сцене", "Вот это поворот"],
-    "Эллен Рипли": ["Счастливая звезда", "Химическая ловушка", "Легкоступ"],
-    "Алан Уэйк": ["Воин света", "Дар: освещение", "Дедлайн"],
-    "Сейбл Уорд": ["Чары пауки-прядильщики", "Сила во мраке", "Дерзость"],
-    "Аэстри Язар": ["Зеркальная иллюзия", "Вдохновение барда", "Замри и увидишь"],
-    "Лара Крофт": ["Сноровка", "Специалист", "Закалка"],
-    "Тревор Бельмонт": ["Глаза Бельмонта", "Ликование", "Момент славы"],
-    "Тори Кейн": ["Чары предательские вороны", "С чистого листа", "Бремя на себя"],
-    "Леон С. Кеннеди": ["Стиснув зубы", "Световая граната", "Дух новичка"],
-    "Джилл Валентайн": ["Фугасная мина", "Поправка", "Противодействие"],
-    "Микаэла Рид": ["Ясновидение", "Дар: круг исцеления", "Дар: уход в тень"],
-    "Хонас Васкес": ["Преодоление", "Корректировка", "Дар: экспонента"],
-    "Ёити Асакава": ["Дар: теория мрака", "Эмпатическая связь", "Родительская забота"],
-    "Хэдди Каур": ["Собранность", "Остаточное проявление", "Усердие"],
-    "Ада Вонг": ["Жучок", "Ниже травы", "Поспешное лечение"],
-    "Ребекка Чемберс": ["Как новенький", "Ободрение", "Полная сосредоточенность"],
-    "Витторио Тоскано": ["Потенциальная энергия", "Умудренный туманом", "Быстрый гамбит"],
-    "Талита Лира": ["На волю", "Командная работа: быстрая пара", "Дружеское состязание"],
-    "Джейн Ромеро": ["Солидарность", "Равновесие", "Напролом"],
-    "Эшли Уильямс": ["Раскачка", "Пристегнись", "Проверка на прочность"],
-    "Стив Харрингтон": ["Нянька", "Товарищество", "Второе дыхание"],
-    "Нэнси Уиллер": ["Лучше вместе", "Фиксация", "Внутренняя сила"],
-    "Юи Кимура": ["Любыми средствами", "Форсаж", "Везение"],
-    "Зарина Кассир": ["Ради людей", "Обман во благо", "Без огласки"],
-    "Шерил Мейсон": ["Оберег души", "Кровавый договор", "Скрытый союз"],
-    "Феликс Рихтер": ["Строим на века", "Отчаянные меры", "Визионер"],
-    "Элоди Ракото": ["Изучение", "Уловка", "Отчаянная борьба"],
-    "Ли Юнчин": ["За чужой счет", "Ударный забег", "Самосохранение"],
-    "Лори Строуд": ["Единственный выживший", "Решающий удар", "Объект одержимости"],
-    "Эйс Висконти": ["Туз в рукаве", "Повысить ставки", "Игра в открытую"],
-    "Уильям Овербек": ["Одолженное время", "Оставленный позади", "Несокрушимый"],
-    "Фенг Мин": ["Тревога", "Гибкость", "Техник"],
-    "Дэвид Кинг": ["Мы будем жить вечно", "Крепкий орешек", "Без сожаления"],
-    "Квентин Смит": ["Аптекарь", "Бессонница", "Проснись"],
-    "Детектив Тэпп": ["Выдержка", "Детективное чутье", "Выслеживание подозреваемого"],
-    "Кейт Денсон": ["Потанцуй со мной", "Уникальная возможность", "Через край"],
-    "Адам Фрэнсис": ["Самоучка", "Освобождение", "Диверсия"],
-    "Джефф Йохансен": ["Уход за больным", "Поломка", "Искажение"],
-    "Дуайт Фэйрфилд": ["Связь", "Прояви себя", "Лидер"],
-    "Мэг Томас": ["Адреналин", "Быстрый и тихий", "Спринтер"],
-    "Клодетт Морель": ["Познания в ботанике", "Сострадание", "Сам себе доктор"],
-    "Джейк Парк": ["Спокойствие духа", "Железная воля", "Крушитель"],
-    "Нея Карлссон": ["Ловкое приземление", "Городской бег", "Уроки улиц"],
-    "Шейн Уиигваас": ["Полный газ!", "Оказание помощи", "Перекрестный допрос"],
-}
-SURV_COMMON_PERKS = ["Темное чувство", "Дежавю", "Надежда", "Кровные узы", "Легковес", "Этому не бывать",
-                     "Мы справимся", "Предчувствие", "Устойчивость", "Скользкое мясо", "Мелкая дичь",
-                     "Мурашки по спине", "Никто не остался позади", "Мародерское чутье"]
-
-KILLER_PERKS = {
-    "Охотник": ["Невероятная стойкость", "Зверская сила", "Порча: Тотем охоты"],
-    "Призрак": ["Хищник", "Ищейка", "Теневой рожденный"],
-    "Деревенщина": ["Стойкий", "Заряд бодрости", "Тиннитус"],
-    "Медсестра": ["Стридор", "Танатофобия", "Зов медсестры"],
-    "Тень": ["Оставьте лучшее напоследок", "Поиграть со своей едой", "Угасающий свет"],
-    "Ведьма": ["Порча: Пожирание надежды", "Порча: Третья печать", "Порча: Погибель"],
-    "Доктор": ["Перегрузка", "Наблюдение и прием", "Безумное упорство"],
-    "Охотница": ["Зверь охоты", "Территориальный императив", "Колыбельная Охотницы"],
-    "Каннибал": ["Нокаут", "Барбекю и чили", "Гибель Франклина"],
-    "Кошмар": ["Помни мне", "Кровавый смотритель", "Выхода нет"],
-    "Свинья": ["Трюк палача", "Наблюдение", "Выбор за тобой"],
-    "Клоун": ["Драконья хватка", "Клаустрофобия", "Клоунада"],
-    "Дух": ["Ярость духа", "Порча: Проклятая земля", "Порча: Обида"],
-    "Легион": ["Безумное веселье", "Ирония судьбы", "Разлад"],
-    "Чума": ["Темная преданность", "Зараза", "Вмешательство скверны"],
-    "Гоуст Фейс": ["Ужасающий", "Скрытное преследование", "Чужой слух"],
-    "Демогоргон": ["Выброс", "Жестокая изоляция", "Разум Тумана"],
-    "Они": ["Тактика зловещего", "Кровавое эхо", "Возмездие"],
-    "Стрелок": ["Рикошет", "Смертельные узы", "Клик-клик"],
-    "Палач": ["Принудительная мера", "След мучений", "Смертельный завет"],
-    "Мор": ["Порча: Кара", "Порча: Кровь фаворита", "Порча: Бессмертный"],
-    "Близнецы": ["Угнетение", "Ценность милосердия", "Загадочный заговор"],
-    "Трюкач": ["Выхода нет", "Толпа ликует", "Рикошет звезд"],
-    "Немезис": ["Преследователь убийцы", "Истерия", "Подрыв"],
-    "Сенобит": ["Мертвая хватка", "Дар: Караульный боли", "Игрушка"],
-    "Художница": ["Зловещие объятия", "Резонанс боли", "Птичий глаз"],
-    "Онрё": ["Звонок из могилы", "Морская буря", "Проклятие Садако"],
-    "Грязь": ["Септический заряд", "Тьма внутри", "Пытка"],
-    "Кукловод": ["Анатомическая досягаемость", "Пробуждение силы", "Вирус Уэскера"],
-    "Рыцарь": ["Никуда не деться", "Высокомерие", "Зов стражников"],
-    "Торговка черепами": ["Корректировка курса", "Синхронизация", "Глаза в небе"],
-    "Сингулярность": ["Генетическое ограничение", "Принудительное очищение", "Машинное обучение"],
-    "Ксеноморф": ["Быстрый жестокий удар", "Чужой среди нас", "Инстинкт улья"],
-    "Хороший Парень": ["Батарейки в комплекте", "Друг до гроба", "Поиграй со мной"],
-    "Неведомое": ["Неведомый ужас", "Эхо воспоминаний", "Связь со злом"],
-    "Лич": ["Призыв Векны", "Длань мертвеца", "Ослепительное пламя"],
-    "Темный Властелин": ["Форма зверя", "Кровавый пир", "Владыка ночи"],
-    "Егерь": ["Железная хватка капкана", "Охотничий азарт", "Выслеживание добычи"],
-    "Гуль": ["Вспышка ярости", "Безумный напор", "Разрушитель"],
-    "Аниматроник": ["Ужас Пиццеплекса", "Детский кошмар", "Поломка системы"],
-    "Красу": ["Разрушительный резонанс", "Морское чудовище", "Порча: Заточение"],
-    "Первый": ["Вуаль тени", "Первородный страх", "Полное поглощение"],
-    "Слэшер": ["Порча: смертельный испуг", "Безмолвная тень", "Неистовство"],
-}
-KILLER_COMMON_PERKS = [
-    "Тихий шорох",
-    "Охотник на оленей",
-    "Сеющий страх",
-    "Порча: никому не скрыться от смерти",
-    "Порча: охотничий азарт",
-    "Коварство",
-    "Мертвая хватка",
-    "Чудовищный храм",
-    "Небрежный мясник",
-    "Сумеречные шпионы",
-    "Разбитые надежды",
-    "Шепоты",
-    "Безжалостный",
-]
-
-CONFIG_FILE = "dbd_randomizer_config.txt"
-
-
-def load_config():
-    config = {
-        "search_x": "", "search_y": "", "clear_x": "", "clear_y": "", "first_result_x": "", "first_result_y": "",
-        "item_slot_x": "", "item_slot_y": "", "addon1_slot_x": "", "addon1_slot_y": "", "addon2_slot_x": "",
-        "addon2_slot_y": "",
-        # ВСТАВИТЬ СЮДА ЭТИ ДВЕ СТРОКИ:
-        "owned_killers": "",
-        "owned_surv_chars": "",
-        "auto_update": "1",
-        "gh_token": "",
-        "nickname": ""
-    }
-    for i in range(1, 5):
-        config[f"slot{i}_x"] = ""
-        config[f"slot{i}_y"] = ""
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                if "=" in line:
-                    key, val = line.strip().split("=", 1)
-                    if key in config: config[key] = val
-    return config
-
-def save_config(config_dict):
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            for key, val in config_dict.items(): f.write(f"{key}={val}\n")
-    except OSError:
-        pass  # конфиг не критичен — не роняем программу
-
-
-def format_build_text(b):
-    """Карточка билда для копирования в буфер обмена."""
-    side_icon = "👹" if b.get("side") == "KILLER" else "👤"
-    lines = [
-        f"=== DBD БИЛД {side_icon} ===",
-        f"Автор: {b.get('author', '—')} | {b.get('date', '')}",
-        f"Персонаж: {b.get('char', '—')}",
-        f"{'Сила' if b.get('side') == 'KILLER' else 'Предмет'}: {b.get('power_or_item', '—')}",
-        "Аддоны:",
-    ]
-    addons = b.get("addons", ["—", "—"])
-    lines += [f"  • {addons[0] if len(addons) > 0 else '—'}",
-              f"  • {addons[1] if len(addons) > 1 else '—'}"]
-    lines.append("Навыки:")
-    for i, p in enumerate(b.get("perks", []), 1):
-        lines.append(f"  {i}. {p}")
-    return "\n".join(lines)
-
-
-class CoordinateGrabber:
-    def __init__(self, parent):
-        self.top = tk.Toplevel(parent)
-        self.top.title("🎯 Захват")
-        self.top.geometry("300x120")
-        self.top.configure(bg="#1e1e1e")
-        self.top.attributes("-topmost", True)
-        self.top.resizable(False, False)
-        ttk.Label(self.top, text="Кликните в нужном месте экрана.\nКоординаты запишутся автоматически.",
-                  justify="center").pack(pady=15)
-        self.coords = None
-        self.top.bind("<Button-1>", self.on_click)
-
-    def on_click(self, event):
-        self.coords = pyautogui.position()
-        self.top.destroy()
-
-class DBDUniversalRandomizer:
+# ----------------------------------------------------------------------------
+# Приложение
+# ----------------------------------------------------------------------------
+class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("DBD Ultimate Search Randomizer (SURV & KILLER)")
-        self.root.geometry("620x860")
-        self.root.configure(bg="#121212")
-        self.config = load_config()
+        self.cfg, migrated = load_config()
+        self.db = load_db()
+        self.build = None
+        self.community_builds = []
+        self.icon_store = IconStore(ICONS_DIR, enabled=True)
+        self._photos = {}
+        self._updating = False
+        self._pending_update = None
+        self.abort = threading.Event()
+        self.worker = None
+        self.ui_q = queue.Queue()
+        self._grabber = None                 # защита от сборщика мусора
+        self._hotkey_handle = None
+        self._char_widgets = {}
+        self._coord_widgets = {}
+        self._timing_widgets = {}
+        self._option_vars = {}
 
-        self.mode_var = tk.StringVar(value="KILLER")
+        _set_dpi_awareness()
+        root.title(f"DBD Ultimate Search Randomizer — SURV & KILLER v{APP_VERSION}")
+        root.configure(bg="#121212")
+        root.geometry("1080x780")
+        root.minsize(900, 620)
 
-        self.chosen_char = ""
-        self.chosen_power_or_item = "—"
-        self.chosen_addons = ["—", "—"]
-        self.current_generated_perks = []
+        self._setup_style()
+        self._build_ui()
+        self._poll_ui_queue()
+        self._register_abort_hotkey()
 
-        # Словари для хранения переменных чекбоксов персонажей
-        self.killer_checkboxes = {}
-        self.surv_checkboxes = {}
+        root.protocol("WM_DELETE_WINDOW", self._on_close)
+        if self.cfg["update"].get("auto", True):
+            root.after(4000, self.periodic_update_check)
+        if migrated:
+            self.log("Конфигурация перенесена из старого dbd_randomizer_config.txt в JSON.")
+        if self.db.get("_load_error"):
+            self.log("⚠ dbd_database.json повреждён — используются встроенные данные.")
+        if not INPUT.available:
+            self.log(f"⚠ Автоматизация недоступна ({INPUT.reason}). Доступен «сухой прогон».")
+        self.log(f"База: {len(self.db['killers'])} убийц, {len(self.db['survivors'])} выживших "
+                 f"(версия {self.db.get('version')}).")
+        if self.icon_store.enabled:
+            have, total = self.icon_store.stats()
+            self.log(f"Иконки навыков: {have}/{total} в кэше; карта покрывает "
+                     f"{len(ICONS.PERK_ICONS)} навыков. Недостающие докачаются при показе билда.")
+        else:
+            self.log("⚠ Pillow не установлен — карточка билда будет без иконок "
+                     "(pip install Pillow).")
 
-        self.style = ttk.Style()
-        self.style.theme_use("default")
-        self.style.configure(".", background="#121212", foreground="#ffffff", font=("Segoe UI", 10))
-        self.style.configure("TLabel", background="#121212", foreground="#e0e0e0")
-        self.style.configure("TFrame", background="#121212")
-        self.style.configure("TLabelframe", background="#121212", bordercolor="#2c2c2c")
-        self.style.configure("TLabelframe.Label", background="#121212", foreground="#ff9500",
-                             font=("Segoe UI", 10, "bold"))
-        self.style.configure("TNotebook", background="#121212", borderwidth=0)
-        self.style.configure("TNotebook.Tab", background="#2c2c2c", foreground="#aaaaaa", padding=[12, 4])
-        self.style.map("TNotebook.Tab", background=[("selected", "#ff9500")], foreground=[("selected", "#121212")])
+    # ---------------------------------------------------------------- стиль --
+    def _setup_style(self):
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")          # «default» на Windows игнорирует цвета
+        except Exception:
+            pass
+        bg, fg, acc = "#121212", "#e6e6e6", "#ff9500"
+        style.configure(".", background=bg, foreground=fg, font=("Segoe UI", 10), bordercolor="#2c2c2c")
+        style.configure("TLabel", background=bg, foreground=fg)
+        style.configure("TFrame", background=bg)
+        style.configure("TLabelframe", background=bg, bordercolor="#2c2c2c")
+        style.configure("TLabelframe.Label", background=bg, foreground=acc, font=("Segoe UI", 10, "bold"))
+        style.configure("TNotebook", background=bg, borderwidth=0)
+        style.configure("TNotebook.Tab", background="#232323", foreground="#9a9a9a", padding=(14, 6))
+        style.map("TNotebook.Tab", background=[("selected", acc)], foreground=[("selected", "#121212")])
+        style.configure("TCheckbutton", background=bg, foreground=fg)
+        style.map("TCheckbutton", background=[("active", bg)])
+        style.configure("TRadiobutton", background=bg, foreground=fg)
+        style.map("TRadiobutton", background=[("active", bg)])
+        style.configure("TButton", background="#2c2c2c", foreground="#ffffff", padding=5)
+        style.map("TButton", background=[("active", "#3a3a3a")])
+        style.configure("Gen.TButton", background=acc, foreground="#121212",
+                        font=("Segoe UI", 12, "bold"), padding=10)
+        style.map("Gen.TButton", background=[("active", "#ffb04d"), ("disabled", "#4a3a20")])
+        style.configure("Equip.TButton", background="#34c759", foreground="#0d1a10",
+                        font=("Segoe UI", 11, "bold"), padding=9)
+        style.map("Equip.TButton", background=[("active", "#4cd964"), ("disabled", "#24402c")])
+        style.configure("Stop.TButton", background="#ff3b30", foreground="#1a0d0c",
+                        font=("Segoe UI", 11, "bold"), padding=9)
+        style.map("Stop.TButton", background=[("active", "#ff6a5f")])
+        style.configure("Vertical.TScrollbar", background="#2c2c2c", troughcolor=bg)
 
-        self.style.configure("Gen.TButton", background="#ff9500", foreground="#121212", font=("Segoe UI", 12, "bold"),
-                             padding=10)
-        self.style.map("Gen.TButton", background=[("active", "#ffaa33")])
-        self.style.configure("Equip.TButton", background="#34c759", foreground="#121212", font=("Segoe UI", 11, "bold"),
-                             padding=8)
-        self.style.map("Equip.TButton", background=[("active", "#4cd964")])
-        self.style.configure("Sec.TButton", background="#2c2c2c", foreground="#ffffff", padding=4)
-        self.style.configure("Pub.TButton", background="#5e5ce6", foreground="#ffffff", font=("Segoe UI", 11, "bold"),
-                             padding=8)
-        self.style.map("Pub.TButton", background=[("active", "#7a79f0")])
-        self.style.configure("Head.TLabel", font=("Segoe UI", 15, "bold"), foreground="#ff9500")
+    # ------------------------------------------------------------- интерфейс --
+    def _build_ui(self):
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(1, weight=1)
 
-        # --- ВЕРХНЯЯ ПАНЕЛЬ (ЗАГОЛОВОК + ПЕРЕКЛЮЧАТЕЛЬ СТОРОНЫ) ---
-        header = tk.Frame(self.root, bg="#121212")
-        header.pack(fill=tk.X, padx=15, pady=(10, 2))
-        ttk.Label(header, text="☠ DBD RANDOMIZER", style="Head.TLabel").pack(side=tk.LEFT)
-        ttk.Label(header, text=f"v{APP_VERSION}", font=("Segoe UI", 9), foreground="#8e8e93").pack(side=tk.LEFT,
-                                                                                                    padx=(8, 0),
-                                                                                                    pady=(6, 0))
-        mode_frame = tk.Frame(header, bg="#121212")
-        mode_frame.pack(side=tk.RIGHT)
-        ttk.Label(mode_frame, text="СТОРОНА:", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=5)
+        # --- переключатель стороны -------------------------------------------
+        self.mode_var = tk.StringVar(value=self.cfg["options"].get("side", "KILLER"))
+        top = ttk.Frame(self.root)
+        top.grid(row=0, column=0, sticky="ew", padx=12, pady=(8, 2))
+        ttk.Label(top, text="СТОРОНА:", font=("Segoe UI", 10, "bold")).pack(side="left")
+        for text, value, color in (("👹 МАНЬЯКИ", "KILLER", "#ff6b60"),
+                                   ("👤 ВЫЖИВАЮЩИЕ", "SURVIVOR", "#5ac8fa")):
+            rb = tk.Radiobutton(top, text=text, variable=self.mode_var, value=value,
+                                bg="#121212", fg=color, selectcolor="#1c1c1e",
+                                activebackground="#121212", activeforeground=color,
+                                font=("Segoe UI", 10, "bold"), command=self._on_mode_change)
+            rb.pack(side="left", padx=12)
 
-        rb_surv = tk.Radiobutton(mode_frame, text="👤 ВЫЖИВАЮЩИЕ", variable=self.mode_var, value="SURVIVOR",
-                                 bg="#121212", fg="#5ac8fa", selectcolor="#1c1c1e", font=("Segoe UI", 10, "bold"),
-                                 activebackground="#121212", indicatoron=False, relief=tk.FLAT, padx=10, pady=3)
-        rb_surv.pack(side=tk.RIGHT, padx=5)
-        rb_kill = tk.Radiobutton(mode_frame, text="👹 МАНЬЯКИ", variable=self.mode_var, value="KILLER", bg="#121212",
-                                 fg="#ff3b30", selectcolor="#1c1c1e", font=("Segoe UI", 10, "bold"),
-                                 activebackground="#121212", indicatoron=False, relief=tk.FLAT, padx=10, pady=3)
-        rb_kill.pack(side=tk.RIGHT, padx=5)
-        self._mode_buttons = [rb_kill, rb_surv]
-        for rb in self._mode_buttons:
-            rb.bind("<Enter>", lambda e, w=rb: w.config(bg="#2c2c2c"))
-            rb.bind("<Leave>", lambda e, w=rb: w.config(bg="#121212"))
-
-        self.notebook = ttk.Notebook(root)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.grid(row=1, column=0, sticky="nsew", padx=8, pady=4)
         self.tab_main = ttk.Frame(self.notebook)
-        self.tab_builds = ttk.Frame(self.notebook)
         self.tab_chars = ttk.Frame(self.notebook)
         self.tab_coords = ttk.Frame(self.notebook)
-
-        self.notebook.add(self.tab_main, text=" 🎲 РАНДОМАЙЗЕР ")
-        self.notebook.add(self.tab_builds, text=" 🌍 БИЛДЫ ")
+        self.tab_builds = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_main, text=" 🎲 БИЛД ")
+        self.notebook.add(self.tab_builds, text=" 🌍 БИЛДЫ СООБЩЕСТВА ")
         self.notebook.add(self.tab_chars, text=" 🎭 ПЕРСОНАЖИ ")
-        self.notebook.add(self.tab_coords, text=" 🎯 КООРДИНАТЫ ")
+        self.notebook.add(self.tab_coords, text=" 🎯 КЛИКИ И ТАЙМИНГИ ")
 
-        # --- ГЛАВНЫЙ ЭКРАН (РАНДОМАЙЗЕР) ---
-        self.res_frame = ttk.LabelFrame(self.tab_main, text=" ВАШ РАНДОМНЫЙ БИЛД ")
-        self.res_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self._build_main_tab()
+        self._build_builds_tab()
+        self._build_chars_tab()
+        self._build_coords_tab()
 
-        self.lbl_char = ttk.Label(self.res_frame, text="Персонаж: Нажмите генерацию", font=("Segoe UI", 13, "bold"),
-                                  foreground="#ffffff")
-        self.lbl_char.pack(anchor=tk.W, padx=15, pady=8)
+        # --- строка состояния -------------------------------------------------
+        bottom = ttk.Frame(self.root)
+        bottom.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 8))
+        self.status = ttk.Label(bottom, text="Готово. Сгенерируйте билд.", foreground="#8e8e93",
+                                font=("Segoe UI", 9), wraplength=760, justify="left")
+        self.status.pack(side="left", fill="x", expand=True)
+        self.btn_stop = ttk.Button(bottom, text="⏹ СТОП (F9)", style="Stop.TButton",
+                                   command=self.request_abort, width=14)
+        self.btn_stop.pack(side="right", padx=(8, 0))
 
-        self.lbl_item = ttk.Label(self.res_frame, text="Сила / Предмет: —", font=("Segoe UI", 11), foreground="#ff9500")
-        self.lbl_item.pack(anchor=tk.W, padx=15, pady=4)
+    # ---- вкладка «Билд» ------------------------------------------------------
+    def _build_main_tab(self):
+        self.tab_main.columnconfigure(0, weight=3)
+        self.tab_main.columnconfigure(1, weight=2)
+        self.tab_main.rowconfigure(0, weight=1)
+        self.tab_main.rowconfigure(1, weight=0)
 
-        self.lbl_addons = ttk.Label(self.res_frame, text="Улучшения (Аддоны):\n  • —\n  • —", font=("Segoe UI", 10),
-                                    justify=tk.LEFT, foreground="#e0e0e0")
-        self.lbl_addons.pack(anchor=tk.W, padx=15, pady=4)
+        left = ttk.Frame(self.tab_main)
+        left.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=8)
+        left.rowconfigure(0, weight=1)
+        left.columnconfigure(0, weight=1)
 
-        self.lbl_perks = ttk.Label(self.res_frame, text="Выбранные навыки:\n  1. —\n  2. —\n  3. —\n  4. —",
-                                   font=("Segoe UI", 11), justify=tk.LEFT, foreground="#5ac8fa")
-        self.lbl_perks.pack(anchor=tk.W, padx=15, pady=10)
+        box = ttk.LabelFrame(left, text=" ВАШ БИЛД ")
+        box.grid(row=0, column=0, sticky="nsew")
+        box.rowconfigure(0, weight=1)
+        box.columnconfigure(0, weight=1)
+        self._build_card(box)
 
-        self.btn_generate = ttk.Button(self.tab_main, text="🎲 СГЕНЕРИРОВАТЬ СЛУЧАЙНЫЙ БИЛД", style="Gen.TButton",
-                                       command=self.generate_new_build)
-        self.btn_generate.pack(fill=tk.X, padx=15, pady=5)
+        right = ttk.Frame(self.tab_main)
+        right.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=8)
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(3, weight=1)
 
-        self.btn_equip = ttk.Button(self.tab_main, text="⚡ ЗАПУСТИТЬ ПОЛНУЮ ЭКИПИРОВКУ НА ЭКРАНЕ",
-                                    style="Equip.TButton", command=self.start_equip_automation)
-        self.btn_equip.config(state=tk.DISABLED)
-        self.btn_equip.pack(fill=tk.X, padx=15, pady=5)
+        opt = ttk.LabelFrame(right, text=" НАСТРОЙКИ ГЕНЕРАЦИИ ")
+        opt.grid(row=0, column=0, sticky="ew")
+        self.perk_mode_var = tk.StringVar(value=self.cfg["options"].get("perk_mode", "general"))
+        for text, value, hint in (("Общие навыки (есть у всех)", "general", ""),
+                                  ("Уникальные навыки персонажа", "unique", ""),
+                                  ("Смешанные (3 своих + 1 общий и т.п.)", "mixed", "")):
+            ttk.Radiobutton(opt, text=text, value=value, variable=self.perk_mode_var).pack(anchor="w", padx=8, pady=1)
+        self.addons_var = tk.BooleanVar(value=self.cfg["options"].get("addons_enabled", True))
+        ttk.Checkbutton(opt, text="Подбирать аддоны", variable=self.addons_var).pack(anchor="w", padx=8, pady=1)
+        self.owned_var = tk.BooleanVar(value=self.cfg["options"].get("respect_owned", False))
+        ttk.Checkbutton(opt, text="Только открытое у меня (белые списки в JSON)",
+                        variable=self.owned_var).pack(anchor="w", padx=8, pady=(1, 6))
 
-        self.btn_publish = ttk.Button(self.tab_main, text="🌍 ОПУБЛИКОВАТЬ БИЛД (увидят все игроки)",
-                                      style="Pub.TButton", command=self.publish_current_build)
-        self.btn_publish.config(state=tk.DISABLED)
-        self.btn_publish.pack(fill=tk.X, padx=15, pady=5)
+        btns = ttk.Frame(right)
+        btns.grid(row=1, column=0, sticky="ew", pady=6)
+        btns.columnconfigure(0, weight=1)
+        self.btn_generate = ttk.Button(btns, text="🎲 СГЕНЕРИРОВАТЬ БИЛД", style="Gen.TButton",
+                                       command=self.generate_build)
+        self.btn_generate.grid(row=0, column=0, sticky="ew", pady=2)
+        self.btn_equip = ttk.Button(btns, text="⚡ ЭКИПИРОВАТЬ В ИГРЕ", style="Equip.TButton",
+                                    command=self.start_equip, state="disabled")
+        self.btn_equip.grid(row=1, column=0, sticky="ew", pady=2)
+        row2 = ttk.Frame(btns)
+        row2.grid(row=2, column=0, sticky="ew", pady=2)
+        row2.columnconfigure(0, weight=1)
+        row2.columnconfigure(1, weight=1)
+        ttk.Button(row2, text="📋 Копировать билд", command=self.copy_build).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        ttk.Button(row2, text="🔁 Перегенерировать перки", command=self.reroll_perks).grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        self.btn_publish = ttk.Button(btns, text="🌍 ОПУБЛИКОВАТЬ БИЛД", command=self.publish_current_build)
+        self.btn_publish.grid(row=3, column=0, sticky="ew", pady=2)
 
-        self.status = ttk.Label(self.tab_main,
-                                text="Выберите персонажа в игре руками, затем запустите авто-экипировку.",
-                                font=("Segoe UI", 9, "italic"), foreground="#8e8e93", justify=tk.CENTER)
-        self.status.pack(pady=5)
+        run = ttk.LabelFrame(right, text=" ЗАПУСК АВТОМАТИЗАЦИИ ")
+        run.grid(row=2, column=0, sticky="ew")
+        self.dry_var = tk.BooleanVar(value=self.cfg["options"].get("dry_run", False))
+        ttk.Checkbutton(run, text="Сухой прогон (без кликов, только лог)",
+                        variable=self.dry_var).pack(anchor="w", padx=8, pady=1)
+        self.ocr_var = tk.BooleanVar(value=self.cfg["options"].get("ocr_verify", False))
+        ttk.Checkbutton(run, text="Проверять результат поиска (OCR, нужен pytesseract)",
+                        variable=self.ocr_var).pack(anchor="w", padx=8, pady=1)
+        self.selchar_var = tk.BooleanVar(value=self.cfg["options"].get("select_char", False))
+        ttk.Checkbutton(run, text="Самому выбрать персонажа (нужна координата char_search)",
+                        variable=self.selchar_var).pack(anchor="w", padx=8, pady=1)
+        self.progress = ttk.Progressbar(run, mode="determinate", maximum=100)
+        self.progress.pack(fill="x", padx=8, pady=(4, 8))
 
-        # --- ИНИЦИАЛИЗАЦИЯ ОСТАЛЬНЫХ ВКЛАДОК ---
-        self.setup_characters_tab()
-        self.setup_coordinates_tab()
-        self.setup_builds_tab()
+        logbox = ttk.LabelFrame(right, text=" ЖУРНАЛ ")
+        logbox.grid(row=3, column=0, sticky="nsew", pady=(6, 0))
+        logbox.rowconfigure(0, weight=1)
+        logbox.columnconfigure(0, weight=1)
+        self.txt_log = tk.Text(logbox, bg="#141414", fg="#b8b8b8", font=("Consolas", 9),
+                               wrap="word", relief="flat", padx=6, pady=6, state="disabled", height=8)
+        self.txt_log.grid(row=0, column=0, sticky="nsew")
+        lsb = ttk.Scrollbar(logbox, orient="vertical", command=self.txt_log.yview)
+        lsb.grid(row=0, column=1, sticky="ns")
+        self.txt_log.configure(yscrollcommand=lsb.set)
 
-        # --- АВТО-ОБНОВЛЕНИЕ ---
-        self._updating = False
-        self.root.title(f"DBD Ultimate Search Randomizer v{APP_VERSION} (SURV & KILLER)")
-        self.root.protocol("WM_DELETE_WINDOW", self.on_app_close)
-        # Первая проверка через 2 секунды после запуска, далее каждые 30 минут
-        self.root.after(2000, self.check_for_updates)
-        self.root.after(UPDATE_CHECK_INTERVAL_MS, self.periodic_update_check)
+    # ---- карточка билда с иконками -------------------------------------------
+    def _build_card(self, parent):
+        canvas = tk.Canvas(parent, bg="#161616", highlightthickness=0, bd=0)
+        sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        self.card = tk.Frame(canvas, bg="#161616")
+        win = canvas.create_window((0, 0), window=self.card, anchor="nw")
+        self.card.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=6)
+        sb.grid(row=0, column=1, sticky="ns", pady=6)
 
-    def periodic_update_check(self):
-        # Уважаем настройку пользователя из config
-        if self.config.get("auto_update", "1") == "1":
-            self.check_for_updates(silent=True)
-        self.root.after(UPDATE_CHECK_INTERVAL_MS, self.periodic_update_check)
+        def _wheel(event):
+            canvas.yview_scroll(-1 if getattr(event, "delta", 0) > 0 or
+                                getattr(event, "num", 0) == 4 else 1, "units")
+            return "break"
+        for w in (canvas, self.card):
+            w.bind("<MouseWheel>", _wheel)
+            w.bind("<Button-4>", _wheel)
+            w.bind("<Button-5>", _wheel)
 
-    def check_for_updates(self, silent=False):
-        """Фоновая проверка релизов GitHub. silent=True — не показывать ошибки."""
-        if self._updating:
+        pad = dict(bg="#161616")
+        self.card_hint = tk.Label(self.card, justify="left", anchor="w", fg="#9a9a9a",
+                                  font=("Segoe UI", 10), wraplength=420, **pad)
+        self.card_hint.pack(fill="x", padx=14, pady=12)
+
+        self.card_author = tk.Label(self.card, anchor="w", fg="#ffd60a", bg="#161616",
+                                    font=("Segoe UI", 9, "italic"))
+        self.card_char = tk.Label(self.card, anchor="w", fg="#ffffff", bg="#161616",
+                                  font=("Segoe UI", 15, "bold"))
+        self.card_main = tk.Label(self.card, anchor="w", fg="#ff9500", bg="#161616",
+                                  font=("Segoe UI", 11, "bold"), wraplength=420, justify="left")
+        self.card_sub = tk.Label(self.card, anchor="w", fg="#6e6e73", bg="#161616",
+                                 font=("Segoe UI", 9, "italic"))
+        for w in (self.card_author, self.card_char, self.card_main, self.card_sub):
+            w.pack(fill="x", padx=14, pady=(2, 0))
+
+        self._card_section("🔧 АДДОНЫ")
+        self.card_addons = []
+        for _ in range(2):
+            lbl = tk.Label(self.card, anchor="w", fg="#dcdcdc", bg="#161616",
+                           font=("Segoe UI", 10), wraplength=400, justify="left")
+            lbl.pack(fill="x", padx=26)
+            self.card_addons.append(lbl)
+
+        self._card_section("🔮 НАВЫКИ")
+        self.card_perks = []
+        for _ in range(4):
+            row = tk.Frame(self.card, **pad)
+            row.pack(fill="x", padx=20, pady=2)
+            img = tk.Label(row, bg="#161616", width=ICON_SIZE, height=ICON_SIZE)
+            img.pack(side="left", padx=(0, 8))
+            txt = tk.Label(row, anchor="w", fg="#34c759", bg="#161616",
+                           font=("Segoe UI", 11), wraplength=340, justify="left")
+            txt.pack(side="left", fill="x", expand=True)
+            self.card_perks.append((img, txt))
+
+        bar = tk.Frame(self.card, **pad)
+        bar.pack(fill="x", padx=14, pady=(10, 14))
+        self.lbl_icons = tk.Label(bar, fg="#6e6e73", bg="#161616", font=("Segoe UI", 8),
+                                  anchor="w", justify="left")
+        self.lbl_icons.pack(side="left", fill="x", expand=True)
+        self.btn_icons = tk.Button(bar, text="⬇ Все иконки", bg="#2c2c2c", fg="#e0e0e0",
+                                   activebackground="#3a3a3a", activeforeground="#ffffff",
+                                   relief="flat", font=("Segoe UI", 8), padx=8, pady=2,
+                                   command=self.download_all_icons)
+        self.btn_icons.pack(side="right")
+        self._update_icon_hint()
+        self._set_build_text(None)
+
+    def _card_section(self, text):
+        tk.Label(self.card, text=text, anchor="w", fg="#8e8e93", bg="#161616",
+                 font=("Segoe UI", 9, "bold")).pack(fill="x", padx=14, pady=(12, 2))
+
+    def _update_icon_hint(self):
+        have, total = self.icon_store.stats()
+        if not self.icon_store.enabled:
+            self.lbl_icons.config(text="Иконки недоступны (нужна библиотека Pillow: "
+                                       "pip install Pillow)")
+            self.btn_icons.config(state="disabled")
             return
-        self._updating = True
-        threading.Thread(target=self._update_worker, args=(silent,), daemon=True).start()
+        self.lbl_icons.config(text=f"Иконок в кэше: {have} из {total} · "
+                                   f"докaчиваются автоматически в {os.path.basename(ICONS_DIR)}/")
 
-    def _update_worker(self, silent):
-        info = get_latest_release_info()
-        self._updating = False
-        if not info:
-            # Fallback: если релизов в репо ещё нет — сравниваем с APP_VERSION в файле на GitHub
-            try:
-                content, _ = _get_remote_file_b64("dbd_randomizer.py")
-                raw = content.decode("utf-8") if content else ""
-                import re
-                m = re.search(r'APP_VERSION\s*=\s*"([\d.]+)"', raw)
-                if m and version_tuple(m.group(1)) > version_tuple(APP_VERSION):
-                    self.root.after(0, lambda: self._show_update_dialog("v" + m.group(1),
-                                                                        "Обновление найдено в основном репозитории."))
-            except Exception:
-                pass
-            return
-        tag, notes = info
-        if version_tuple(tag) > version_tuple(APP_VERSION):
-            self.root.after(0, lambda: self._show_update_dialog(tag, notes))
-        elif not silent:
-            self.root.after(0, lambda: messagebox.showinfo(
-                "Обновление", f"У вас уже установлена последняя версия (v{APP_VERSION})."))
-
-    def _show_update_dialog(self, tag, notes):
-        dlg = UpdateDialog(self.root, tag, notes)
-        self.root.wait_window(dlg.top if hasattr(dlg, "top") else dlg)
-        if dlg.result == "restart":
-            self.restart_app()
-
-    def restart_app(self):
-        """Перезапускает скрипт с обновлённым файлом."""
-        try:
-            subprocess.Popen([sys.executable, os.path.abspath(__file__)], cwd=os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            messagebox.showerror("Перезапуск", f"Обновление скачано, но перезапустить не удалось:\n{e}\n\nЗапустите программу вручную.")
-            return
-        self.root.destroy()
-
-    def on_app_close(self):
-        save_config(self.config)
-        self.root.destroy()
-
-    def toggle_auto_update(self):
-        """Включает/выключает фоновую проверку обновлений и сохраняет настройку."""
-        self.config["auto_update"] = "1" if self.auto_update_var.get() else "0"
-        save_config(self.config)
-
-    # ================== МЕТОДЫ ДЛЯ КООРДИНАТ ==================
-    def get_coords(self, key):
-        """Возвращает координаты (x, y) по ключу или None, если поля пустые/некорректные."""
-        try:
-            ex, ey = self.coord_entries[key]
-            x = int(ex.get().strip())
-            y = int(ey.get().strip())
-            return x, y
-        except (KeyError, ValueError):
+    def _icon_photo(self, name):
+        """PhotoImage иконки: из кэша, иначе заглушка. Ссылки храним в self._photos."""
+        if not self.icon_store.enabled or not name or name in (EMPTY, NO_ADDONS):
             return None
+        key = (name, ICON_SIZE)
+        if key in self._photos:
+            return self._photos[key]
+        try:
+            from PIL import Image, ImageTk
+        except Exception:
+            return None
+        img = None
+        path = self.icon_store.local_path(name)
+        try:
+            if path and os.path.getsize(path) > 400:
+                img = Image.open(path).convert("RGBA")
+        except Exception:
+            img = None
+        if img is None:
+            try:
+                img = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (40, 40, 44, 255))
+            except Exception:
+                return None
+        else:
+            img = img.resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
+        try:
+            photo = ImageTk.PhotoImage(img)
+        except Exception:
+            return None
+        self._photos[key] = photo            # держим ссылку, иначе Tk её соберёт
+        return photo
 
-    def grab_coordinates(self, key):
-        """Открывает окно захвата координат и записывает результат в нужные поля"""
-        grabber = CoordinateGrabber(self.root)
-        self.root.wait_window(grabber.top)
-        if grabber.coords:
-            ex, ey = self.coord_entries[key]
-            ex.delete(0, tk.END)
-            ex.insert(0, str(grabber.coords[0]))
-            ey.delete(0, tk.END)
-            ey.insert(0, str(grabber.coords[1]))
+    def _request_icons(self, names):
+        if not self.icon_store.enabled:
+            return
+        self.icon_store.request(names, on_ready=lambda ready: self.ui_q.put(("icons", ready)))
 
-    # --- ВКЛАДКА ПЕРСОНАЖЕЙ ---
-    def setup_characters_tab(self):
-        """Создание интерфейса выбора имеющихся персонажей"""
-        lbl_info = ttk.Label(self.tab_chars,
-                             text="Отметьте персонажей, которые У ВАС ЕСТЬ (открыты):\nНеотмеченные персонажи не будут выпадать при генерации.",
-                             font=("Segoe UI", 10, "italic"), foreground="#ff9500", justify=tk.CENTER)
-        lbl_info.pack(pady=10)
+    def _on_icons_ready(self, ready):
+        self._photos.clear()               # сбрасываем заглушки
+        self._update_icon_hint()
+        if self.build:
+            self._render_build()
 
-        paned = ttk.Panedwindow(self.tab_chars, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+    def download_all_icons(self):
+        if not self.icon_store.enabled:
+            messagebox.showwarning("Иконки", "Нужна библиотека Pillow: pip install Pillow")
+            return
+        self.btn_icons.config(state="disabled")
+        self.lbl_icons.config(text="Скачиваю иконки…")
+        self.log("Начата массовая загрузка иконок с wiki.gg…")
 
-        # Левая колонка - Маньяки
-        lf_killers = ttk.LabelFrame(paned, text=" 👹 ДОСТУПНЫЕ МАНЬЯКИ ")
-        paned.add(lf_killers, weight=1)
+        def work():
+            try:
+                done, todo = self.icon_store.fetch_all()
+                self.ui_q.put(("log", f"Иконки: докачано {done} из {todo}."))
+            except Exception as exc:
+                self.ui_q.put(("log", f"Загрузка иконок прервана: {exc}"))
+            finally:
+                self.ui_q.put(("icons_done", None))
+        threading.Thread(target=work, daemon=True).start()
 
-        cv_kill = tk.Canvas(lf_killers, bg="#121212", highlightthickness=0)
-        sb_kill = ttk.Scrollbar(lf_killers, orient=tk.VERTICAL, command=cv_kill.yview)
-        sf_kill = ttk.Frame(cv_kill)
-        sf_kill.bind("<Configure>", lambda e: cv_kill.configure(scrollregion=cv_kill.bbox("all")))
-        cv_kill.create_window((0, 0), window=sf_kill, anchor=tk.NW)
-        cv_kill.configure(yscrollcommand=sb_kill.set)
-        cv_kill.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        sb_kill.pack(side=tk.RIGHT, fill=tk.Y)
+    def _on_icons_done(self, _):
+        self.btn_icons.config(state="normal")
+        self._photos.clear()
+        self._update_icon_hint()
+        if self.build:
+            self._render_build()
 
-        saved_killers = [x.strip() for x in self.config.get("owned_killers", "").split(",") if x.strip()]
-        for k_name in sorted(KILLERS_DATABASE.keys()):
-            is_owned = True if not self.config.get("owned_killers") else (k_name in saved_killers)
-            var = tk.BooleanVar(value=is_owned)
-            self.killer_checkboxes[k_name] = var
-            cb = tk.Checkbutton(sf_kill, text=k_name, variable=var, bg="#121212", fg="#e0e0e0", selectcolor="#2c2c2c",
-                                activebackground="#121212", activeforeground="#ffffff", font=("Segoe UI", 10))
-            cb.pack(anchor=tk.W, padx=5, pady=2)
+    # ---- вкладка «Персонажи» -------------------------------------------------
+    def _make_scrolled(self, parent):
+        frame = ttk.Frame(parent)
+        frame.pack(fill="both", expand=True)
+        canvas = tk.Canvas(frame, bg="#121212", highlightthickness=0)
+        sb = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+        inner = ttk.Frame(canvas)
+        win = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
 
-        # Правая колонка - Выжившие
-        lf_survs = ttk.LabelFrame(paned, text=" 👤 ДОСТУПНЫЕ ВЫЖИВАЮЩИЕ ")
-        paned.add(lf_survs, weight=1)
+        def _wheel(event, target=None):
+            delta = -1 if getattr(event, "num", 0) == 4 or getattr(event, "delta", 0) > 0 else 1
+            canvas.yview_scroll(delta, "units")
+            return "break"
+        canvas.bind("<MouseWheel>", _wheel)
+        canvas.bind("<Button-4>", _wheel)
+        canvas.bind("<Button-5>", _wheel)
+        for child in (inner, canvas):
+            child.bind("<Enter>", lambda e, c=canvas: c.focus_set())
+        return inner, canvas
 
-        cv_surv = tk.Canvas(lf_survs, bg="#121212", highlightthickness=0)
-        sb_surv = ttk.Scrollbar(lf_survs, orient=tk.VERTICAL, command=cv_surv.yview)
-        sf_surv = ttk.Frame(cv_surv)
-        sf_surv.bind("<Configure>", lambda e: cv_surv.configure(scrollregion=sf_surv.bbox("all")))
-        cv_surv.create_window((0, 0), window=sf_surv, anchor=tk.NW)
-        cv_surv.configure(yscrollcommand=sb_surv.set)
-        cv_surv.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        sb_surv.pack(side=tk.RIGHT, fill=tk.Y)
+    def _build_chars_tab(self):
+        hint = ("Отметьте персонажей, которые у вас ОТКРЫТЫ — неотмеченные не выпадают.\n"
+                "Имя должно совпадать с тем, что написано в игре (его же можно вбить в поиск персонажа).")
+        ttk.Label(self.tab_chars, text=hint, foreground="#ff9500", justify="center",
+                  font=("Segoe UI", 9, "italic")).pack(pady=(8, 2))
 
-        saved_survs = [x.strip() for x in self.config.get("owned_surv_chars", "").split(",") if x.strip()]
-        for s_name in sorted(SURVIVOR_PERKS.keys()):
-            is_owned = True if not self.config.get("owned_surv_chars") else (s_name in saved_survs)
-            var = tk.BooleanVar(value=is_owned)
-            self.surv_checkboxes[s_name] = var
-            cb = tk.Checkbutton(sf_surv, text=s_name, variable=var, bg="#121212", fg="#e0e0e0", selectcolor="#2c2c2c",
-                                activebackground="#121212", activeforeground="#ffffff", font=("Segoe UI", 10))
-            cb.pack(anchor=tk.W, padx=5, pady=2)
+        toolbar = ttk.Frame(self.tab_chars)
+        toolbar.pack(fill="x", padx=10, pady=4)
+        ttk.Label(toolbar, text="Фильтр:").pack(side="left")
+        self.char_filter = ttk.Entry(toolbar, width=24)
+        self.char_filter.pack(side="left", padx=6)
+        self.char_filter.bind("<KeyRelease>", lambda e: self._apply_char_filter())
+        for text, cmd in (("Все", lambda: self._set_all_chars(True)),
+                          ("Никого", lambda: self._set_all_chars(False)),
+                          ("Инвертировать", lambda: self._set_all_chars(None)),
+                          ("💾 Сохранить", self.save_owned_characters)):
+            ttk.Button(toolbar, text=text, command=cmd).pack(side="left", padx=3)
 
-        btn_save_chars = ttk.Button(self.tab_chars, text="💾 Сохранить список доступных персонажей", style="Sec.TButton",
-                                    command=self.save_owned_characters)
-        btn_save_chars.pack(fill=tk.X, padx=15, pady=10)
+        paned = ttk.Panedwindow(self.tab_chars, orient="horizontal")
+        paned.pack(fill="both", expand=True, padx=10, pady=4)
+
+        lf_k = ttk.LabelFrame(paned, text=" 👹 МАНЬЯКИ ")
+        paned.add(lf_k, weight=1)
+        inner_k, _ = self._make_scrolled(lf_k)
+
+        lf_s = ttk.LabelFrame(paned, text=" 👤 ВЫЖИВАЮЩИЕ ")
+        paned.add(lf_s, weight=1)
+        inner_s, _ = self._make_scrolled(lf_s)
+
+        owned_k = set(self.cfg["owned"].get("killers") or [])
+        owned_s = set(self.cfg["owned"].get("survivors") or [])
+        for name in sorted(self.db["killers"].keys()):
+            var = tk.BooleanVar(value=(name in owned_k) if owned_k else True)
+            self._char_widgets[("K", name)] = (var, self._add_char_cb(inner_k, name, var, "#ff9500"))
+        for name in sorted(self.db["survivors"].keys()):
+            var = tk.BooleanVar(value=(name in owned_s) if owned_s else True)
+            self._char_widgets[("S", name)] = (var, self._add_char_cb(inner_s, name, var, "#5ac8fa"))
+
+        note = ("Подсказка: если снять все отметки и нажать «Сохранить», при следующем запуске "
+                "снова будут отмечены все.")
+        ttk.Label(self.tab_chars, text=note, foreground="#6e6e73",
+                  font=("Segoe UI", 8, "italic")).pack(pady=(0, 8))
+
+    def _add_char_cb(self, parent, name, var, color):
+        cb = tk.Checkbutton(parent, text=name, variable=var, bg="#121212", fg="#dcdcdc",
+                            selectcolor="#232323", activebackground="#121212",
+                            activeforeground=color, anchor="w", font=("Segoe UI", 10),
+                            highlightthickness=0)
+        cb.pack(fill="x", padx=4, pady=1)
+        return cb
+
+    def _apply_char_filter(self):
+        """Скрывает неподходящие чекбоксы и заново пакует видимые в алфавитном порядке."""
+        needle = _norm(self.char_filter.get())
+        for side in ("K", "S"):
+            names = sorted(n for (s, n) in self._char_widgets if s == side)
+            for name in names:
+                _var, widget = self._char_widgets[(side, name)]
+                if needle and needle not in _norm(name):
+                    widget.pack_forget()
+                else:
+                    widget.pack(fill="x", padx=4, pady=1)
+
+    def _set_all_chars(self, value):
+        needle = _norm(self.char_filter.get())
+        for (side, name), (var, _w) in self._char_widgets.items():
+            if needle and needle not in _norm(name):
+                continue
+            if value is None:
+                var.set(not var.get())
+            else:
+                var.set(bool(value))
 
     def save_owned_characters(self):
-        """Сбор отмеченных персонажей и их сохранение в config.txt"""
-        owned_killers = [k for k, var in self.killer_checkboxes.items() if var.get()]
-        owned_survs = [s for s, var in self.surv_checkboxes.items() if var.get()]
-        self.config["owned_killers"] = ",".join(owned_killers)
-        self.config["owned_surv_chars"] = ",".join(owned_survs)
-        save_config(self.config)
-        messagebox.showinfo("Готово", "Список имеющихся персонажей успешно обновлен!")
+        killers = [n for (s, n), (v, _w) in self._char_widgets.items() if s == "K" and v.get()]
+        survs = [n for (s, n), (v, _w) in self._char_widgets.items() if s == "S" and v.get()]
+        self.cfg["owned"]["killers"] = sorted(killers)
+        self.cfg["owned"]["survivors"] = sorted(survs)
+        save_config(self.cfg)
+        self.set_status(f"Сохранено: маньяков {len(killers)}, выживших {len(survs)}.", "#34c759")
+        self.log(f"Сохранён список персонажей: {len(killers)} маньяков / {len(survs)} выживших.")
 
-    # --- ВКЛАДКА НАСТРОЙКИ КЛИКОВ ---
-    def setup_coordinates_tab(self):
-        """Интерфейс вкладки настройки кликов"""
-        canvas_coords = tk.Canvas(self.tab_coords, bg="#121212", highlightthickness=0)
-        scroll_coords = ttk.Scrollbar(self.tab_coords, orient=tk.VERTICAL, command=canvas_coords.yview)
-        c_frame = ttk.Frame(canvas_coords)
-        c_frame.bind("<Configure>", lambda e: canvas_coords.configure(scrollregion=canvas_coords.bbox("all")))
-        canvas_coords.create_window((0, 0), window=c_frame, anchor=tk.NW)
-        canvas_coords.configure(yscrollcommand=scroll_coords.set)
+    # ---- вкладка «Клики и тайминги» -----------------------------------------
+    def _build_coords_tab(self):
+        self.tab_coords.columnconfigure(0, weight=3)
+        self.tab_coords.columnconfigure(1, weight=2)
+        self.tab_coords.rowconfigure(0, weight=1)
 
-        self.coord_entries = {}
-        fields = [
-            ("item_slot", "👜 Слот силы (маньяк) / предмета (сурв)"),
-            ("addon1_slot", "🔧 Слот аддона №1"),
-            ("addon2_slot", "🔧 Слот аддона №2"),
-            ("slot1", "🔮 Слот навыка 1"),
-            ("slot2", "🔮 Слот навыка 2"),
-            ("slot3", "🔮 Слот навыка 3"),
-            ("slot4", "🔮 Слот навыка 4"),
-            ("search", "🔍 Поисковая строка инвентаря"),
-            ("clear", "❌ Кнопка очистки строки поиска"),
-            ("first_result", "✅ Самая первая иконка в выдаче поиска"),
-        ]
+        # координаты
+        leftf = ttk.LabelFrame(self.tab_coords, text=" КООРДИНАТЫ ЭКРАНА (пиксели) ")
+        leftf.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=8)
+        leftf.rowconfigure(0, weight=1)
+        leftf.columnconfigure(0, weight=1)
+        wrap = ttk.Frame(leftf)
+        wrap.grid(row=0, column=0, sticky="nsew")
+        wrap.rowconfigure(0, weight=1)
+        wrap.columnconfigure(0, weight=1)
+        inner, _ = self._make_scrolled_grid(wrap)
 
-        for key, desc in fields:
-            frm = ttk.Frame(c_frame)
-            frm.pack(fill=tk.X, padx=10, pady=4)
-            ttk.Label(frm, text=desc, width=38, anchor=tk.W).pack(side=tk.LEFT)
-            e_x = tk.Entry(frm, width=6, background="#2c2c2c", foreground="#ffffff", insertbackground="white", bd=1,
-                           relief="solid")
-            e_y = tk.Entry(frm, width=6, background="#2c2c2c", foreground="#ffffff", insertbackground="white", bd=1,
-                           relief="solid")
-            e_x.pack(side=tk.LEFT, padx=2)
-            e_y.pack(side=tk.LEFT, padx=2)
-            e_x.insert(0, self.config.get(f"{key}_x", ""))
-            e_y.insert(0, self.config.get(f"{key}_y", ""))
-            self.coord_entries[key] = (e_x, e_y)
-            ttk.Button(frm, text="🎯 Указать кликом", style="Sec.TButton",
-                       command=lambda k=key: self.grab_coordinates(k)).pack(side=tk.LEFT, padx=8)
+        for key, desc in COORD_FIELDS:
+            row = ttk.Frame(inner)
+            row.pack(fill="x", padx=6, pady=2)
+            ttk.Label(row, text=desc, width=42, anchor="w").pack(side="left")
+            saved = self.cfg["coords"].get(key, {})
+            entries = {}
+            for axis in ("x", "y"):
+                ent = tk.Entry(row, width=6, bg="#232323", fg="#ffffff", insertbackground="white",
+                               relief="solid", bd=1, justify="center")
+                ent.insert(0, str(saved.get(axis, "")))
+                ent.pack(side="left", padx=2)
+                entries[axis] = ent
+            if key == "ocr_region":
+                for axis in ("w", "h"):
+                    ent = tk.Entry(row, width=6, bg="#232323", fg="#ffffff", insertbackground="white",
+                                   relief="solid", bd=1, justify="center")
+                    ent.insert(0, str(saved.get(axis, "")))
+                    ent.pack(side="left", padx=2)
+                    entries[axis] = ent
+            self._coord_widgets[key] = entries
+            ttk.Button(row, text="🎯 Клик", width=8,
+                       command=lambda k=key: self.grab_coordinates(k)).pack(side="left", padx=6)
+            if key == "ocr_region":
+                ttk.Button(row, text="🔎 Область", width=10,
+                           command=lambda: self.grab_ocr_region()).pack(side="left", padx=2)
 
-        canvas_coords.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scroll_coords.pack(side=tk.RIGHT, fill=tk.Y)
+        # тайминги + опции
+        rightf = ttk.Frame(self.tab_coords)
+        rightf.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=8)
+        rightf.rowconfigure(2, weight=1)
+        rightf.columnconfigure(0, weight=1)
 
-        coord_buttons = ttk.Frame(self.tab_coords)
-        coord_buttons.pack(fill=tk.X, pady=10)
-        ttk.Button(coord_buttons, text="💾 Сохранить координаты", style="Sec.TButton",
-                   command=self.save_coordinates).pack(side=tk.LEFT, padx=10, expand=True, fill=tk.X)
+        tf = ttk.LabelFrame(rightf, text=" ТАЙМИНГИ ")
+        tf.grid(row=0, column=0, sticky="ew")
+        for key, (default, desc) in TIMING_DEFAULTS.items():
+            row = ttk.Frame(tf)
+            row.pack(fill="x", padx=6, pady=2)
+            ttk.Label(row, text=desc, anchor="w").pack(side="left", fill="x", expand=True)
+            ent = tk.Entry(row, width=7, bg="#232323", fg="#ffffff", insertbackground="white",
+                           relief="solid", bd=1, justify="center")
+            ent.insert(0, str(self.cfg["timings"].get(key, default)))
+            ent.pack(side="right")
+            self._timing_widgets[key] = ent
 
-        # --- БЛОК АВТО-ОБНОВЛЕНИЯ ---
-        upd_frame = ttk.LabelFrame(self.tab_coords, text=" 🌐 АВТО-ОБНОВЛЕНИЕ ")
-        upd_frame.pack(fill=tk.X, padx=15, pady=10)
-        self.auto_update_var = tk.BooleanVar(value=(self.config.get("auto_update", "1") == "1"))
-        cb_auto = tk.Checkbutton(upd_frame, text="Проверять обновления автоматически (каждые 30 минут)",
-                                 variable=self.auto_update_var, bg="#121212", fg="#e0e0e0",
-                                 selectcolor="#2c2c2c", activebackground="#121212", activeforeground="#ffffff",
-                                 font=("Segoe UI", 10), command=self.toggle_auto_update)
-        cb_auto.pack(anchor=tk.W, padx=8, pady=4)
-        ttk.Button(upd_frame, text="🔍 Проверить обновления сейчас", style="Sec.TButton",
-                   command=lambda: self.check_for_updates(silent=False)).pack(fill=tk.X, padx=8, pady=4)
+        of = ttk.LabelFrame(rightf, text=" ПАРАМЕТРЫ КЛИКОВ ")
+        of.grid(row=1, column=0, sticky="ew", pady=6)
+        self._add_option(of, "use_clear_button", "Кликать «×» очистки перед поиском")
+        self._add_option(of, "verify_clipboard", "Проверять буфер обмена перед вставкой")
+        self._add_option(of, "restore_clipboard", "Восстанавливать буфер обмена после")
+        row = ttk.Frame(of)
+        row.pack(fill="x", padx=6, pady=3)
+        ttk.Label(row, text="Номер иконки в выдаче (1–9):").pack(side="left")
+        self._option_vars["result_index"] = tk.StringVar(value=str(self.cfg["options"].get("result_index", 1)))
+        ttk.Entry(row, textvariable=self._option_vars["result_index"], width=4).pack(side="right")
+        row = ttk.Frame(of)
+        row.pack(fill="x", padx=6, pady=3)
+        ttk.Label(row, text="Клавиша СТОП:").pack(side="left")
+        self._option_vars["abort_key"] = tk.StringVar(value=str(self.cfg["options"].get("abort_key", "f9")))
+        ttk.Entry(row, textvariable=self._option_vars["abort_key"], width=8).pack(side="right")
 
-    def save_coordinates(self):
-        for key, (ex, ey) in self.coord_entries.items():
-            self.config[f"{key}_x"] = ex.get().strip()
-            self.config[f"{key}_y"] = ey.get().strip()
-        save_config(self.config)
-        messagebox.showinfo("Готово", "Все координаты успешно сохранены!")
+        sf = ttk.LabelFrame(rightf, text=" СЕРВИС ")
+        sf.grid(row=2, column=0, sticky="nsew")
+        for text, cmd in (("💾 Сохранить все настройки", self.save_settings),
+                          ("🩺 Проверить базу данных", self.run_data_check),
+                          ("📝 Открыть dbd_database.json", self.open_db_file),
+                          ("🔄 Пересоздать dbd_database.json", self.reset_db_file),
+                          ("🧪 Тестовый клик по «first_result»", self.test_click_result)):
+            ttk.Button(sf, text=text, command=cmd).pack(fill="x", padx=6, pady=2)
 
-    # ================== ВКЛАДКА БИЛДОВ СООБЩЕСТВА ==================
-    def setup_builds_tab(self):
-        """Интерфейс вкладки общественных билдов + настройки токена."""
-        self.community_builds = []
+        upf = ttk.LabelFrame(rightf, text=" 🔄 АВТООБНОВЛЕНИЕ ")
+        upf.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        self.auto_update_var = tk.BooleanVar(value=bool(self.cfg["update"].get("auto", True)))
+        ttk.Checkbutton(upf, text="Проверять релизы GitHub (при запуске и каждые 30 мин)",
+                        variable=self.auto_update_var,
+                        command=self.toggle_auto_update).pack(anchor="w", padx=6, pady=2)
+        self.allow_branch_var = tk.BooleanVar(value=bool(self.cfg["update"].get("allow_branch", False)))
+        ttk.Checkbutton(upf, text="Брать файлы из main, если релизов нет (небезопасно)",
+                        variable=self.allow_branch_var).pack(anchor="w", padx=6, pady=2)
+        ttk.Button(upf, text="🔄 Проверить обновления сейчас",
+                   command=lambda: self.check_for_updates(silent=False)).pack(fill="x", padx=6, pady=2)
+        ttk.Label(upf, text=f"Версия v{APP_VERSION}. Файлы берутся из ТЕГА РЕЛИЗА, перед заменой "
+                            f"показываются размер и SHA-256, старые версии сохраняются как .bak. "
+                            f"Конфиг и токен не перезаписываются никогда.",
+                  font=("Segoe UI", 8, "italic"), foreground="#8e8e93", justify="left",
+                  wraplength=330).pack(anchor="w", padx=6, pady=(0, 6))
 
+    def _make_scrolled_grid(self, parent):
+        canvas = tk.Canvas(parent, bg="#121212", highlightthickness=0)
+        sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        inner = ttk.Frame(canvas)
+        win = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        sb.grid(row=0, column=1, sticky="ns")
+
+        def _wheel(event):
+            delta = -1 if getattr(event, "num", 0) == 4 or getattr(event, "delta", 0) > 0 else 1
+            canvas.yview_scroll(delta, "units")
+            return "break"
+        canvas.bind("<MouseWheel>", _wheel)
+        canvas.bind("<Button-4>", _wheel)
+        canvas.bind("<Button-5>", _wheel)
+        return inner, canvas
+
+    def _add_option(self, parent, key, text):
+        var = tk.BooleanVar(value=bool(self.cfg["options"].get(key, OPTION_DEFAULTS.get(key))))
+        self._option_vars[key] = var
+        ttk.Checkbutton(parent, text=text, variable=var).pack(anchor="w", padx=6, pady=2)
+
+    # ---------------------------------------------------------------- утилиты --
+    def log(self, message):
+        self.ui_q.put(("log", str(message)))
+
+    def set_status(self, text, color="#8e8e93"):
+        self.ui_q.put(("status", (str(text), color)))
+
+    def _poll_ui_queue(self):
+        try:
+            while True:
+                kind, payload = self.ui_q.get_nowait()
+                if kind == "log":
+                    self._append_log(payload)
+                elif kind == "status":
+                    text, color = payload
+                    self.status.config(text=text, foreground=color)
+                elif kind == "progress":
+                    self.progress["value"] = payload
+                elif kind == "error":
+                    messagebox.showerror("Ошибка", payload)
+                elif kind == "warn":
+                    messagebox.showwarning("Внимание", payload)
+                elif kind == "info":
+                    messagebox.showinfo("Готово", payload)
+                elif kind == "icons":
+                    self._on_icons_ready(payload)
+                elif kind == "icons_done":
+                    self._on_icons_done(payload)
+                elif kind == "builds":
+                    self._on_builds_loaded(*payload)
+                elif kind == "update":
+                    self._show_update_dialog(*payload)
+        except queue.Empty:
+            pass
+        self.root.after(70, self._poll_ui_queue)
+
+    def _append_log(self, line):
+        stamp = time.strftime("%H:%M:%S")
+        self.txt_log.configure(state="normal")
+        self.txt_log.insert("end", f"[{stamp}] {line}\n")
+        self.txt_log.see("end")
+        self.txt_log.configure(state="disabled")
+
+    def _on_mode_change(self):
+        self.cfg["options"]["side"] = self.mode_var.get()
+
+    def _set_build_text(self, text):
+        """Пустое состояние карточки: подсказка вместо билда."""
+        self.card_hint.config(text=text or "")
+        filler = "" if text else "—"
+        self.card_author.config(text="")
+        self.card_char.config(text="Билд не сгенерирован" if text else filler)
+        self.card_main.config(text="")
+        self.card_sub.config(text="")
+        for lbl in self.card_addons:
+            lbl.config(text=filler)
+        for img, lbl in self.card_perks:
+            img.config(image="", text="" if not text else "")
+            lbl.config(text=filler, fg="#4a4a4a")
+
+    def _render_build(self):
+        b = self.build
+        if not b:
+            return
+        self.card_hint.config(text="")
+        self.card_author.config(text=f"🌍 билд сообщества от {b['author']}" if b.get("author") else "")
+        if b["side"] == "KILLER":
+            self.card_char.config(text=f"👹 {b['char']}", fg="#ff6b60")
+            self.card_main.config(text=f"⚡ {b['power_or_item']}")
+            self.card_sub.config(text="сила убийцы не экипируется — ставятся только аддоны и навыки")
+        else:
+            self.card_char.config(text=f"👤 {b['char']}", fg="#5ac8fa")
+            self.card_main.config(text=f"📦 {b['power_or_item']}")
+            self.card_sub.config(text=f"категория: {b.get('category', '')}")
+
+        for lbl, addon in zip(self.card_addons, list(b["addons"]) + ["", ""]):
+            if not addon or addon == EMPTY:
+                lbl.config(text="   •  —", fg="#4a4a4a")
+            elif addon == NO_ADDONS:
+                lbl.config(text="   •  🚫 аддон не подобран", fg="#6e6e73")
+            else:
+                lbl.config(text=f"   •  {addon}", fg="#dcdcdc")
+
+        want = []
+        for i, (img, lbl) in enumerate(self.card_perks):
+            perk = b["perks"][i] if i < len(b["perks"]) else EMPTY
+            if not perk or perk == EMPTY:
+                img.config(image="", text="")
+                lbl.config(text=f"{i + 1}.  —  (слот пуст)", fg="#4a4a4a")
+                continue
+            photo = self._icon_photo(perk)
+            if photo is not None:
+                img.config(image=photo, text="")
+            else:
+                img.config(image="", text="▢")
+            lbl.config(text=f"{i + 1}.  {perk}", fg="#34c759")
+            want.append(perk)
+        self._render_details_icons(want)
+        self._request_icons(want)
+
+    def get_coord(self, key):
+        ent = self._coord_widgets.get(key)
+        if not ent:
+            return None
+        try:
+            return int(str(ent["x"].get()).strip()), int(str(ent["y"].get()).strip())
+        except Exception:
+            return None
+
+    def get_ocr_region(self):
+        ent = self._coord_widgets.get("ocr_region")
+        if not ent:
+            return None
+        try:
+            return (int(str(ent["x"].get()).strip()), int(str(ent["y"].get()).strip()),
+                    int(str(ent["w"].get()).strip()), int(str(ent["h"].get()).strip()))
+        except Exception:
+            return None
+
+    def timing(self, key):
+        default = TIMING_DEFAULTS[key][0]
+        try:
+            val = float(str(self._timing_widgets[key].get()).strip().replace(",", "."))
+        except Exception:
+            return float(default)
+        if key == "retries":
+            return max(0, int(val))
+        return max(0.0, val)
+
+    def option(self, key):
+        var = self._option_vars.get(key)
+        if var is None:
+            return self.cfg["options"].get(key, OPTION_DEFAULTS.get(key))
+        val = var.get()
+        if key == "result_index":
+            try:
+                return max(1, min(9, int(str(val).strip())))
+            except Exception:
+                return 1
+        if key == "abort_key":
+            return str(val).strip().lower() or "f9"
+        return bool(val)
+
+    def collect_settings(self):
+        for key, entries in self._coord_widgets.items():
+            for axis, ent in entries.items():
+                self.cfg["coords"].setdefault(key, {})[axis] = ent.get().strip()
+        for key, ent in self._timing_widgets.items():
+            raw = ent.get().strip().replace(",", ".")
+            try:
+                self.cfg["timings"][key] = int(float(raw)) if key == "retries" else float(raw)
+            except ValueError:
+                pass
+        for key, var in self._option_vars.items():
+            val = var.get()
+            if key == "result_index":
+                try:
+                    val = max(1, min(9, int(str(val).strip())))
+                except Exception:
+                    val = 1
+            elif key == "abort_key":
+                val = str(val).strip().lower() or "f9"
+            else:
+                val = bool(val)
+            self.cfg["options"][key] = val
+        self.cfg["options"]["side"] = self.mode_var.get()
+        self.cfg["options"]["dry_run"] = bool(self.dry_var.get())
+        self.cfg["options"]["ocr_verify"] = bool(self.ocr_var.get())
+        self.cfg["options"]["perk_mode"] = self.perk_mode_var.get()
+        self.cfg["options"]["select_char"] = bool(self.selchar_var.get())
+        self.cfg["publish"]["nickname"] = _entry_text(self.nick_entry)
+        self.cfg["publish"]["gh_token"] = _entry_text(self.token_entry)
+        self.cfg["update"]["auto"] = bool(self.auto_update_var.get())
+        self.cfg["update"]["allow_branch"] = bool(self.allow_branch_var.get())
+        self.cfg["options"]["addons_enabled"] = bool(self.addons_var.get())
+        self.cfg["options"]["respect_owned"] = bool(self.owned_var.get())
+
+    def save_settings(self):
+        self.collect_settings()
+        save_config(self.cfg)
+        self.set_status("Настройки сохранены.", "#34c759")
+        self.log("Настройки (координаты, тайминги, опции) сохранены в dbd_randomizer_config.json")
+        self._register_abort_hotkey()
+
+    # ------------------------------------------------------- захват координат --
+    def grab_coordinates(self, key):
+        if self._grabber is not None:
+            return
+        self._grabber = CoordinateGrabber(self.root, f"Захват: {key}")
+        self.root.wait_window(self._grabber.top)
+        coords = self._grabber.coords
+        self._grabber = None
+        if not coords:
+            return
+        entries = self._coord_widgets[key]
+        entries["x"].delete(0, "end")
+        entries["x"].insert(0, str(coords[0]))
+        entries["y"].delete(0, "end")
+        entries["y"].insert(0, str(coords[1]))
+        self.log(f"Координата «{key}» = {coords[0]}, {coords[1]}")
+
+    def grab_ocr_region(self):
+        """Два клика: левый верхний угол области, затем правый нижний."""
+        if self._grabber is not None:
+            return
+        first = CoordinateGrabber(self.root, "OCR: левый верхний угол")
+        self.root.wait_window(first.top)
+        p1 = first.coords
+        self._grabber = None
+        if not p1:
+            return
+        self._grabber = CoordinateGrabber(self.root, "OCR: правый нижний угол")
+        self.root.wait_window(self._grabber.top)
+        p2 = self._grabber.coords
+        self._grabber = None
+        if not p2:
+            return
+        ent = self._coord_widgets["ocr_region"]
+        for axis, value in (("x", min(p1[0], p2[0])), ("y", min(p1[1], p2[1])),
+                            ("w", abs(p2[0] - p1[0])), ("h", abs(p2[1] - p1[1]))):
+            ent[axis].delete(0, "end")
+            ent[axis].insert(0, str(value))
+        self.log(f"OCR-область: x={ent['x'].get()} y={ent['y'].get()} "
+                 f"w={ent['w'].get()} h={ent['h'].get()}")
+
+    def test_click_result(self):
+        coord = self.get_coord("first_result")
+        if not coord:
+            messagebox.showwarning("Координаты", "Не задана координата «first_result».")
+            return
+        if self.dry_var.get():
+            self.log(f"[DRY] тестовый клик по {coord}")
+            return
+        if not INPUT.available:
+            messagebox.showerror("Автоматизация", INPUT.reason)
+            return
+        try:
+            INPUT.click(coord[0], coord[1], hold=self.timing("hold"))
+            self.log(f"Тестовый клик по {coord} выполнен.")
+        except Exception as exc:
+            messagebox.showerror("Ошибка", str(exc))
+
+    # ------------------------------------------------------------- генерация --
+    def available_characters(self, side):
+        tag = "K" if side == "KILLER" else "S"
+        names = self.db["killers"] if tag == "K" else self.db["survivors"]
+        out = []
+        for name in names:
+            widget = self._char_widgets.get((tag, name))
+            if widget is None or widget[0].get():
+                out.append(name)
+        return out
+
+    def generate_build(self):
+        side = self.mode_var.get()
+        available = self.available_characters(side)
+        if not available:
+            messagebox.showwarning("Внимание", "Не отмечен ни один персонаж на вкладке «ПЕРСОНАЖИ».")
+            return
+        kwargs = dict(perk_mode=self.perk_mode_var.get(),
+                      respect_owned=bool(self.owned_var.get()),
+                      addons_enabled=bool(self.addons_var.get()))
+        try:
+            if side == "KILLER":
+                self.build = make_killer_build(self.db, available, **kwargs)
+            else:
+                self.build = make_survivor_build(self.db, available, **kwargs)
+        except Exception as exc:
+            messagebox.showerror("Генерация", f"Не удалось собрать билд:\n{exc}")
+            return
+        self._render_build()
+        self.btn_equip.config(state="normal")
+        self.set_status("Билд готов. Откройте в игре меню снаряжения этого персонажа и жмите «ЭКИПИРОВАТЬ».",
+                        "#34c759")
+        self.log("Сгенерирован билд: " + build_to_clipboard_text(self.build))
+
+    def reroll_perks(self):
+        if not self.build:
+            messagebox.showwarning("Внимание", "Сначала сгенерируйте билд.")
+            return
+        b = self.build
+        if b["side"] == "KILLER":
+            unique = list(self.db["killers"][b["char"]].get("perks", []))
+            common = list(self.db.get("killer_common_perks", []))
+        else:
+            unique = list(self.db["survivors"].get(b["char"], []))
+            common = list(self.db.get("surv_common_perks", []))
+        mode = self.perk_mode_var.get()
+        pool = unique if mode == "unique" else (unique + common if mode == "mixed" else common)
+        perks = _pick(pool, 4)
+        if len(perks) < 4:
+            perks = _fill_perks(perks, [common, unique + common], bool(self.owned_var.get()))
+        b["perks"] = perks
+        self._render_build()
+        self.log("Перки перегенерированы: " + ", ".join(b["perks"]))
+
+    def copy_build(self):
+        if not self.build:
+            messagebox.showwarning("Внимание", "Сначала сгенерируйте билд.")
+            return
+        try:
+            pyperclip.copy(build_to_clipboard_text(self.build))
+            self.set_status("Билд скопирован в буфер обмена.", "#34c759")
+        except Exception as exc:
+            messagebox.showerror("Буфер обмена", str(exc))
+
+    # ------------------------------------------------------- билды сообщества --
+    def _build_builds_tab(self):
         top_bar = ttk.Frame(self.tab_builds)
-        top_bar.pack(fill=tk.X, padx=10, pady=(8, 2))
-        ttk.Button(top_bar, text="🔄 Обновить список", style="Sec.TButton",
-                   command=lambda: self.refresh_community_builds(manual=True)).pack(side=tk.LEFT)
-        ttk.Button(top_bar, text="📋 Скопировать выбранный", style="Sec.TButton",
-                   command=self.copy_selected_build).pack(side=tk.LEFT, padx=6)
+        top_bar.pack(fill="x", padx=10, pady=(8, 2))
+        ttk.Button(top_bar, text="🔄 Обновить список",
+                   command=lambda: self.refresh_community_builds(manual=True)).pack(side="left")
+        ttk.Button(top_bar, text="📋 Скопировать выбранный",
+                   command=self.copy_selected_build).pack(side="left", padx=6)
         ttk.Button(top_bar, text="⚡ Экипировать выбранный", style="Equip.TButton",
-                   command=self.equip_selected_build).pack(side=tk.LEFT, padx=6)
-        self.lbl_builds_info = ttk.Label(top_bar, text="", foreground="#8e8e93", font=("Segoe UI", 9, "italic"))
-        self.lbl_builds_info.pack(side=tk.RIGHT)
+                   command=self.equip_selected_build).pack(side="left", padx=6)
+        self.lbl_builds_info = ttk.Label(top_bar, text="", foreground="#8e8e93",
+                                         font=("Segoe UI", 9, "italic"))
+        self.lbl_builds_info.pack(side="right")
 
-        # Фильтры
         filt = ttk.Frame(self.tab_builds)
-        filt.pack(fill=tk.X, padx=10, pady=2)
-        ttk.Label(filt, text="Фильтр:").pack(side=tk.LEFT)
+        filt.pack(fill="x", padx=10, pady=2)
+        ttk.Label(filt, text="Фильтр:").pack(side="left")
         self.builds_filter_var = tk.StringVar(value="ВСЕ")
-        for val, txt in [("ВСЕ", "Все"), ("KILLER", "👹 Маньяки"), ("SURVIVOR", "👤 Выжившие")]:
-            tk.Radiobutton(filt, text=txt, variable=self.builds_filter_var, value=val, bg="#121212", fg="#e0e0e0",
-                           selectcolor="#2c2c2c", activebackground="#121212", activeforeground="#ffffff",
-                           font=("Segoe UI", 9), command=self._render_builds_list).pack(side=tk.LEFT, padx=4)
-        ttk.Label(filt, text="Поиск:", font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(14, 2))
-        self.builds_search_entry = tk.Entry(filt, width=22, background="#2c2c2c", foreground="#ffffff",
+        for value, text in (("ВСЕ", "Все"), ("KILLER", "👹 Маньяки"), ("SURVIVOR", "👤 Выжившие")):
+            rb = tk.Radiobutton(filt, text=text, variable=self.builds_filter_var, value=value,
+                                bg="#121212", fg="#e0e0e0", selectcolor="#232323",
+                                activebackground="#121212", activeforeground="#ffffff",
+                                font=("Segoe UI", 9), command=self._render_builds_list)
+            rb.pack(side="left", padx=4)
+        ttk.Label(filt, text="Поиск:", font=("Segoe UI", 9)).pack(side="left", padx=(14, 2))
+        self.builds_search_entry = tk.Entry(filt, width=22, bg="#232323", fg="#ffffff",
                                             insertbackground="white", bd=1, relief="solid")
-        self.builds_search_entry.pack(side=tk.LEFT)
+        self.builds_search_entry.pack(side="left")
         self.builds_search_entry.bind("<KeyRelease>", lambda e: self._render_builds_list())
 
-        # Список билдов (Treeview)
         list_frame = ttk.Frame(self.tab_builds)
-        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        list_frame.pack(fill="both", expand=True, padx=10, pady=5)
         self.builds_tree = ttk.Treeview(list_frame, columns=("side", "author", "char", "main", "perks"),
-                                        show="headings", height=14)
-        for col, txt, w, anchor in [("side", "Сторона", 90, tk.CENTER), ("author", "Автор", 110, tk.W),
-                                    ("char", "Персонаж", 150, tk.W), ("main", "Сила / Предмет", 190, tk.W),
-                                    ("perks", "Навыки", 380, tk.W)]:
-            self.builds_tree.heading(col, text=txt)
-            self.builds_tree.column(col, width=w, anchor=anchor)
-        sb = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.builds_tree.yview)
-        self.builds_tree.configure(yscrollcommand=sb.set)
-        self.builds_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        sb.pack(side=tk.RIGHT, fill=tk.Y)
+                                        show="headings", height=12)
+        for col, text, width, anch in (("side", "Сторона", 90, "center"), ("author", "Автор", 110, "w"),
+                                       ("char", "Персонаж", 150, "w"), ("main", "Сила / Предмет", 190, "w"),
+                                       ("perks", "Навыки", 360, "w")):
+            self.builds_tree.heading(col, text=text)
+            self.builds_tree.column(col, width=width, anchor=anch)
+        tsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.builds_tree.yview)
+        self.builds_tree.configure(yscrollcommand=tsb.set)
+        self.builds_tree.pack(side="left", fill="both", expand=True)
+        tsb.pack(side="right", fill="y")
         try:
             self.builds_tree.tag_configure("killer", foreground="#ff6961")
             self.builds_tree.tag_configure("survivor", foreground="#7fd4ff")
             self.builds_tree.tag_configure("mine", foreground="#ffd60a")
-        except tk.TclError:
+        except Exception:
             pass
         self.builds_tree.bind("<Double-1>", lambda e: self.copy_selected_build())
-
-        # Детали выбранного билда
-        det_frame = ttk.LabelFrame(self.tab_builds, text=" ДЕТАЛИ ВЫБРАННОГО БИЛДА ")
-        det_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
-        self.lbl_build_details = ttk.Label(det_frame, text="—", justify=tk.LEFT, font=("Segoe UI", 9),
-                                           foreground="#e0e0e0")
-        self.lbl_build_details.pack(anchor=tk.W, padx=10, pady=5)
         self.builds_tree.bind("<<TreeviewSelect>>", lambda e: self._show_build_details())
 
-        # Настройки публикации
-        set_frame = ttk.LabelFrame(self.tab_builds, text=" 🔑 НАСТРОЙКА ПУБЛИКАЦИИ ")
-        set_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        row1 = ttk.Frame(set_frame)
-        row1.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Label(row1, text="Ник для публикации:", width=18, anchor=tk.W).pack(side=tk.LEFT)
-        self.nick_entry = tk.Entry(row1, width=20, background="#2c2c2c", foreground="#ffffff",
-                                   insertbackground="white", bd=1, relief="solid")
-        self.nick_entry.insert(0, self.config.get("nickname", ""))
-        self.nick_entry.pack(side=tk.LEFT, padx=4)
-        row2 = ttk.Frame(set_frame)
-        row2.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Label(row2, text="Токен GitHub (Contents: Write):", width=26, anchor=tk.W).pack(side=tk.LEFT)
-        self.token_entry = tk.Entry(row2, width=44, show="*", background="#2c2c2c", foreground="#ffffff",
-                                    insertbackground="white", bd=1, relief="solid")
-        self.token_entry.insert(0, self.config.get("gh_token", ""))
-        self.token_entry.pack(side=tk.LEFT, padx=4)
-        self.show_token_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(row2, text="показать", variable=self.show_token_var, bg="#121212", fg="#8e8e93",
-                       selectcolor="#2c2c2c", activebackground="#121212", font=("Segoe UI", 8),
-                       command=self._toggle_token_visibility).pack(side=tk.LEFT)
-        btn_row = ttk.Frame(set_frame)
-        btn_row.pack(fill=tk.X, padx=8, pady=(2, 8))
-        ttk.Button(btn_row, text="💾 Сохранить настройки", style="Sec.TButton",
-                   command=self.save_build_settings).pack(side=tk.LEFT)
-        ttk.Label(btn_row, text="Для публикации нужен токен с правом записи в репозиторий "
-                                "(fine-grained: Contents Read&Write или classic: repo).\n"
-                                "Билды хранятся в файле community_builds.json — их видят все пользователи программы.",
-                  font=("Segoe UI", 8, "italic"), foreground="#8e8e93", justify=tk.LEFT).pack(side=tk.LEFT, padx=12)
+        det = ttk.LabelFrame(self.tab_builds, text=" ДЕТАЛИ ВЫБРАННОГО БИЛДА ")
+        det.pack(fill="x", padx=10, pady=(0, 5))
+        row = ttk.Frame(det)
+        row.pack(fill="x", padx=10, pady=(5, 0))
+        self.lbl_build_details = ttk.Label(row, text="—", justify="left", font=("Consolas", 9),
+                                           foreground="#e0e0e0")
+        self.lbl_build_details.pack(side="left", anchor="n", pady=5)
+        self.det_icons_frame = tk.Frame(det, bg="#121212")
+        self.det_icons_frame.pack(anchor="e", padx=10, pady=5)
+        self.det_icons = []
+        for _ in range(4):
+            lbl = tk.Label(self.det_icons_frame, bg="#121212", width=ICON_SIZE, height=ICON_SIZE)
+            lbl.pack(side="left", padx=2)
+            self.det_icons.append(lbl)
 
-        # Первая загрузка списка при старте
+        sett = ttk.LabelFrame(self.tab_builds, text=" 🔑 НАСТРОЙКА ПУБЛИКАЦИИ ")
+        sett.pack(fill="x", padx=10, pady=(0, 6))
+        r1 = ttk.Frame(sett)
+        r1.pack(fill="x", padx=8, pady=4)
+        ttk.Label(r1, text="Ник для публикации:", width=26, anchor="w").pack(side="left")
+        self.nick_entry = tk.Entry(r1, width=22, bg="#232323", fg="#ffffff",
+                                   insertbackground="white", bd=1, relief="solid")
+        self.nick_entry.insert(0, self.cfg["publish"].get("nickname", ""))
+        self.nick_entry.pack(side="left", padx=4)
+        r2 = ttk.Frame(sett)
+        r2.pack(fill="x", padx=8, pady=4)
+        ttk.Label(r2, text="Токен GitHub (Contents: Write):", width=26, anchor="w").pack(side="left")
+        self.token_entry = tk.Entry(r2, width=44, show="*", bg="#232323", fg="#ffffff",
+                                    insertbackground="white", bd=1, relief="solid")
+        self.token_entry.insert(0, self.cfg["publish"].get("gh_token", ""))
+        self.token_entry.pack(side="left", padx=4)
+        self.show_token_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(r2, text="показать", variable=self.show_token_var, bg="#121212", fg="#8e8e93",
+                       selectcolor="#232323", activebackground="#121212", font=("Segoe UI", 8),
+                       command=self._toggle_token_visibility).pack(side="left")
+        r3 = ttk.Frame(sett)
+        r3.pack(fill="x", padx=8, pady=(2, 8))
+        ttk.Button(r3, text="💾 Сохранить настройки", command=self.save_publish_settings).pack(side="left")
+        ttk.Label(r3, text="Токен нужен только для ПУБЛИКАЦИИ. Хранится в вашем конфиге;\n"
+                           "для чтения списка билдов токен не требуется.",
+                  font=("Segoe UI", 8, "italic"), foreground="#8e8e93", justify="left").pack(side="left", padx=12)
+
         self.root.after(1500, lambda: self.refresh_community_builds(manual=False))
+
+    def _render_details_icons(self, names):
+        if not getattr(self, "det_icons", None):
+            return
+        for lbl, name in zip(self.det_icons, list(names) + [""] * 4):
+            photo = self._icon_photo(name) if name else None
+            if photo is not None:
+                lbl.config(image=photo, text="")
+            else:
+                lbl.config(image="", text="")
 
     def _toggle_token_visibility(self):
         self.token_entry.config(show="" if self.show_token_var.get() else "*")
 
-    def save_build_settings(self):
-        self.config["nickname"] = self.nick_entry.get().strip()
-        self.config["gh_token"] = self.token_entry.get().strip()
-        save_config(self.config)
-        messagebox.showinfo("Готово", "Настройки публикации сохранены.")
+    def save_publish_settings(self):
+        self.cfg["publish"]["nickname"] = self.nick_entry.get().strip()
+        self.cfg["publish"]["gh_token"] = self.token_entry.get().strip()
+        save_config(self.cfg)
+        self.set_status("Настройки публикации сохранены.", "#34c759")
+        self.log("Сохранены ник и токен публикации (токен — только в локальном конфиге).")
 
     def refresh_community_builds(self, manual=False):
         threading.Thread(target=self._load_builds_worker, args=(manual,), daemon=True).start()
 
     def _load_builds_worker(self, manual):
-        builds, online = load_community_builds()
-        self.root.after(0, lambda: self._on_builds_loaded(builds, online, manual))
+        builds, online = GH.load_community_builds(APP_DIR)
+        self.ui_q.put(("builds", (builds, online, manual)))
 
     def _on_builds_loaded(self, builds, online, manual):
         self.community_builds = builds if isinstance(builds, list) else []
         self._render_builds_list()
         if online:
             self.lbl_builds_info.config(text=f"Загружено из GitHub: {len(self.community_builds)}",
-                                       foreground="#34c759")
+                                        foreground="#34c759")
         else:
             self.lbl_builds_info.config(text=f"Офлайн-кэш: {len(self.community_builds)} (нет связи с GitHub)",
-                                       foreground="#ffcc00")
-        if manual:
-            if not self.community_builds and online:
-                messagebox.showinfo("БИЛДЫ", "Пока никто ничего не опубликовал. Сгенерируйте билд и нажмите «Опубликовать»!")
+                                        foreground="#ffcc00")
+        self.log(f"Билды сообщества: {len(self.community_builds)} "
+                 f"({'онлайн' if online else 'кэш'}).")
+        if manual and not self.community_builds and online:
+            self.ui_q.put(("info", "Пока никто ничего не опубликовал. "
+                                   "Сгенерируйте билд и нажмите «Опубликовать»!"))
 
     def _filtered_builds(self):
         flt = self.builds_filter_var.get()
-        q = self.builds_search_entry.get().strip().lower() if hasattr(self, "builds_search_entry") else ""
+        try:
+            q = self.builds_search_entry.get().strip().lower()
+        except Exception:
+            q = ""
         out = []
         for b in self.community_builds:
             if not isinstance(b, dict):
@@ -1538,7 +1820,8 @@ class DBDUniversalRandomizer:
                 continue
             if q:
                 blob = " ".join([str(b.get("char", "")), str(b.get("power_or_item", "")),
-                                 str(b.get("author", "")), " ".join(map(str, b.get("perks", [])))]).lower()
+                                 str(b.get("author", "")),
+                                 " ".join(map(str, b.get("perks", [])))]).lower()
                 if q not in blob:
                     continue
             out.append(b)
@@ -1546,297 +1829,546 @@ class DBDUniversalRandomizer:
 
     def _render_builds_list(self, keep_selection=False):
         tree = self.builds_tree
-        selected_id = tree.selection()[0] if keep_selection and tree.selection() else None
+        selected = tree.selection()[0] if keep_selection and tree.selection() else None
         tree.delete(*tree.get_children())
         for i, b in enumerate(self._filtered_builds()):
             side_txt = "👹 Маньяк" if b.get("side") == "KILLER" else "👤 Выживший"
-            perks = " | ".join(b.get("perks", []))
+            perks = " | ".join(str(x) for x in b.get("perks", []))
             tag = "mine" if b.get("local") else ("killer" if b.get("side") == "KILLER" else "survivor")
-            tree.insert("", tk.END, iid=str(i), values=(side_txt, b.get("author", "—"), b.get("char", "—"),
-                                                        b.get("power_or_item", "—"), perks), tags=(tag,))
-        if selected_id is not None and tree.exists(selected_id):
-            tree.selection_set(selected_id)
+            tree.insert("", "end", iid=str(i), tags=(tag,),
+                        values=(side_txt, b.get("author", "—"), b.get("char", "—"),
+                                b.get("power_or_item", "—"), perks))
+        if selected is not None and tree.exists(selected):
+            tree.selection_set(selected)
 
     def _selected_build(self):
         sel = self.builds_tree.selection()
         if not sel:
             return None
-        idx = int(sel[0])
+        try:
+            idx = int(sel[0])
+        except (TypeError, ValueError):
+            return None
         filtered = self._filtered_builds()
         return filtered[idx] if 0 <= idx < len(filtered) else None
 
     def _show_build_details(self):
         b = self._selected_build()
-        if not b:
-            self.lbl_build_details.config(text="—")
-            return
-        self.lbl_build_details.config(text=format_build_text(b))
+        self.lbl_build_details.config(text=GH.format_build_text(b) if b else "—")
+        perks = [p for p in (b.get("perks") if b else []) or []][:4]
+        self._render_details_icons(perks)
+        self._request_icons(perks)
 
     def copy_selected_build(self):
         b = self._selected_build()
         if not b:
-            messagebox.showwarning("БИЛДЫ", "Сначала выберите билд из списка (клик по строке).")
+            self.ui_q.put(("warn", "Сначала выберите билд из списка (клик по строке)."))
             return
-        pyperclip.copy(format_build_text(b))
-        self.status.config(text="Карточка билда скопирована в буфер обмена ✔", foreground="#34c759")
+        try:
+            pyperclip.copy(GH.format_build_text(b))
+            self.set_status("Карточка билда скопирована в буфер обмена ✔", "#34c759")
+        except Exception as exc:
+            self.ui_q.put(("error", f"Не удалось скопировать: {exc}"))
 
     def equip_selected_build(self):
         b = self._selected_build()
         if not b:
-            messagebox.showwarning("БИЛДЫ", "Сначала выберите билд из списка.")
+            self.ui_q.put(("warn", "Сначала выберите билд из списка."))
             return
-        self._show_build_details()  # фиксируем карточку до перерисовки списка
-        addons = list(b.get("addons", ["—", "—"]))
+        addons = [a for a in (b.get("addons") or [])]
         while len(addons) < 2:
-            addons.append("—")
-        perks = list(b.get("perks", []))
+            addons.append(EMPTY)
+        perks = [p for p in (b.get("perks") or []) if p and p != EMPTY]
         if len(perks) < 4:
-            messagebox.showwarning("БИЛДЫ", "В билде меньше 4 навыков — экипировка невозможна.")
+            self.ui_q.put(("warn", "В билде меньше 4 навыков — автоэкипировка невозможна."))
             return
-        self.chosen_char = b.get("char", "")
-        self.chosen_power_or_item = b.get("power_or_item", "—")
-        self.chosen_addons = addons[:2]
-        self.current_generated_perks = perks[:4]
-        self.mode_var.set(b.get("side", "KILLER"))
-        icon = "👹 Убийца" if b.get("side") == "KILLER" else "👤 Выживающий"
-        color = "#ff3b30" if b.get("side") == "KILLER" else "#5ac8fa"
-        self.lbl_char.config(text=f"{icon}: {self.chosen_char} (билд от {b.get('author', '—')})", foreground=color)
-        self.lbl_item.config(text=f"⚡/📦 {self.chosen_power_or_item}")
-        self.lbl_addons.config(text=f"🔧 Аддоны:\n  • {self.chosen_addons[0]}\n  • {self.chosen_addons[1]}")
-        p = self.current_generated_perks
-        self.lbl_perks.config(text=f"🔮 Навыки:\n  1. {p[0]}\n  2. {p[1]}\n  3. {p[2]}\n  4. {p[3]}")
-        self.btn_equip.config(state=tk.NORMAL)
+        side = b.get("side", "KILLER")
+        self.mode_var.set(side)
+        self.build = {
+            "side": side,
+            "char": b.get("char", ""),
+            "power_or_item": b.get("power_or_item", EMPTY),
+            "category": "",
+            "power_is_item": side == "SURVIVOR",
+            "addons": addons[:2],
+            "perks": perks[:4],
+            "author": b.get("author", "—"),
+        }
+        self._render_build()
+        self.btn_equip.config(state="normal")
         self.notebook.select(self.tab_main)
-        self.status.config(text="Чужой билд загружен! Откройте меню снаряжения и жмите «Запустить экипировку».",
-                           foreground="#34c759")
+        self.set_status(f"Билд от {self.build['author']} загружен. Откройте меню снаряжения "
+                        f"и нажмите «ЭКИПИРОВАТЬ».", "#34c759")
+        self.log(f"Загружен чужой билд: {GH.format_build_text(b).splitlines()[2]}")
 
-    # ================== ПУБЛИКАЦИЯ БИЛДА ==================
     def publish_current_build(self):
-        if not self.current_generated_perks or not self.chosen_char:
-            messagebox.showwarning("Публикация", "Сначала сгенерируйте билд на вкладке «РАНДОМАЙЗЕР».")
+        if not self.build:
+            self.ui_q.put(("warn", "Сначала сгенерируйте билд на вкладке «БИЛД»."))
             return
-        author = self.config.get("nickname", "").strip()
+        b = self.build
+        if any(p == EMPTY for p in b["perks"]):
+            self.ui_q.put(("warn", "В билде есть пустые слоты навыков — заполните их перед публикацией."))
+            return
+        author = str(self.cfg["publish"].get("nickname", "")).strip()
         if not author:
             author = simpledialog.askstring("Публикация", "Введите ваш ник (будет виден всем):",
                                             parent=self.root)
             if not author:
                 return
             author = author.strip()[:30]
-            self.config["nickname"] = author
-            if hasattr(self, "nick_entry"):
-                self.nick_entry.delete(0, tk.END)
+            self.cfg["publish"]["nickname"] = author
+            try:
+                self.nick_entry.delete(0, "end")
                 self.nick_entry.insert(0, author)
-            save_config(self.config)
-        token = self.config.get("gh_token", "").strip()
+            except Exception:
+                pass
+            save_config(self.cfg)
+        token = GH.resolve_token(self.cfg)
         if not token:
             token = simpledialog.askstring("Публикация",
-                                          "Введите токен GitHub (нужны права на запись в репозиторий).\n"
-                                          "Можно сохранить навсегда во вкладке «БИЛДЫ»:",
-                                          show="*", parent=self.root)
+                                           "Введите токен GitHub (нужны права на запись в репозиторий).\n"
+                                           "Сохранить навсегда можно во вкладке «БИЛДЫ»:",
+                                           show="*", parent=self.root)
             if not token:
                 return
             token = token.strip()
-        build = {
-            "id": f"{int(time.time())}-{random.randint(1000, 9999)}",
-            "app_version": APP_VERSION,
-            "date": time.strftime("%d.%m.%Y"),
-            "author": author,
-            "side": self.mode_var.get(),
-            "char": self.chosen_char,
-            "power_or_item": self.chosen_power_or_item,
-            "addons": list(self.chosen_addons),
-            "perks": list(self.current_generated_perks),
-        }
-        self.btn_publish.config(state=tk.DISABLED)
-        self.status.config(text="Публикуем билд на GitHub...", foreground="#ffcc00")
-        threading.Thread(target=self._publish_worker, args=(build, token), daemon=True).start()
+        addons = [EMPTY if a == NO_ADDONS else a for a in b["addons"]]
+        payload = GH.make_build_payload(b["side"], b["char"], b["power_or_item"], addons,
+                                        b["perks"], author)
+        self.btn_publish.config(state="disabled")
+        self.set_status("Публикуем билд на GitHub…", "#ffcc00")
+        threading.Thread(target=self._publish_worker, args=(payload, token), daemon=True).start()
 
-    def _publish_worker(self, build, token):
-        ok, msg = publish_build_to_github(build, token)
+    def _publish_worker(self, payload, token):
+        ok, msg = GH.publish_build_to_github(payload, token)
+
         def done():
-            self.btn_publish.config(state=tk.NORMAL)
+            self.btn_publish.config(state="normal")
             if ok:
-                self.status.config(text="🌍 " + msg, foreground="#34c759")
-                build["local"] = True  # подсвечиваем свой билд жёлтым
-                self.community_builds.insert(0, build)
+                self.set_status("🌍 " + msg, "#34c759")
+                payload["local"] = True
+                self.community_builds.insert(0, payload)
                 self._render_builds_list()
-                self.lbl_build_details.config(text=format_build_text(build))
+                self.lbl_build_details.config(text=GH.format_build_text(payload))
                 messagebox.showinfo("Публикация", msg)
             else:
-                self.status.config(text="🔴 " + msg, foreground="#ff3b30")
+                self.set_status("🔴 " + msg, "#ff3b30")
+                self.log("Публикация не удалась: " + msg)
                 messagebox.showerror("Публикация не удалась", msg)
         self.root.after(0, done)
 
-    # ================== ЛОГИКА ГЕНЕРАЦИИ БИЛДОВ ==================
-    def generate_new_build(self):
-        side = self.mode_var.get()
+    # ---------------------------------------------------------- автообновление --
+    def periodic_update_check(self):
+        if self.cfg["update"].get("auto", True):
+            self.check_for_updates(silent=True)
+        self.root.after(GH.UPDATE_CHECK_INTERVAL_MS, self.periodic_update_check)
 
-        if side == "KILLER":
-            available_killers = [k for k, var in self.killer_checkboxes.items() if var.get()]
-            if not available_killers:
-                messagebox.showwarning("Внимание", "У вас не выбрано ни одного маньяка на вкладке 'ПЕРСОНАЖИ'!")
-                return
+    def check_for_updates(self, silent=False):
+        if self._updating:
+            return
+        self._updating = True
+        if not silent:
+            self.set_status("Проверяю обновления на GitHub…", "#ffcc00")
+        threading.Thread(target=self._update_worker, args=(silent,), daemon=True).start()
 
-            self.chosen_char = random.choice(available_killers)
-            self.chosen_power_or_item = KILLERS_DATABASE[self.chosen_char]["power"]
-
-            addons_pool = KILLERS_DATABASE[self.chosen_char]["addons"]
-            if len(addons_pool) >= 2:
-                self.chosen_addons = random.sample(addons_pool, 2)
-            elif len(addons_pool) == 1:
-                self.chosen_addons = [addons_pool[0], "—"]
-            else:
-                self.chosen_addons = ["🚫 Нет аддонов", "—"]
-
-            perk_pool = ALL_KILLER_PERKS + KILLER_COMMON_PERKS
-            self.current_generated_perks = random.sample(perk_pool, 4)
-
-            self.lbl_char.config(text=f"👹 Убийца: {self.chosen_char}", foreground="#ff3b30")
-            self.lbl_item.config(text=f"⚡ Уникальная Сила: {self.chosen_power_or_item}")
-
-        else:   # ВЫЖИВШИЙ
-            available_survs = [s for s, var in self.surv_checkboxes.items() if var.get()]
-            if not available_survs:
-                messagebox.showwarning("Внимание", "У вас не выбрано ни одного выжившего на вкладке 'ПЕРСОНАЖИ'!")
-                return
-
-            self.chosen_char = random.choice(available_survs)
-
-            chosen_category = random.choice(list(SURV_ITEMS_DATABASE.keys()))
-            self.chosen_power_or_item = random.choice(SURV_ITEMS_DATABASE[chosen_category]["items"])
-
-            addons_pool = SURV_ITEMS_DATABASE[chosen_category]["addons"]
-            if addons_pool:
-                if len(addons_pool) >= 2:
-                    self.chosen_addons = random.sample(addons_pool, 2)
-                else:
-                    self.chosen_addons = [addons_pool[0], "—"]
-            else:
-                self.chosen_addons = ["🚫 Аддоны отсутствуют", "—"]
-
-            # НОВЫЙ БЛОК ВЫБОРА ПЕРКОВ
-            all_unique_perks = []
-            for surv in available_survs:
-                all_unique_perks.extend(SURVIVOR_PERKS.get(surv, []))
-            all_unique_perks = list(set(all_unique_perks))
-            perk_pool = all_unique_perks + SURV_COMMON_PERKS
-            self.current_generated_perks = random.sample(perk_pool, 4)
-
-            self.lbl_char.config(text=f"👤 Выживающий: {self.chosen_char}", foreground="#5ac8fa")
-            self.lbl_item.config(text=f"📦 Предмет: {self.chosen_power_or_item} ({chosen_category})")
-
-        # Обновление интерфейса (для обеих сторон)
-        self.lbl_addons.config(text=f"🔧 Аддоны:\n  • {self.chosen_addons[0]}\n  • {self.chosen_addons[1]}")
-        self.lbl_perks.config(text=f"🔮 Навыки:\n  1. {self.current_generated_perks[0]}\n  2. {self.current_generated_perks[1]}\n  3. {self.current_generated_perks[2]}\n  4. {self.current_generated_perks[3]}")
-        self.btn_equip.config(state=tk.NORMAL)
-        self.btn_publish.config(state=tk.NORMAL)
-        self.status.config(text="Билд сгенерирован! Можно опубликовать его для сообщества или сразу экипировать.", foreground="#34c759")
-
-    # ================== НАДЕЖНАЯ АВТОМАТИЗАЦИЯ КЛИКОВ (ИСПРАВЛЕНО) ==================
-    def dbd_click(self, coords):
-        if coords:
-            pydirectinput.moveTo(coords[0], coords[1])
-            pydirectinput.mouseDown()
-            time.sleep(0.03)  # минимальное удержание для регистрации клика
-            pydirectinput.mouseUp()
-            time.sleep(0.05)  # короткая пауза после
-
-    def start_equip_automation(self):
-        required = ["search", "clear", "first_result", "item_slot", "addon1_slot", "addon2_slot", "slot1", "slot2",
-                    "slot3", "slot4"]
-        for r in required:
-            if not self.get_coords(r):
-                messagebox.showerror("Координаты", f"Пожалуйста, укажите координату '{r}' на вкладке настроек!")
-                return
-        threading.Thread(target=self.run_full_automation, daemon=True).start()
-
-    def safe_paste(self, text):
-        pyperclip.copy(text)
-        time.sleep(0.02)  # почти мгновенно
-        pydirectinput.keyDown('ctrl')
-        time.sleep(0.01)
-        pydirectinput.press('v')
-        time.sleep(0.01)
-        pydirectinput.keyUp('ctrl')
-        time.sleep(0.05)  # финальная пауза
-
-    def search_and_select(self, target_name):
-        search_pos = self.get_coords("search")
-        clear_pos = self.get_coords("clear")
-        first_res = self.get_coords("first_result")
-
-        self.dbd_click(clear_pos)
-        time.sleep(0.01)  # быстро очищаем
-
-        self.dbd_click(search_pos)
-        time.sleep(0.01)  # быстро активируем поле
-
-        self.safe_paste(target_name)
-
-        time.sleep(0.01)  # минимальное ожидание фильтрации (если не хватает, увеличьте до 0.2)
-        self.dbd_click(first_res)
-        time.sleep(0.1)  # быстро кликаем по результату
-
-    def run_full_automation(self):
-        self.btn_generate.config(state=tk.DISABLED)
-        self.btn_equip.config(state=tk.DISABLED)
-
-        for i in range(5, 0, -1):
-            self.status.config(text=f"⚠️ Приготовьтесь! Старт через {i} сек... Откройте игру.", foreground="#ffcc00")
-            time.sleep(1)
-
+    def _update_worker(self, silent):
         try:
-            side = self.mode_var.get()
-
-            # 1. Снаряжение предмета (Только для Выживших)
-            if side == "SURVIVOR":
-                self.status.config(text="Устанавливаем предмет выжившего...", foreground="#ff9500")
-                item_slot = self.get_coords("item_slot")
-                self.dbd_click(item_slot)
-                time.sleep(0.4)
-                self.search_and_select(self.chosen_power_or_item)
-
-            # 2. Ставим аддон №1
-            if self.chosen_addons[0] != "—" and "🚫" not in self.chosen_addons[0]:
-                self.status.config(text="Экипируем улучшение №1...", foreground="#ff9500")
-                addon1_slot = self.get_coords("addon1_slot")
-                self.dbd_click(addon1_slot)
-                time.sleep(0.4)
-                self.search_and_select(self.chosen_addons[0])
-
-            # 3. Ставим аддон №2
-            if self.chosen_addons[1] != "—" and "🚫" not in self.chosen_addons[1]:
-                self.status.config(text="Экипируем улучшение №2...", foreground="#ff9500")
-                addon2_slot = self.get_coords("addon2_slot")
-                self.dbd_click(addon2_slot)
-                time.sleep(0.4)
-                self.search_and_select(self.chosen_addons[1])
-
-            # 4. Поочередно забиваем перки в 4 слота
-            for idx in range(4):
-                self.status.config(text=f"Установка перка {idx + 1} из 4...", foreground="#ff9500")
-                perk_slot = self.get_coords(f"slot{idx + 1}")
-                self.dbd_click(perk_slot)
-                self.search_and_select(self.current_generated_perks[idx])
-
-            self.status.config(text="🎉 Авто-экипировка билда полностью завершена!", foreground="#34c759")
-
-        except Exception as err:
-            self.status.config(text=f"🔴 Ошибка выполнения: {err}", foreground="#ff3b30")
-            messagebox.showerror("Ошибка кликера", str(err))
+            token = GH.resolve_token(self.cfg)
+            upd = GH.check_update(APP_VERSION, token=token,
+                                  allow_branch=bool(self.cfg["update"].get("allow_branch", False)))
+            if not upd:
+                if not silent:
+                    self.ui_q.put(("info", f"У вас уже установлена последняя версия (v{APP_VERSION})."))
+                else:
+                    self.log(f"Обновлений нет (текущая v{APP_VERSION}).")
+                return
+            if upd["tag"] == self.cfg["update"].get("skip_tag"):
+                self.log(f"Обновление {upd['tag']} пропущено пользователем.")
+                return
+            bundle, info, missing = GH.download_update(upd["ref"], token=token)
+            self.log(f"Найдено обновление {upd['tag']}: скачано и проверено файлов {len(bundle)}"
+                     + (f"; в релизе нет: {', '.join(missing)}" if missing else ""))
+            self.ui_q.put(("update", (upd, info, bundle)))
+        except GH.UpdateError as exc:
+            self.log(f"Обновление отклонено проверкой: {exc}")
+            if not silent:
+                self.ui_q.put(("error", f"Обновление НЕ установлено — проверка не пройдена:\n{exc}"))
+        except Exception as exc:
+            self.log(f"Проверка обновления не удалась: {exc!r}")
+            if not silent:
+                self.ui_q.put(("error", f"Проверка обновления не удалась:\n{exc}"))
         finally:
-            self.btn_generate.config(state=tk.NORMAL)
-            self.btn_equip.config(state=tk.NORMAL)
+            self._updating = False
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = DBDUniversalRandomizer(root)
-    root.mainloop()
+    def _show_update_dialog(self, upd, info, bundle):
+        self._pending_update = (upd, info, bundle)
+        dlg = UpdateDialog(self.root, upd, info)
+        self.root.wait_window(dlg.top)
+        if dlg.result == "restart":
+            self.apply_and_restart(bundle)
+        else:
+            self.cfg["update"]["skip_tag"] = upd.get("tag", "")
+            save_config(self.cfg)
+            self.log(f"Обновление {upd.get('tag')} отложено (больше не предлагать эту версию).")
+        self._pending_update = None
+
+    def apply_and_restart(self, bundle):
+        try:
+            changed = GH.apply_update(bundle, APP_DIR)
+        except GH.UpdateError as exc:
+            messagebox.showerror("Обновление", str(exc))
+            return
+        if not changed:
+            messagebox.showinfo("Обновление", "Файлы уже актуальны — заменять нечего.")
+            return
+        self.log("Обновлены файлы: " + ", ".join(changed) + " (старые версии — .bak)")
+        try:
+            subprocess.Popen([sys.executable, os.path.join(APP_DIR, "dbd_randomizer.py")], cwd=APP_DIR)
+        except Exception as exc:
+            messagebox.showerror("Перезапуск", f"Обновление установлено ({', '.join(changed)}), "
+                                               f"но перезапустить не удалось:\n{exc}\n\nЗапустите программу вручную.")
+            return
+        self.abort.set()
+        self.root.destroy()
+
+    def toggle_auto_update(self):
+        self.cfg["update"]["auto"] = bool(self.auto_update_var.get())
+        save_config(self.cfg)
+        self.log("Автопроверка обновлений: " + ("включена" if self.cfg["update"]["auto"] else "выключена"))
+
+    # ----------------------------------------------------------- автоматизация --
+    def _register_abort_hotkey(self):
+        key = str(self.cfg["options"].get("abort_key", "f9")).lower()
+        try:
+            import keyboard
+        except Exception:
+            return
+        try:
+            if self._hotkey_handle is not None:
+                keyboard.remove_hotkey(self._hotkey_handle)
+        except Exception:
+            pass
+        try:
+            self._hotkey_handle = keyboard.add_hotkey(key, self.request_abort)
+        except Exception as exc:
+            self.log(f"Не удалось назначить горячую клавишу {key}: {exc}")
+
+    def request_abort(self):
+        if not self.abort.is_set():
+            self.abort.set()
+            self.log("⏹ Получена команда СТОП.")
+            self.set_status("Останавливаюсь…", "#ffcc00")
+
+    def _sleep(self, seconds, abortable=True):
+        end = time.time() + max(0.0, seconds)
+        while time.time() < end:
+            if abortable and self.abort.is_set():
+                raise AbortError()
+            time.sleep(min(0.05, max(0.0, end - time.time())))
+
+    def _click(self, coord, label=""):
+        if coord is None:
+            raise RuntimeError(f"не задана координата {label}")
+        if self.dry_var.get():
+            self.log(f"[DRY] клик {label or ''} -> {coord}")
+            return
+        INPUT.click(coord[0], coord[1], hold=self.timing("hold"),
+                    steps=int(self.timing("move_steps")))
+
+    def _paste(self, text):
+        if self.dry_var.get():
+            self.log(f"[DRY] вставка текста: «{text}»")
+            return True
+        ok = INPUT.paste(text, verify=self.option("verify_clipboard"),
+                         restore=self.option("restore_clipboard"))
+        if not ok:
+            self.log(f"⚠ Буфер обмена не принял текст «{text}» — вставка вслепую.")
+        return ok
+
+    def _ocr_matches(self, target):
+        region = self.get_ocr_region()
+        if not region or not self.option("ocr_verify"):
+            return None
+        text = ocr_read(*region)
+        if not text:
+            return None
+        hit = _norm(target) in _norm(text)
+        self.log(f"OCR: «{text[:60]}» -> {'совпало' if hit else 'НЕ совпало'} с «{target}»")
+        return hit
+
+    def search_and_select(self, target):
+        """Клик по поиску -> вставка имени -> (проверка) -> клик по результату.
+
+        Возвращает True, если элемент экипирован (или подтверждён OCR),
+        False — если поиск, судя по всему, ничего не нашёл.
+        """
+        search = self.get_coord("search")
+        result = self.get_coord("first_result")
+        if search is None or result is None:
+            raise RuntimeError("не заданы координаты search / first_result")
+        settle = self.timing("search_settle")
+        retries = max(0, int(self.timing("retries")))
+        index = self.option("result_index")
+        step = int(self.timing("result_step"))
+        dry = self.dry_var.get()
+        target_coord = result if index <= 1 else (result[0] + (index - 1) * step, result[1])
+
+        for attempt in range(retries + 1):
+            if self.abort.is_set():
+                raise AbortError()
+            if attempt:
+                self.log(f"Повтор поиска «{target}» ({attempt}/{retries})…")
+
+            self._click(search, "search")
+            self._sleep(0.12)
+            if self.option("use_clear_button"):
+                self._click(self.get_coord("clear"), "clear")
+                self._sleep(0.08)
+                self._click(search, "search")
+                self._sleep(0.08)
+            if not dry:
+                # Ctrl+A + Delete надёжнее кнопки «×»: работает и когда поле уже пустое
+                INPUT.hotkey("ctrl", "a")
+                self._sleep(0.03)
+            self._paste(target)
+            self._sleep(settle * (1.6 if attempt else 1.0))   # повтор — заведомо дольше
+
+            checked = self._ocr_matches(target)
+            if checked is False:
+                if attempt < retries:
+                    continue
+                self.log(f"⚠ «{target}»: OCR не подтвердил результат — клик пропускается, "
+                         f"проверьте имя в dbd_database.json.")
+                return False
+
+            self._click(target_coord, "first_result" if index <= 1 else f"result#{index}")
+            self._sleep(0.15)
+            return True
+        return False
+
+    def _equip_steps(self):
+        b = self.build
+        steps = []
+        if self.selchar_var.get():
+            steps.append(("char_search", b["char"], "персонаж"))
+        if b["side"] == "SURVIVOR" and b.get("power_is_item"):
+            if b["power_or_item"] not in (EMPTY,):
+                steps.append(("item_slot", b["power_or_item"], "предмет"))
+        for i, addon in enumerate(b["addons"], start=1):
+            if addon in (EMPTY, NO_ADDONS):
+                continue
+            steps.append((f"addon{i}_slot", addon, f"аддон №{i}"))
+        for i, perk in enumerate(b["perks"], start=1):
+            if perk == EMPTY:
+                continue
+            steps.append((f"slot{i}", perk, f"навык {i}/4"))
+        return steps
+
+    def start_equip(self):
+        if not self.build:
+            messagebox.showwarning("Внимание", "Сначала сгенерируйте билд.")
+            return
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo("Уже идёт", "Автоэкипировка уже запущена.")
+            return
+        self.collect_settings()
+
+        steps = self._equip_steps()
+        required = ["search", "first_result"] + [s[0] for s in steps]
+        # «char_search» — это и слот, и поле поиска; координата одна
+        missing = [r for r in dict.fromkeys(required) if self.get_coord(r) is None]
+        if missing:
+            messagebox.showerror("Координаты", "Не заданы координаты:\n" + "\n".join(f"• {m}" for m in missing))
+            self.notebook.select(self.tab_coords)
+            return
+        if not self.dry_var.get() and not INPUT.available:
+            messagebox.showerror("Автоматизация", f"Недоступен ввод: {INPUT.reason}\n"
+                                                  "Включите «Сухой прогон», чтобы посмотреть план действий.")
+            return
+        if self.build["side"] == "KILLER":
+            self.log("Режим МАНЬЯК: сила не экипируется — ставим только аддоны и навыки. "
+                     "Персонажа выберите в игре сами.")
+
+        save_config(self.cfg)
+        self.abort.clear()
+        self.btn_generate.config(state="disabled")
+        self.btn_equip.config(state="disabled")
+        self.worker = threading.Thread(target=self._run_automation, args=(steps,), daemon=True)
+        self.worker.start()
+
+    def _run_automation(self, steps):
+        total = len(steps) + 1
+        try:
+            countdown = int(self.timing("countdown"))
+            for i in range(countdown, 0, -1):
+                if self.abort.is_set():
+                    raise AbortError()
+                self.set_status(f"⚠ Приготовьтесь: старт через {i} с… (СТОП — {self.option('abort_key').upper()})",
+                                "#ffcc00")
+                self.ui_q.put(("progress", (countdown - i) / max(1, total) * 100))
+                time.sleep(1)
+
+            mode = "СУХОЙ ПРОГОН" if self.dry_var.get() else "АВТО"
+            self.log(f"=== {mode}: {total - 1} шаг(ов) ===")
+            for done, (key, name, label) in enumerate(steps, start=1):
+                if self.abort.is_set():
+                    raise AbortError()
+                self.set_status(f"{mode}: {label} — «{name}» ({done}/{len(steps)})", "#ff9500")
+                self.log(f"→ {label}: кликаю слот «{key}»")
+                self._click(self.get_coord(key), key)
+                self._sleep(self.timing("after_slot_click"))
+                ok = self.search_and_select(name)
+                if not ok:
+                    self.log(f"⚠ «{name}» — не подтверждено, продолжаю дальше.")
+                self.ui_q.put(("progress", done / max(1, total) * 100))
+                self._sleep(self.timing("between_steps"))
+
+            self.set_status("🎉 Готово: билд экипирован.", "#34c759")
+            self.log("=== Автоэкипировка завершена ===")
+        except AbortError:
+            self.set_status("⏹ Остановлено пользователем.", "#ffcc00")
+            self.log("Остановлено пользователем.")
+        except InputUnavailable as exc:
+            self.set_status(f"🔴 Ввод недоступен: {exc}", "#ff3b30")
+            self.ui_q.put(("error", f"Автоматизация недоступна:\n{exc}"))
+        except Exception as exc:
+            self.set_status(f"🔴 Ошибка: {exc}", "#ff3b30")
+            self.log(f"Ошибка: {exc!r}")
+            self.ui_q.put(("error", str(exc)))
+        finally:
+            self.ui_q.put(("progress", 100))
+            self.root.after(0, lambda: (self.btn_generate.config(state="normal"),
+                                        self.btn_equip.config(state="normal")))
+
+    # ---------------------------------------------------------------- сервис --
+    def run_data_check(self):
+        errors, warnings = validate_db(self.db)
+        text = [f"Проверка базы (версия {self.db.get('version')})",
+                f"Убийц: {len(self.db['killers'])} | Выживших: {len(self.db['survivors'])} | "
+                f"Категорий предметов: {len(self.db['survivor_items'])}",
+                "",
+                f"ОШИБКИ ({len(errors)}):"]
+        text += [f"  ✖ {e}" for e in errors] or ["  — нет"]
+        text += ["", f"ПРЕДУПРЕЖДЕНИЯ ({len(warnings)}):"]
+        text += [f"  ⚠ {w}" for w in warnings[:120]] or ["  — нет"]
+        if len(warnings) > 120:
+            text.append(f"  … и ещё {len(warnings) - 120}")
+        report = "\n".join(text)
+        win = tk.Toplevel(self.root)
+        win.title("Проверка базы данных")
+        win.geometry("900x620")
+        win.configure(bg="#121212")
+        txt = tk.Text(win, bg="#141414", fg="#dcdcdc", font=("Consolas", 10), wrap="word",
+                      relief="flat", padx=10, pady=10)
+        txt.pack(fill="both", expand=True)
+        txt.insert("end", report)
+        txt.configure(state="disabled")
+        ttk.Button(win, text="📋 Скопировать отчёт",
+                   command=lambda: pyperclip.copy(report)).pack(pady=6)
+        self.log(f"Проверка базы: ошибок {len(errors)}, предупреждений {len(warnings)}.")
+        path = os.path.join(APP_DIR, "dbd_data_report.txt")
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(report + "\n")
+        except Exception:
+            pass
+
+    def open_db_file(self):
+        self.collect_settings()
+        try:
+            dump_db(self.db)
+        except Exception as exc:
+            messagebox.showerror("Ошибка", f"Не удалось сохранить базу:\n{exc}")
+            return
+        try:
+            os.startfile(DB_FILE)                       # Windows
+        except Exception:
+            filedialog.askopenfile(initialdir=APP_DIR, initialfile=os.path.basename(DB_FILE))
+
+    def reset_db_file(self):
+        if not messagebox.askyesno("Внимание", "Пересоздать dbd_database.json из встроенных данных?\n"
+                                               "Ваши правки базы будут потеряны."):
+            return
+        if os.path.exists(DB_FILE):
+            try:
+                shutil.copy2(DB_FILE, DB_FILE + ".bak")
+            except Exception:
+                pass
+        self.db = db_defaults()
+        dump_db(self.db)
+        self.log("dbd_database.json пересоздан (резервная копия — .bak). Перезапустите программу, "
+                 "чтобы списки персонажей обновились.")
+        messagebox.showinfo("Готово", "База пересоздана. Перезапустите программу.")
+
+    def _on_close(self):
+        self.abort.set()
+        try:
+            self.collect_settings()          # координаты, тайминги, ник, токен, автообновление
+            self.save_owned_characters_silent()
+            save_config(self.cfg)
+        except Exception:
+            pass
+        self.root.destroy()
+
+    def save_owned_characters_silent(self):
+        killers = [n for (s, n), (v, _w) in self._char_widgets.items() if s == "K" and v.get()]
+        survs = [n for (s, n), (v, _w) in self._char_widgets.items() if s == "S" and v.get()]
+        self.cfg["owned"]["killers"] = sorted(killers)
+        self.cfg["owned"]["survivors"] = sorted(survs)
+
+
+class AbortError(Exception):
+    pass
+
+
+# ----------------------------------------------------------------------------
+# --selftest: проверка базы и генератора без GUI
+# ----------------------------------------------------------------------------
+def selftest():
+    print(f"DBD Randomizer selftest | app v{APP_VERSION} | база {DATA.VERSION}")
+    db = load_db()
+    errors, warnings = validate_db(db)
+    print(f"  убийц: {len(db['killers'])}, выживших: {len(db['survivors'])}, "
+          f"категорий предметов: {len(db['survivor_items'])}")
+    print(f"  ошибок: {len(errors)}, предупреждений: {len(warnings)}")
+    for e in errors:
+        print("   ✖", e)
+    for w in warnings[:15]:
+        print("   ⚠", w)
+    if len(warnings) > 15:
+        print(f"   … ещё {len(warnings) - 15} предупреждений (кнопка «Проверить базу» в GUI)")
+
+    random.seed(42)
+    ok = True
+    for side in ("KILLER", "SURVIVOR"):
+        pool = sorted(db["killers"] if side == "KILLER" else db["survivors"])
+        for mode in ("general", "unique", "mixed"):
+            for _ in range(60):
+                fn = make_killer_build if side == "KILLER" else make_survivor_build
+                b = fn(db, pool, perk_mode=mode)
+                need = 3 if mode == "unique" else 4
+                if len(b["perks"]) != 4 or len(set(b["perks"])) != 4:
+                    print("   ✖ перки:", side, mode, b["perks"]); ok = False
+                if sum(1 for p in b["perks"] if p in (db["killers"].get(b["char"], {}) or {}).get("perks", [])
+                       or p in db["survivors"].get(b["char"], [])) < min(need, 4) and mode == "unique":
+                    print("   ✖ unique-режим потерял свои перки:", side, b["char"], b["perks"]); ok = False
+                if len(b["addons"]) != 2:
+                    print("   ✖ аддоны:", side, mode, b["addons"]); ok = False
+    print("  генератор:", "OK" if ok else "ЕСТЬ ОШИБКИ")
+    sample = make_killer_build(db, sorted(db["killers"]), perk_mode="mixed")
+    print("\nПример билда:\n" + build_to_text(sample))
+    return 0 if ok and not errors else 1
 
 
 def main():
-    """Точка входа для pip-установки (запуск командой `dbd-randomizer`)."""
+    if "--selftest" in sys.argv:
+        sys.exit(selftest())
+    _load_tk()
+    _set_dpi_awareness()
     root = tk.Tk()
-    DBDUniversalRandomizer(root)
+    App(root)
     root.mainloop()
-    return 0
+
+
+if __name__ == "__main__":
+    main()

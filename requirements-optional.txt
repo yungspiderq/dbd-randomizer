@@ -1,0 +1,5 @@
+# Проверка результата поиска по OCR (необязательно).
+# Дополнительно нужен установщик Tesseract для Windows с русским языком:
+# https://github.com/UB-Mannheim/tesseract/wiki
+pytesseract
+Pillow
