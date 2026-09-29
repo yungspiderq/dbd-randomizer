@@ -151,9 +151,7 @@ class IconCombo:
         self._value = value or ""
         self.text.config(text=self._value if self._value else "— не выбрано —",
                          fg="#dfe5ea" if self._value else "#56606c")
-        photo = self.app._icon_photo(self._value, 20) if self._value else None
-        self.icon.config(image=photo if photo is not None else "",
-                         text="" if photo is not None else "")
+        self.icon.config(image=self.app._icon_photo(self._value or None, 20), text="")
 
     def configure(self, values=None, **kw):
         if values is not None:
@@ -1184,6 +1182,7 @@ class App:
             rb.pack(side="left", padx=(0, 6))
 
         pal = self._pal
+        self.root.columnconfigure(0, weight=0, minsize=218)
         self.root.columnconfigure(1, weight=1)
         self.nav = tk.Frame(self.root, bg="#0b0e12", width=218)
         self.nav.grid(row=1, column=0, sticky="ns")
@@ -1480,36 +1479,44 @@ class App:
         self.lbl_icons.config(text=f"Иконок в кэше: {have} из {total} · "
                                    f"докaчиваются автоматически в {os.path.basename(ICONS_DIR)}/")
 
-    def _icon_photo(self, name, size=ICON_SIZE):
-        """PhotoImage иконки: из кэша, иначе заглушка. Ссылки храним в self._photos."""
-        if not self.icon_store.enabled or not name or name in (EMPTY, NO_ADDONS):
-            return None
-        key = (name, size)
+    def _placeholder_photo(self, size):
+        """Тёмный квадрат нужного размера в пикселях. ВАЖНО: без картинки Tk
+        считает height Label'а в СТРОКАХ текста — плитки разъезжаются."""
+        key = ("-", size)
         if key in self._photos:
             return self._photos[key]
+        photo = None
         try:
             from PIL import Image, ImageTk
+            photo = ImageTk.PhotoImage(Image.new("RGBA", (size, size), (44, 52, 64, 255)))
         except Exception:
-            return None
-        img = None
-        path = self.icon_store.local_path(name)
-        try:
-            if path and os.path.getsize(path) > 400:
-                img = Image.open(path).convert("RGBA")
-        except Exception:
-            img = None
-        if img is None:
             try:
-                img = Image.new("RGBA", (size, size), (44, 52, 64, 255))
+                photo = tk.PhotoImage(width=size, height=size)
             except Exception:
                 return None
-        else:
-            img = img.resize((size, size), Image.LANCZOS)
-        try:
-            photo = ImageTk.PhotoImage(img)
-        except Exception:
-            return None
-        self._photos[key] = photo            # держим ссылку, иначе Tk её соберёт
+        self._photos[key] = photo
+        return photo
+
+    def _icon_photo(self, name, size=ICON_SIZE):
+        """PhotoImage иконки ИЛИ плейсхолдер: никогда None при живом Tk."""
+        key = (name or "-", size)
+        if key in self._photos:
+            return self._photos[key]
+        photo = None
+        if self.icon_store.enabled and name and name not in (EMPTY, NO_ADDONS):
+            try:
+                from PIL import Image, ImageTk
+                img = None
+                path = self.icon_store.local_path(name)
+                if path and os.path.getsize(path) > 400:
+                    img = Image.open(path).convert("RGBA")
+                if img is not None:
+                    photo = ImageTk.PhotoImage(img.resize((size, size), Image.LANCZOS))
+            except Exception:
+                photo = None
+        if photo is None:
+            return self._placeholder_photo(size)
+        self._photos[key] = photo
         return photo
 
     def _request_icons(self, names):
@@ -1897,9 +1904,7 @@ class App:
                             highlightthickness=0, command=self._update_char_counts)
         cb.pack(side="left", fill="x", expand=True)
         self._char_icons[(side, name)] = img
-        photo = self._icon_photo(name, 22)
-        if photo is not None:
-            img.config(image=photo)
+        img.config(image=self._icon_photo(name, 22))
         return row
 
     def _apply_char_filter(self):
@@ -2129,13 +2134,13 @@ class App:
         self.card_char.config(text="Билд не сгенерирован" if text else filler)
         self.card_main.config(text="")
         self.card_sub.config(text="")
-        self.card_char_img.config(image="", text="")
-        self.card_main_img.config(image="", text="")
+        self.card_char_img.config(image=self._icon_photo(None, ICON_SIZE + 12), text="")
+        self.card_main_img.config(image=self._icon_photo(None, ICON_SIZE), text="")
         for img, lbl in self.card_addons:
-            img.config(image="", text="")
+            img.config(image=self._icon_photo(None, ICON_SIZE), text="")
             lbl.config(text=filler, fg="#56606c")
         for img, lbl in self.card_perks:
-            img.config(image="", text="" if not text else "")
+            img.config(image=self._icon_photo(None, ICON_SIZE), text="")
             lbl.config(text=filler, fg="#56606c")
 
     def _render_build(self):
@@ -2166,29 +2171,23 @@ class App:
 
         for img_label, name in ((self.card_char_img, b["char"]),
                                 (self.card_main_img, b["power_or_item"])):
-            photo = self._icon_photo(name) if name and name not in (EMPTY, NO_ADDONS) else None
-            if photo is not None:
-                img_label.config(image=photo, text="")
-            else:
-                img_label.config(image="", text="")
+            sz = ICON_SIZE if img_label is self.card_main_img else ICON_SIZE + 12
+            img_label.config(image=self._icon_photo(
+                name if name and name not in (EMPTY, NO_ADDONS) else None, sz), text="")
         want_extra = [n for n in (b["char"], b["power_or_item"])
                       if n and n not in (EMPTY, NO_ADDONS)]
 
         want_addons = []
         for (img, lbl), addon in zip(self.card_addons, list(b["addons"]) + ["", ""]):
             if not addon or addon == EMPTY:
-                img.config(image="", text="")
+                img.config(image=self._icon_photo(None, ICON_SIZE), text="")
                 lbl.config(text="   •  —", fg="#56606c")
                 continue
             if addon == NO_ADDONS:
-                img.config(image="", text="")
+                img.config(image=self._icon_photo(None, ICON_SIZE), text="")
                 lbl.config(text="   •  🚫 аддон не подобран", fg="#7d8894")
                 continue
-            photo = self._icon_photo(addon)
-            if photo is not None:
-                img.config(image=photo, text="")
-            else:
-                img.config(image="", text="▢")
+            img.config(image=self._icon_photo(addon, ICON_SIZE), text="")
             lbl.config(text=f"   •  {addon}", fg="#dfe5ea")
             want_addons.append(addon)
 
@@ -2196,14 +2195,10 @@ class App:
         for i, (img, lbl) in enumerate(self.card_perks):
             perk = b["perks"][i] if i < len(b["perks"]) else EMPTY
             if not perk or perk == EMPTY:
-                img.config(image="", text="")
+                img.config(image=self._icon_photo(None, ICON_SIZE), text="")
                 lbl.config(text=f"{i + 1}.  —  (слот пуст)", fg="#56606c")
                 continue
-            photo = self._icon_photo(perk)
-            if photo is not None:
-                img.config(image=photo, text="")
-            else:
-                img.config(image="", text="▢")
+            img.config(image=self._icon_photo(perk, ICON_SIZE), text="")
             lbl.config(text=f"{i + 1}.  {perk}", fg="#3fb950")
             want.append(perk)
         self._request_icons(want + want_addons + want_extra)
@@ -2600,8 +2595,7 @@ class App:
     def _refresh_char_icons(self):
         """Подставляет портреты в строки вкладки «Персонажи», когда они докачались."""
         for (_side, _name), lbl in getattr(self, "_char_icons", {}).items():
-            photo = self._icon_photo(_name, 22)
-            lbl.config(image=photo if photo is not None else "", text="")
+            lbl.config(image=self._icon_photo(_name, 22), text="")
 
     def _update_char_counts(self):
         for side, lf in (("K", getattr(self, "_lf_k", None)),
@@ -2715,9 +2709,9 @@ class App:
             self.det_title.config(text="Выберите билд в списке", fg=pal["muted"])
             self.det_meta.config(text="")
             self.det_desc.config(text="")
-            self.det_char_img.config(image="", text="")
+            self.det_char_img.config(image=self._icon_photo(None, 30), text="")
             for img, txt in self.det_rows:
-                img.config(image="", text="")
+                img.config(image=self._icon_photo(None, 24), text="")
                 txt.config(text="—", fg="#56606c")
             return
         side = b.get("side", "KILLER")
@@ -2726,19 +2720,16 @@ class App:
         self.det_title.config(text=(b.get("title") or b.get("char") or "Билд"), fg=color)
         self.det_meta.config(text=f"{b.get('author', '—')} · {b.get('date', '')}")
         self.det_desc.config(text=(b.get("description") or "").strip())
-        photo = self._icon_photo(b.get("char", ""), 30)
-        self.det_char_img.config(image=photo if photo is not None else "",
-                                 text="" if photo is not None else "▢")
+        self.det_char_img.config(image=self._icon_photo(b.get("char") or None, 30), text="")
         values = ([b.get("power_or_item", "")] + list(b.get("addons") or [])
                   + list(b.get("perks") or []))
         names = [b.get("char", "")]
         for (img, txt), val in zip(self.det_rows, values + [""] * 7):
             if not val or val in (EMPTY, NO_ADDONS, "—"):
-                img.config(image="", text="")
+                img.config(image=self._icon_photo(None, 24), text="")
                 txt.config(text="—", fg="#56606c")
                 continue
-            ph = self._icon_photo(val, 24)
-            img.config(image=ph if ph is not None else "", text="" if ph is not None else "▢")
+            img.config(image=self._icon_photo(val, 24), text="")
             txt.config(text=val, fg="#dfe5ea")
             names.append(val)
         self._request_icons([n for n in names if n])
