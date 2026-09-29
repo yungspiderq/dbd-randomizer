@@ -37,9 +37,10 @@ setup(
     long_description_content_type="text/markdown",
     author="yungspiderq",
     url="https://github.com/yungspiderq/dbd-randomizer",
-    py_modules=["dbd_randomizer", "dbd_data", "dbd_github"],
+    py_modules=["dbd_randomizer", "dbd_data", "dbd_github", "dbd_icons",
+                "dbd_icons_store"],
     install_requires=read_requirements(),
-    extras_require={"ocr": ["pytesseract>=0.3.10", "Pillow>=9.0.0"]},
+    extras_require={"ocr": ["pytesseract>=0.3.10"]},
     python_requires=">=3.8",
     entry_points={
         "gui_scripts": ["dbd-randomizer=dbd_randomizer:main"],

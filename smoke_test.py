@@ -48,6 +48,7 @@ def install_fake_tk():
     tk.Text = mock.MagicMock()
     tk.Label = mock.MagicMock()
     tk.Checkbutton = mock.MagicMock()
+    tk.Button = mock.MagicMock()
     tk.Radiobutton = mock.MagicMock()
     tk.Frame = mock.MagicMock()
     tk.Entry = mock.MagicMock(side_effect=lambda *a, **kw: _fake_entry(kw.get("text", "")))
@@ -120,6 +121,7 @@ def make_app():
     root = mock.MagicMock()
     root.after = lambda *a, **kw: None          # без рекурсии polling'а
     app = R.App(root)
+    app.icon_store.enabled = False              # тесты не ходят в интернет за иконками
     # подменяем виджеты координат/таймингов на управляемые заглушки
     app.timing = lambda key: float(R.TIMING_DEFAULTS[key][0]) if key != "retries" else 2
     return app
@@ -212,6 +214,50 @@ class TestGeneration(unittest.TestCase):
         b = R.make_survivor_build(self.db, ["Дуайт Фэйрфилд"])
         self.assertIn("Выживший", R.build_to_text(b))
         self.assertIn("Перки:", R.build_to_clipboard_text(b))
+
+
+class TestIcons(unittest.TestCase):
+    """Карта иконок обязана покрывать все навыки из базы — иначе в UI будут дырки."""
+
+    def setUp(self):
+        self.db = R.db_defaults()
+        self.icons = R.ICONS.PERK_ICONS
+
+    def test_every_perk_has_icon(self):
+        names = set()
+        for info in self.db["killers"].values():
+            names.update(info.get("perks", []))
+        for perks in self.db["survivors"].values():
+            names.update(perks)
+        names.update(self.db["killer_common_perks"])
+        names.update(self.db["surv_common_perks"])
+        missing = sorted(n for n in names if n and n not in self.icons)
+        self.assertEqual(missing, [], f"нет иконок для: {missing}")
+
+    def test_no_orphan_icons(self):
+        names = set()
+        for info in self.db["killers"].values():
+            names.update(info.get("perks", []))
+        for perks in self.db["survivors"].values():
+            names.update(perks)
+        names.update(self.db["killer_common_perks"])
+        names.update(self.db["surv_common_perks"])
+        orphans = sorted(k for k in self.icons if k not in names)
+        self.assertLessEqual(len(orphans), 3, f"иконки без навыка в базе: {orphans}")
+
+    def test_urls_are_wiki_png(self):
+        self.assertTrue(R.ICONS.ICON_BASE.startswith("https://deadbydaylight.wiki.gg/"))
+        for name, fname in self.icons.items():
+            self.assertTrue(fname.lower().endswith(".png"), (name, fname))
+            self.assertNotIn(" ", fname, (name, fname))
+
+    def test_store_disabled_is_safe(self):
+        import tempfile
+        st = R.IconStore(tempfile.mkdtemp(), enabled=False)
+        self.assertIsNone(st.fetch_one("Надежда"))
+        self.assertFalse(st.is_cached("Надежда"))
+        st.request(["Надежда"], on_ready=lambda r: None)      # не должно падать
+        self.assertEqual(st.missing([]), [])
 
 
 class TestValidation(unittest.TestCase):
@@ -473,11 +519,13 @@ class TestUpdateSafety(unittest.TestCase):
     GOOD = {"dbd_randomizer.py": b"def main():\n    pass\n" + b"x = 1\n" * 40,
             "dbd_data.py": b"KILLERS = {}\n" + b"# pad\n" * 40,
             "dbd_github.py": b'APP_VERSION = "9.9.9"\n' + b"# pad\n" * 40,
+            "dbd_icons.py": b"PERK_ICONS = {}\n" + b"# pad\n" * 40,
+            "dbd_icons_store.py": b"class IconStore:\n    pass\n" + b"# pad\n" * 40,
             "requirements.txt": b"pyautogui\npyperclip\npydirectinput\n"}
 
     def test_good_bundle_passes(self):
         info = GH._verify_bundle(self.GOOD)
-        self.assertEqual(len(info), 4)
+        self.assertEqual(len(info), len(self.GOOD))
         for item in info:
             self.assertEqual(len(item["sha256"]), 64)
             self.assertGreater(item["bytes"], 0)
@@ -545,16 +593,16 @@ class TestUpdateSafety(unittest.TestCase):
             good = dict(self.GOOD)
             GH._get_remote_file_b64 = lambda path, token=None, ref="main": (good.get(path), "sha")
             bundle, info, missing = GH.download_update("v9.9.9")
-            self.assertEqual(len(bundle), 4)
-            self.assertEqual(len(info), 4)
+            self.assertEqual(len(bundle), 6)
+            self.assertEqual(len(info), 6)
             self.assertEqual(missing, [])
 
             # релиз в формате v1.x (только главный файл) — допустим, но помечается
-            single = {"dbd_randomizer.py": good["dbd_randomizer.py"]}
-            GH._get_remote_file_b64 = lambda path, token=None, ref="main": (single.get(path), "sha")
-            bundle, info, missing = GH.download_update("v1.1.1")
-            self.assertEqual(list(bundle), ["dbd_randomizer.py"])
-            self.assertEqual(missing, ["dbd_data.py", "dbd_github.py", "requirements.txt"])
+            # релиз v2.x, в котором не хватает обязательного модуля, -> отказ
+            partial = {k: v for k, v in good.items() if k != "dbd_icons.py"}
+            GH._get_remote_file_b64 = lambda path, token=None, ref="main": (partial.get(path), "sha")
+            with self.assertRaises(GH.UpdateError):
+                GH.download_update("v2.0.0")
 
             # нет даже главного файла — обновление отклоняется
             GH._get_remote_file_b64 = lambda path, token=None, ref="main": (None, None)

@@ -50,13 +50,19 @@ def _load_tk():
 try:
     import dbd_data as DATA
     import dbd_github as GH
+    import dbd_icons as ICONS
+    from dbd_icons_store import IconStore, pil_available
 except ImportError:                       # запуск из другой директории
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import dbd_data as DATA
     import dbd_github as GH
+    import dbd_icons as ICONS
+    from dbd_icons_store import IconStore, pil_available
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_VERSION = GH.APP_VERSION
+ICONS_DIR = os.path.join(APP_DIR, "icons_cache")
+ICON_SIZE = 34
 CONFIG_FILE = os.path.join(APP_DIR, "dbd_randomizer_config.json")
 LEGACY_CONFIG = os.path.join(APP_DIR, "dbd_randomizer_config.txt")
 DB_FILE = os.path.join(APP_DIR, "dbd_database.json")
@@ -769,6 +775,8 @@ class App:
         self.db = load_db()
         self.build = None
         self.community_builds = []
+        self.icon_store = IconStore(ICONS_DIR, enabled=True)
+        self._photos = {}
         self._updating = False
         self._pending_update = None
         self.abort = threading.Event()
@@ -803,6 +811,13 @@ class App:
             self.log(f"⚠ Автоматизация недоступна ({INPUT.reason}). Доступен «сухой прогон».")
         self.log(f"База: {len(self.db['killers'])} убийц, {len(self.db['survivors'])} выживших "
                  f"(версия {self.db.get('version')}).")
+        if self.icon_store.enabled:
+            have, total = self.icon_store.stats()
+            self.log(f"Иконки навыков: {have}/{total} в кэше; карта покрывает "
+                     f"{len(ICONS.PERK_ICONS)} навыков. Недостающие докачаются при показе билда.")
+        else:
+            self.log("⚠ Pillow не установлен — карточка билда будет без иконок "
+                     "(pip install Pillow).")
 
     # ---------------------------------------------------------------- стиль --
     def _setup_style(self):
@@ -897,24 +912,7 @@ class App:
         box.grid(row=0, column=0, sticky="nsew")
         box.rowconfigure(0, weight=1)
         box.columnconfigure(0, weight=1)
-        self.txt_build = tk.Text(box, bg="#181818", fg="#f0f0f0", insertbackground="#f0f0f0",
-                                 font=("Consolas", 11), wrap="word", relief="flat", padx=12, pady=10,
-                                 state="disabled")
-        self.txt_build.grid(row=0, column=0, sticky="nsew")
-        sb = ttk.Scrollbar(box, orient="vertical", command=self.txt_build.yview)
-        sb.grid(row=0, column=1, sticky="ns")
-        self.txt_build.configure(yscrollcommand=sb.set)
-        for tag, color, font in (("head", "#ff9500", ("Consolas", 12, "bold")),
-                                 ("item", "#5ac8fa", ("Consolas", 11, "bold")),
-                                 ("addon", "#e0e0e0", ("Consolas", 11)),
-                                 ("perk", "#34c759", ("Consolas", 11)),
-                                 ("warn", "#ffcc00", ("Consolas", 10, "italic"))):
-            self.txt_build.tag_configure(tag, foreground=color, font=font)
-        self._set_build_text("Нажмите «СГЕНЕРИРОВАТЬ».\n\n"
-                             "1) Вкладка «ПЕРСОНАЖИ» — отметьте, что у вас открыто.\n"
-                             "2) Вкладка «КЛИКИ И ТАЙМИНГИ» — укажите координаты.\n"
-                             "3) В игре откройте меню снаряжения нужного персонажа.\n"
-                             "4) Нажмите «ЭКИПИРОВАТЬ».")
+        self._build_card(box)
 
         right = ttk.Frame(self.tab_main)
         right.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=8)
@@ -976,6 +974,158 @@ class App:
         lsb = ttk.Scrollbar(logbox, orient="vertical", command=self.txt_log.yview)
         lsb.grid(row=0, column=1, sticky="ns")
         self.txt_log.configure(yscrollcommand=lsb.set)
+
+    # ---- карточка билда с иконками -------------------------------------------
+    def _build_card(self, parent):
+        canvas = tk.Canvas(parent, bg="#161616", highlightthickness=0, bd=0)
+        sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        self.card = tk.Frame(canvas, bg="#161616")
+        win = canvas.create_window((0, 0), window=self.card, anchor="nw")
+        self.card.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=6)
+        sb.grid(row=0, column=1, sticky="ns", pady=6)
+
+        def _wheel(event):
+            canvas.yview_scroll(-1 if getattr(event, "delta", 0) > 0 or
+                                getattr(event, "num", 0) == 4 else 1, "units")
+            return "break"
+        for w in (canvas, self.card):
+            w.bind("<MouseWheel>", _wheel)
+            w.bind("<Button-4>", _wheel)
+            w.bind("<Button-5>", _wheel)
+
+        pad = dict(bg="#161616")
+        self.card_hint = tk.Label(self.card, justify="left", anchor="w", fg="#9a9a9a",
+                                  font=("Segoe UI", 10), wraplength=420, **pad)
+        self.card_hint.pack(fill="x", padx=14, pady=12)
+
+        self.card_author = tk.Label(self.card, anchor="w", fg="#ffd60a", bg="#161616",
+                                    font=("Segoe UI", 9, "italic"))
+        self.card_char = tk.Label(self.card, anchor="w", fg="#ffffff", bg="#161616",
+                                  font=("Segoe UI", 15, "bold"))
+        self.card_main = tk.Label(self.card, anchor="w", fg="#ff9500", bg="#161616",
+                                  font=("Segoe UI", 11, "bold"), wraplength=420, justify="left")
+        self.card_sub = tk.Label(self.card, anchor="w", fg="#6e6e73", bg="#161616",
+                                 font=("Segoe UI", 9, "italic"))
+        for w in (self.card_author, self.card_char, self.card_main, self.card_sub):
+            w.pack(fill="x", padx=14, pady=(2, 0))
+
+        self._card_section("🔧 АДДОНЫ")
+        self.card_addons = []
+        for _ in range(2):
+            lbl = tk.Label(self.card, anchor="w", fg="#dcdcdc", bg="#161616",
+                           font=("Segoe UI", 10), wraplength=400, justify="left")
+            lbl.pack(fill="x", padx=26)
+            self.card_addons.append(lbl)
+
+        self._card_section("🔮 НАВЫКИ")
+        self.card_perks = []
+        for _ in range(4):
+            row = tk.Frame(self.card, **pad)
+            row.pack(fill="x", padx=20, pady=2)
+            img = tk.Label(row, bg="#161616", width=ICON_SIZE, height=ICON_SIZE)
+            img.pack(side="left", padx=(0, 8))
+            txt = tk.Label(row, anchor="w", fg="#34c759", bg="#161616",
+                           font=("Segoe UI", 11), wraplength=340, justify="left")
+            txt.pack(side="left", fill="x", expand=True)
+            self.card_perks.append((img, txt))
+
+        bar = tk.Frame(self.card, **pad)
+        bar.pack(fill="x", padx=14, pady=(10, 14))
+        self.lbl_icons = tk.Label(bar, fg="#6e6e73", bg="#161616", font=("Segoe UI", 8),
+                                  anchor="w", justify="left")
+        self.lbl_icons.pack(side="left", fill="x", expand=True)
+        self.btn_icons = tk.Button(bar, text="⬇ Все иконки", bg="#2c2c2c", fg="#e0e0e0",
+                                   activebackground="#3a3a3a", activeforeground="#ffffff",
+                                   relief="flat", font=("Segoe UI", 8), padx=8, pady=2,
+                                   command=self.download_all_icons)
+        self.btn_icons.pack(side="right")
+        self._update_icon_hint()
+        self._set_build_text(None)
+
+    def _card_section(self, text):
+        tk.Label(self.card, text=text, anchor="w", fg="#8e8e93", bg="#161616",
+                 font=("Segoe UI", 9, "bold")).pack(fill="x", padx=14, pady=(12, 2))
+
+    def _update_icon_hint(self):
+        have, total = self.icon_store.stats()
+        if not self.icon_store.enabled:
+            self.lbl_icons.config(text="Иконки недоступны (нужна библиотека Pillow: "
+                                       "pip install Pillow)")
+            self.btn_icons.config(state="disabled")
+            return
+        self.lbl_icons.config(text=f"Иконок в кэше: {have} из {total} · "
+                                   f"докaчиваются автоматически в {os.path.basename(ICONS_DIR)}/")
+
+    def _icon_photo(self, name):
+        """PhotoImage иконки: из кэша, иначе заглушка. Ссылки храним в self._photos."""
+        if not self.icon_store.enabled or not name or name in (EMPTY, NO_ADDONS):
+            return None
+        key = (name, ICON_SIZE)
+        if key in self._photos:
+            return self._photos[key]
+        try:
+            from PIL import Image, ImageTk
+        except Exception:
+            return None
+        img = None
+        path = self.icon_store.local_path(name)
+        try:
+            if path and os.path.getsize(path) > 400:
+                img = Image.open(path).convert("RGBA")
+        except Exception:
+            img = None
+        if img is None:
+            try:
+                img = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (40, 40, 44, 255))
+            except Exception:
+                return None
+        else:
+            img = img.resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
+        try:
+            photo = ImageTk.PhotoImage(img)
+        except Exception:
+            return None
+        self._photos[key] = photo            # держим ссылку, иначе Tk её соберёт
+        return photo
+
+    def _request_icons(self, names):
+        if not self.icon_store.enabled:
+            return
+        self.icon_store.request(names, on_ready=lambda ready: self.ui_q.put(("icons", ready)))
+
+    def _on_icons_ready(self, ready):
+        self._photos.clear()               # сбрасываем заглушки
+        self._update_icon_hint()
+        if self.build:
+            self._render_build()
+
+    def download_all_icons(self):
+        if not self.icon_store.enabled:
+            messagebox.showwarning("Иконки", "Нужна библиотека Pillow: pip install Pillow")
+            return
+        self.btn_icons.config(state="disabled")
+        self.lbl_icons.config(text="Скачиваю иконки…")
+        self.log("Начата массовая загрузка иконок с wiki.gg…")
+
+        def work():
+            try:
+                done, todo = self.icon_store.fetch_all()
+                self.ui_q.put(("log", f"Иконки: докачано {done} из {todo}."))
+            except Exception as exc:
+                self.ui_q.put(("log", f"Загрузка иконок прервана: {exc}"))
+            finally:
+                self.ui_q.put(("icons_done", None))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_icons_done(self, _):
+        self.btn_icons.config(state="normal")
+        self._photos.clear()
+        self._update_icon_hint()
+        if self.build:
+            self._render_build()
 
     # ---- вкладка «Персонажи» -------------------------------------------------
     def _make_scrolled(self, parent):
@@ -1236,6 +1386,10 @@ class App:
                     messagebox.showwarning("Внимание", payload)
                 elif kind == "info":
                     messagebox.showinfo("Готово", payload)
+                elif kind == "icons":
+                    self._on_icons_ready(payload)
+                elif kind == "icons_done":
+                    self._on_icons_done(payload)
                 elif kind == "builds":
                     self._on_builds_loaded(*payload)
                 elif kind == "update":
@@ -1255,31 +1409,58 @@ class App:
         self.cfg["options"]["side"] = self.mode_var.get()
 
     def _set_build_text(self, text):
-        self.txt_build.configure(state="normal")
-        self.txt_build.delete("1.0", "end")
-        self.txt_build.insert("end", text)
-        self.txt_build.configure(state="disabled")
+        """Пустое состояние карточки: подсказка вместо билда."""
+        self.card_hint.config(text=text or "")
+        filler = "" if text else "—"
+        self.card_author.config(text="")
+        self.card_char.config(text="Билд не сгенерирован" if text else filler)
+        self.card_main.config(text="")
+        self.card_sub.config(text="")
+        for lbl in self.card_addons:
+            lbl.config(text=filler)
+        for img, lbl in self.card_perks:
+            img.config(image="", text="" if not text else "")
+            lbl.config(text=filler, fg="#4a4a4a")
 
     def _render_build(self):
         b = self.build
-        self.txt_build.configure(state="normal")
-        self.txt_build.delete("1.0", "end")
-        if b.get("author"):
-            self.txt_build.insert("end", f"🌍 билд сообщества от {b['author']}\n", "warn")
+        if not b:
+            return
+        self.card_hint.config(text="")
+        self.card_author.config(text=f"🌍 билд сообщества от {b['author']}" if b.get("author") else "")
         if b["side"] == "KILLER":
-            self.txt_build.insert("end", f"👹 Убийца: {b['char']}\n", "head")
-            self.txt_build.insert("end", f"⚡ Сила: {b['power_or_item']}  (не экипируется)\n", "item")
+            self.card_char.config(text=f"👹 {b['char']}", fg="#ff6b60")
+            self.card_main.config(text=f"⚡ {b['power_or_item']}")
+            self.card_sub.config(text="сила убийцы не экипируется — ставятся только аддоны и навыки")
         else:
-            self.txt_build.insert("end", f"👤 Выживший: {b['char']}\n", "head")
-            self.txt_build.insert("end", f"📦 Предмет: {b['power_or_item']}\n", "item")
-            self.txt_build.insert("end", f"    категория: {b.get('category', '')}\n", "warn")
-        self.txt_build.insert("end", "\n🔧 Аддоны:\n", "head")
-        for a in b["addons"]:
-            self.txt_build.insert("end", f"   • {a}\n", "addon")
-        self.txt_build.insert("end", "\n🔮 Навыки:\n", "head")
-        for i, p in enumerate(b["perks"], 1):
-            self.txt_build.insert("end", f"   {i}. {p}\n", "perk")
-        self.txt_build.configure(state="disabled")
+            self.card_char.config(text=f"👤 {b['char']}", fg="#5ac8fa")
+            self.card_main.config(text=f"📦 {b['power_or_item']}")
+            self.card_sub.config(text=f"категория: {b.get('category', '')}")
+
+        for lbl, addon in zip(self.card_addons, list(b["addons"]) + ["", ""]):
+            if not addon or addon == EMPTY:
+                lbl.config(text="   •  —", fg="#4a4a4a")
+            elif addon == NO_ADDONS:
+                lbl.config(text="   •  🚫 аддон не подобран", fg="#6e6e73")
+            else:
+                lbl.config(text=f"   •  {addon}", fg="#dcdcdc")
+
+        want = []
+        for i, (img, lbl) in enumerate(self.card_perks):
+            perk = b["perks"][i] if i < len(b["perks"]) else EMPTY
+            if not perk or perk == EMPTY:
+                img.config(image="", text="")
+                lbl.config(text=f"{i + 1}.  —  (слот пуст)", fg="#4a4a4a")
+                continue
+            photo = self._icon_photo(perk)
+            if photo is not None:
+                img.config(image=photo, text="")
+            else:
+                img.config(image="", text="▢")
+            lbl.config(text=f"{i + 1}.  {perk}", fg="#34c759")
+            want.append(perk)
+        self._render_details_icons(want)
+        self._request_icons(want)
 
     def get_coord(self, key):
         ent = self._coord_widgets.get(key)
@@ -1541,9 +1722,18 @@ class App:
 
         det = ttk.LabelFrame(self.tab_builds, text=" ДЕТАЛИ ВЫБРАННОГО БИЛДА ")
         det.pack(fill="x", padx=10, pady=(0, 5))
-        self.lbl_build_details = ttk.Label(det, text="—", justify="left", font=("Consolas", 9),
+        row = ttk.Frame(det)
+        row.pack(fill="x", padx=10, pady=(5, 0))
+        self.lbl_build_details = ttk.Label(row, text="—", justify="left", font=("Consolas", 9),
                                            foreground="#e0e0e0")
-        self.lbl_build_details.pack(anchor="w", padx=10, pady=5)
+        self.lbl_build_details.pack(side="left", anchor="n", pady=5)
+        self.det_icons_frame = tk.Frame(det, bg="#121212")
+        self.det_icons_frame.pack(anchor="e", padx=10, pady=5)
+        self.det_icons = []
+        for _ in range(4):
+            lbl = tk.Label(self.det_icons_frame, bg="#121212", width=ICON_SIZE, height=ICON_SIZE)
+            lbl.pack(side="left", padx=2)
+            self.det_icons.append(lbl)
 
         sett = ttk.LabelFrame(self.tab_builds, text=" 🔑 НАСТРОЙКА ПУБЛИКАЦИИ ")
         sett.pack(fill="x", padx=10, pady=(0, 6))
@@ -1573,6 +1763,16 @@ class App:
                   font=("Segoe UI", 8, "italic"), foreground="#8e8e93", justify="left").pack(side="left", padx=12)
 
         self.root.after(1500, lambda: self.refresh_community_builds(manual=False))
+
+    def _render_details_icons(self, names):
+        if not getattr(self, "det_icons", None):
+            return
+        for lbl, name in zip(self.det_icons, list(names) + [""] * 4):
+            photo = self._icon_photo(name) if name else None
+            if photo is not None:
+                lbl.config(image=photo, text="")
+            else:
+                lbl.config(image="", text="")
 
     def _toggle_token_visibility(self):
         self.token_entry.config(show="" if self.show_token_var.get() else "*")
@@ -1655,6 +1855,9 @@ class App:
     def _show_build_details(self):
         b = self._selected_build()
         self.lbl_build_details.config(text=GH.format_build_text(b) if b else "—")
+        perks = [p for p in (b.get("perks") if b else []) or []][:4]
+        self._render_details_icons(perks)
+        self._request_icons(perks)
 
     def copy_selected_build(self):
         b = self._selected_build()

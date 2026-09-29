@@ -8,6 +8,12 @@ dbd_randomizer_config.txt.migrated
 dbd_randomizer_config.json.broken
 .github_token
 
+# кэш иконок (качается с вики, не хранится в git)
+icons_cache/
+tools/wiki_files.json
+tools/perk_image_files.json
+tools/unresolved.json
+
 # локальные артефакты
 dbd_database.json
 community_builds_cache.json

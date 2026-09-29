@@ -34,7 +34,7 @@ import time
 import urllib.error
 import urllib.request
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 GITHUB_REPO = "yungspiderq/dbd-randomizer"
 API = "https://api.github.com"
 
@@ -46,14 +46,17 @@ UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
 # Файлы приложения. REQUIRED обязан быть в релизе (иначе обновление отклоняется),
 # OPTIONAL скачивается, если есть: так релиз v1.x (один файл) не блокирует проверку,
 # а релиз v2.x обновляет все модули сразу.
-REQUIRED_FILES = ("dbd_randomizer.py",)
-OPTIONAL_FILES = ("dbd_data.py", "dbd_github.py", "requirements.txt")
+REQUIRED_FILES = ("dbd_randomizer.py", "dbd_data.py", "dbd_github.py",
+                  "dbd_icons.py", "dbd_icons_store.py")
+OPTIONAL_FILES = ("requirements.txt",)
 UPDATABLE_FILES = REQUIRED_FILES + OPTIONAL_FILES
 # Маркер, который обязан присутствовать в скачанном файле (защита от подмены на HTML/пустышку).
 SANITY_MARKERS = {
     "dbd_randomizer.py": "def main(",
     "dbd_data.py": "KILLERS",
     "dbd_github.py": "APP_VERSION",
+    "dbd_icons.py": "PERK_ICONS",
+    "dbd_icons_store.py": "class IconStore",
     "requirements.txt": None,
 }
 MIN_FILE_SIZE = 20
