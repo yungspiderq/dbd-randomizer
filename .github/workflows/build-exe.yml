@@ -10,6 +10,9 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write          # нужно для gh release upload
+
 jobs:
   build:
     runs-on: windows-latest
