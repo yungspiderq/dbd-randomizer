@@ -34,7 +34,7 @@ import time
 import urllib.error
 import urllib.request
 
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.3.1"
 GITHUB_REPO = "yungspiderq/dbd-randomizer"
 API = "https://api.github.com"
 
@@ -43,7 +43,7 @@ BUILDS_FILE_NAME = "community_builds.json"
 # Корзина создана владельцем репозитория; любой клиент может читать и писать
 # ключ community_builds. Гонки разруливаются чтением-слиянием-повтором.
 KVDB_BASE = "https://kvdb.io"
-ANON_BUCKET_DEFAULT = "BjwyvdhjUKKk7SG9cbN9bw"
+ANON_BUCKET_DEFAULT = "BeFWn1piWxbk42EndgZ7wg"
 ANON_BUILDS_KEY = "community_builds"
 BUILDS_LOCAL_CACHE = "community_builds_cache.json"
 MAX_COMMUNITY_BUILDS = 200
