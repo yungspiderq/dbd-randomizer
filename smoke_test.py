@@ -60,8 +60,8 @@ def install_fake_tk():
 
     ttk = types.ModuleType("tkinter.ttk")
     for name in ("Style", "Frame", "Label", "Button", "Checkbutton", "Radiobutton",
-                 "Entry", "Notebook", "LabelFrame", "Scrollbar", "Progressbar", "Panedwindow",
-                 "Treeview"):
+                 "Entry", "Combobox", "Spinbox", "Notebook", "LabelFrame", "Scrollbar",
+                 "Progressbar", "Panedwindow", "Treeview", "Separator", "Menubutton"):
         setattr(ttk, name, mock.MagicMock())
     messagebox = types.ModuleType("tkinter.messagebox")
     messagebox.showinfo = mock.MagicMock()
@@ -168,7 +168,7 @@ class TestGeneration(unittest.TestCase):
     def test_all_modes_produce_valid_builds(self):
         for side in ("KILLER", "SURVIVOR"):
             pool = sorted(self.db["killers"] if side == "KILLER" else self.db["survivors"])
-            for mode in ("general", "unique", "mixed"):
+            for mode in ("general", "unique", "mixed", "any"):
                 fn = R.make_killer_build if side == "KILLER" else R.make_survivor_build
                 for _ in range(200):
                     b = fn(self.db, pool, perk_mode=mode, addons_enabled=True)
@@ -278,6 +278,15 @@ class TestIcons(unittest.TestCase):
             self.assertTrue(fname.lower().endswith(".png"), (name, fname))
             self.assertNotIn(" ", fname, (name, fname))
 
+    def test_stats_count_perks_and_addons(self):
+        import tempfile
+        st = R.IconStore(tempfile.mkdtemp(), enabled=True)
+        if not st.enabled:
+            self.skipTest("Pillow недоступен")
+        have, total = st.stats()
+        self.assertEqual(total, len(R.ICONS.PERK_ICONS) + len(R.ICONS.ADDON_ICONS))
+        self.assertEqual(have, 0)
+
     def test_store_resolves_addon_icons(self):
         import tempfile
         st = R.IconStore(tempfile.mkdtemp(), enabled=True)
@@ -295,6 +304,57 @@ class TestIcons(unittest.TestCase):
         self.assertFalse(st.is_cached("Надежда"))
         st.request(["Надежда"], on_ready=lambda r: None)      # не должно падать
         self.assertEqual(st.missing([]), [])
+
+
+class TestBuildPassport(unittest.TestCase):
+    """v2.3: название/описание билда и анонимная публикация без токена."""
+
+    def test_payload_carries_title_and_description(self):
+        p = R.GH.make_build_payload("KILLER", "Охотник", "Медвежий капкан",
+                                    ["Точильный камень", "Смоляная бутылка"],
+                                    ["Нетерпимость", "Зверская сила", "Пугающее присутствие",
+                                     "Шепоты"], "SpiderQ", title="Онрё", description="Ловите.")
+        self.assertEqual(p["title"], "Онрё")
+        self.assertEqual(p["description"], "Ловите.")
+        p2 = R.GH.make_build_payload("KILLER", "Охотник", "Медвежий капкан", [], [], "x")
+        self.assertNotIn("title", p2)
+        self.assertNotIn("description", p2)
+
+    def test_title_and_description_are_capped(self):
+        p = R.GH.make_build_payload("KILLER", "Охотник", "x", [], [], "x",
+                                    title="Ы" * 100, description="А" * 500)
+        self.assertLessEqual(len(p["title"]), 60)
+        self.assertLessEqual(len(p["description"]), 300)
+
+    def test_format_build_text_shows_passport(self):
+        b = {"side": "KILLER", "char": "Охотник", "power_or_item": "Медвежий капкан",
+             "addons": ["Точильный камень", "Смоляная бутылка"],
+             "perks": ["Нетерпимость", "Зверская сила", "Пугающее присутствие", "Шепоты"],
+             "author": "SpiderQ", "title": "Онрё", "description": "Ловите."}
+        txt = R.GH.format_build_text(b)
+        self.assertIn("Название: Онрё", txt)
+        self.assertIn("Описание: Ловите.", txt)
+        old = R.GH.format_build_text({k: v for k, v in b.items() if k not in ("title", "description")})
+        self.assertNotIn("Название:", old)          # старые билды читаются как раньше
+
+    def test_merge_builds_keeps_others_and_dedupes(self):
+        a = {"id": "a"}
+        b = {"id": "b"}
+        merged, dup = R.GH.merge_builds([a], b)
+        self.assertEqual([x["id"] for x in merged], ["b", "a"])
+        self.assertFalse(dup)
+        merged2, dup2 = R.GH.merge_builds(merged, b)
+        self.assertTrue(dup2)
+        self.assertEqual(len(merged2), 2)
+
+    def test_publish_anon_fails_gracefully_offline(self):
+        ok, msg = R.GH.publish_build_anon({"id": "x-1"}, bucket="nope",
+                                          base="http://127.0.0.1:9", tries=1)
+        self.assertFalse(ok)
+        self.assertTrue(msg)
+
+    def test_load_anon_offline_is_none(self):
+        self.assertIsNone(R.GH.load_anon_builds(bucket="nope", base="http://127.0.0.1:9"))
 
 
 class TestPerkModes(unittest.TestCase):
@@ -335,6 +395,22 @@ class TestPerkModes(unittest.TestCase):
             self.assertEqual(len(own & set(b["perks"])), 3, b["perks"])
             rest = (set(b["perks"]) - own).pop()
             self.assertNotIn(rest, self.db["killer_common_perks"], b["perks"])
+
+    def test_any_mode_draws_from_whole_pool(self):
+        import random
+        random.seed(3)
+        all_k = (set(self.db["killer_common_perks"]) |
+                 set(R.all_unique_perks(self.db, "KILLER")))
+        saw_common = saw_foreign = False
+        own = self._own("KILLER", "Каннибал")
+        for _ in range(60):
+            b = R.make_killer_build(self.db, ["Каннибал"], perk_mode="any")
+            self.assertEqual(len(set(b["perks"])), 4)
+            self.assertTrue(set(b["perks"]) <= all_k, b["perks"])
+            common = set(self.db["killer_common_perks"])
+            saw_common = saw_common or bool(set(b["perks"]) & common)
+            saw_foreign = saw_foreign or bool(set(b["perks"]) - own - common)
+        self.assertTrue(saw_common and saw_foreign, "режим any не перемешивает весь пул")
 
     def test_general_is_common_only(self):
         b = R.make_killer_build(self.db, ["Каннибал"], perk_mode="general")

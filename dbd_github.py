@@ -34,11 +34,17 @@ import time
 import urllib.error
 import urllib.request
 
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
 GITHUB_REPO = "yungspiderq/dbd-randomizer"
 API = "https://api.github.com"
 
 BUILDS_FILE_NAME = "community_builds.json"
+# Анонимный канал публикации (без токена GitHub): key-value хранилище kvdb.io.
+# Корзина создана владельцем репозитория; любой клиент может читать и писать
+# ключ community_builds. Гонки разруливаются чтением-слиянием-повтором.
+KVDB_BASE = "https://kvdb.io"
+ANON_BUCKET_DEFAULT = "BjwyvdhjUKKk7SG9cbN9bw"
+ANON_BUILDS_KEY = "community_builds"
 BUILDS_LOCAL_CACHE = "community_builds_cache.json"
 MAX_COMMUNITY_BUILDS = 200
 UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
@@ -189,12 +195,17 @@ def load_community_builds(cache_dir="."):
     return [], False
 
 
-def make_build_payload(side, char, power_or_item, addons, perks, author, version=APP_VERSION):
-    """Словарь билда в ТОМ ЖЕ формате, что и v1.1.x — старые публикации читаются как есть."""
+def make_build_payload(side, char, power_or_item, addons, perks, author, version=APP_VERSION,
+                       title="", description=""):
+    """Словарь билда в ТОМ ЖЕ формате, что и v1.1.x — старые публикации читаются как есть.
+
+    v2.3: необязательные ``title`` и ``description`` (конструктор билдов). Старые
+    клиенты их просто не показывают, новые — рисуют в карточке и списке.
+    """
     addons = list(addons or [])
     while len(addons) < 2:
         addons.append("—")
-    return {
+    out = {
         "id": f"{int(time.time())}-{random.randint(1000, 9999)}",
         "app_version": version,
         "date": time.strftime("%d.%m.%Y"),
@@ -205,6 +216,13 @@ def make_build_payload(side, char, power_or_item, addons, perks, author, version
         "addons": addons[:2],
         "perks": list(perks or [])[:4],
     }
+    title = (title or "").strip()
+    description = (description or "").strip()
+    if title:
+        out["title"] = title[:60]
+    if description:
+        out["description"] = description[:300]
+    return out
 
 
 def publish_build_to_github(build, token):
@@ -269,13 +287,66 @@ def publish_build_to_github(build, token):
         return False, f"Не удалось опубликовать: {exc}"
 
 
+def load_anon_builds(bucket=ANON_BUCKET_DEFAULT, key=ANON_BUILDS_KEY, base=KVDB_BASE):
+    """Читает список билдов из анонимного хранилища kvdb.io. None = сеть недоступна."""
+    try:
+        raw = _http_get(f"{base}/{bucket}/{key}", timeout=12)
+        data = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return None
+    if isinstance(data, list):
+        return [b for b in data if isinstance(b, dict)]
+    return []
+
+
+def merge_builds(existing, new_build, limit=MAX_COMMUNITY_BUILDS):
+    """Слияние без потери чужих данных: дедупликация по id, новинка сверху."""
+    builds = [b for b in (existing or []) if isinstance(b, dict)]
+    if any(b.get("id") == new_build.get("id") for b in builds):
+        return builds, True                     # уже опубликован
+    builds.insert(0, new_build)
+    return builds[:limit], False
+
+
+def publish_build_anon(build, bucket=ANON_BUCKET_DEFAULT, key=ANON_BUILDS_KEY,
+                       base=KVDB_BASE, tries=3):
+    """Публикация БЕЗ токена: read → merge → write → проверка, с повторами при гонке."""
+    url = f"{base}/{bucket}/{key}"
+    last = ""
+    for _ in range(max(1, tries)):
+        current = load_anon_builds(bucket, key, base)
+        if current is None:
+            current = []
+        merged, dup = merge_builds(current, build)
+        if dup:
+            return True, "Такой билд уже опубликован."
+        try:
+            _http_request(url, data=merged, method="PUT",
+                          headers={"Content-Type": "application/json"})
+        except Exception as exc:
+            last = str(exc)
+            continue
+        check = load_anon_builds(bucket, key, base) or []
+        if any(b.get("id") == build.get("id") for b in check):
+            return True, ("Билд опубликован в анонимном облаке (kvdb.io). "
+                          "Он появится у всех, кто читает список из этого канала.")
+        last = "запись не подтвердилась при повторном чтении"
+    return False, f"Не удалось опубликовать анонимно: {last}"
+
+
 def format_build_text(b):
     """Карточка билда для копирования в буфер обмена (формат v1.1.x)."""
     side_icon = "👹" if b.get("side") == "KILLER" else "👤"
     addons = list(b.get("addons") or ["—", "—"])
     lines = [
         f"=== DBD БИЛД {side_icon} ===",
-        f"Автор: {b.get('author', '—')} | {b.get('date', '')}",
+    ]
+    if (b.get("title") or "").strip():
+        lines.append(f"Название: {b['title']}")
+    lines.append(f"Автор: {b.get('author', '—')} | {b.get('date', '')}")
+    if (b.get("description") or "").strip():
+        lines.append(f"Описание: {b['description']}")
+    lines += [
         f"Персонаж: {b.get('char', '—')}",
         f"{'Сила' if b.get('side') == 'KILLER' else 'Предмет'}: {b.get('power_or_item', '—')}",
         "Аддоны:",

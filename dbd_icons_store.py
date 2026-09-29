@@ -92,10 +92,14 @@ class IconStore:
 
     # ------------------------------------------------------------- загрузка --
     def fetch_one(self, name):
-        """Скачивает одну иконку. Возвращает путь или None."""
+        """Скачивает одну иконку (навыка ИЛИ аддона). Возвращает путь или None."""
         if not self.enabled:
             return None
-        rel = ICONS.PERK_ICONS.get(name) if ICONS else None
+        rel = None
+        for mapping in self._maps():
+            rel = mapping.get(name)
+            if rel:
+                break
         if not rel:
             return None
         url = ICONS.ICON_BASE + urllib.parse.quote(rel)
@@ -155,10 +159,12 @@ class IconStore:
                 pass
 
     def fetch_all(self, on_progress=None):
-        """Массовая докачка всей карты (кнопка «Скачать все иконки»)."""
+        """Массовая докачка всех карт — навыки и аддоны (кнопка «Скачать все иконки»)."""
         if not self.enabled or not ICONS:
             return 0, 0
-        names = list(ICONS.PERK_ICONS)
+        names = []
+        for mapping in self._maps():
+            names += list(mapping)
         todo = self.missing(names)
         done = 0
         for i, name in enumerate(todo, 1):

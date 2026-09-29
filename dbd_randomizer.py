@@ -286,7 +286,7 @@ def default_config():
         cfg["timings"][key] = val
     cfg["options"] = dict(OPTION_DEFAULTS)
     cfg["owned"] = {"killers": [], "survivors": []}
-    cfg["publish"] = {"nickname": "", "gh_token": ""}
+    cfg["publish"] = {"nickname": "", "gh_token": "", "backend": "github", "anon_bucket": ""}
     cfg["update"] = {"auto": True, "allow_branch": False, "skip_tag": ""}
     return cfg
 
@@ -493,7 +493,8 @@ def pick_perks(db, side, char, perk_mode="mixed", respect_owned=False):
 
     ``general`` — только общие (есть у всех);
     ``mixed``   — 3 своих уникальных + 1 общий;
-    ``unique``  — 3 своих уникальных + 1 уникальный любого другого персонажа.
+    ``unique``  — 3 своих уникальных + 1 уникальный любого другого персонажа;
+    ``any``     — полностью случайные 4 из всех навыков стороны.
 
     При respect_owned=True каждый подпул фильтруется белым списком, а недостающие
     слоты остаются EMPTY (автоэкипировка не будет тыкать в то, чего нет).
@@ -509,7 +510,9 @@ def pick_perks(db, side, char, perk_mode="mixed", respect_owned=False):
     foreign = [p for p in all_unique_perks(db, side)
                if p not in unique and p not in set(common)]
 
-    if perk_mode == "unique":
+    if perk_mode == "any":
+        stages = ((common + unique + foreign, 4),)
+    elif perk_mode == "unique":
         stages = ((unique, len(unique)), (foreign, 4), (common, 4))
     elif perk_mode == "mixed":
         stages = ((unique, len(unique)), (common, 4), (foreign, 4))
@@ -604,6 +607,8 @@ def build_to_text(b):
 def build_to_clipboard_text(b):
     """Компактный вариант для копирования/чата."""
     head = b["char"]
+    if (b.get("title") or "").strip():
+        head = f"«{b['title'].strip()}» — {head}"
     item = b["power_or_item"]
     addons = " + ".join(a for a in b["addons"] if a not in (EMPTY, NO_ADDONS)) or "без аддонов"
     perks = ", ".join(b["perks"])
@@ -981,12 +986,15 @@ class App:
         self.tab_chars = ttk.Frame(self.notebook)
         self.tab_coords = ttk.Frame(self.notebook)
         self.tab_builds = ttk.Frame(self.notebook)
+        self.tab_maker = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_main, text=" 🎲 БИЛД ")
+        self.notebook.add(self.tab_maker, text=" 🛠 КОНСТРУКТОР ")
         self.notebook.add(self.tab_builds, text=" 🌍 БИЛДЫ СООБЩЕСТВА ")
         self.notebook.add(self.tab_chars, text=" 🎭 ПЕРСОНАЖИ ")
         self.notebook.add(self.tab_coords, text=" 🎯 КЛИКИ И ТАЙМИНГИ ")
 
         self._build_main_tab()
+        self._build_maker_tab()
         self._build_builds_tab()
         self._build_chars_tab()
         self._build_coords_tab()
@@ -1029,6 +1037,7 @@ class App:
         self.perk_mode_var = tk.StringVar(value=self.cfg["options"].get("perk_mode", "general"))
         for text, value, hint in (("Смешанные: 3 своих + 1 общий", "mixed", ""),
                                   ("Уникальные: 3 своих + 1 чужой уникальный", "unique", ""),
+                                  ("Случайные: любые 4 из всех навыков", "any", ""),
                                   ("Общие: только навыки, которые есть у всех", "general", "")):
             ttk.Radiobutton(opt, text=text, value=value, variable=self.perk_mode_var).pack(anchor="w", padx=8, pady=1)
         self.addons_var = tk.BooleanVar(value=self.cfg["options"].get("addons_enabled", True))
@@ -1235,6 +1244,236 @@ class App:
         self._update_icon_hint()
         if self.build:
             self._render_build()
+
+    # ---- вкладка «Конструктор» ----------------------------------------------
+    def _build_maker_tab(self):
+        top = ttk.Frame(self.tab_maker)
+        top.pack(fill="x", padx=10, pady=(8, 2))
+        ttk.Label(top, text="Соберите билд вручную: название, описание, персонаж, аддоны и навыки. "
+                            "Готовый билд можно положить в карточку, скопировать, экипировать или опубликовать.",
+                  foreground="#ff9500", font=("Segoe UI", 9, "italic"),
+                  justify="left", wraplength=940).pack(fill="x")
+
+        box = ttk.LabelFrame(self.tab_maker, text=" ПАСПОРТ БИЛДА ")
+        box.pack(fill="x", padx=10, pady=4)
+        r = ttk.Frame(box)
+        r.pack(fill="x", padx=8, pady=(6, 2))
+        ttk.Label(r, text="Название:", width=10, anchor="w").pack(side="left")
+        self.mk_title = tk.Entry(r, width=52, bg="#232323", fg="#ffffff",
+                                 insertbackground="white", bd=1, relief="solid")
+        self.mk_title.pack(side="left", padx=4)
+        r2 = ttk.Frame(box)
+        r2.pack(fill="x", padx=8, pady=(0, 6))
+        ttk.Label(r2, text="Описание:", width=10, anchor="w").pack(side="left")
+        self.mk_desc = tk.Text(r2, height=3, bg="#232323", fg="#ffffff",
+                               insertbackground="white", bd=1, relief="solid",
+                               font=("Segoe UI", 9), wrap="word")
+        self.mk_desc.pack(side="left", fill="x", expand=True, padx=4)
+
+        sel = ttk.LabelFrame(self.tab_maker, text=" СОСТАВ ")
+        sel.pack(fill="both", expand=True, padx=10, pady=4)
+        row = ttk.Frame(sel)
+        row.pack(fill="x", padx=8, pady=(6, 2))
+        ttk.Label(row, text="Сторона:", width=10, anchor="w").pack(side="left")
+        self.mk_side_var = tk.StringVar(value="KILLER")
+        for text, value, color in (("👹 Маньяк", "KILLER", "#ff6b60"),
+                                   ("👤 Выживший", "SURVIVOR", "#5ac8fa")):
+            tk.Radiobutton(row, text=text, variable=self.mk_side_var, value=value,
+                           bg="#121212", fg=color, selectcolor="#1c1c1e",
+                           activebackground="#121212", activeforeground=color,
+                           font=("Segoe UI", 9, "bold"),
+                           command=self._mk_on_side).pack(side="left", padx=8)
+
+        self.mk_row_char = ttk.Frame(sel)
+        self.mk_row_char.pack(fill="x", padx=8, pady=2)
+        ttk.Label(self.mk_row_char, text="Персонаж:", width=10, anchor="w").pack(side="left")
+        self.mk_char = ttk.Combobox(self.mk_row_char, state="readonly", width=22)
+        self.mk_char.pack(side="left", padx=4)
+        self.mk_char.bind("<<ComboboxSelected>>", lambda e: self._mk_on_char())
+        self.mk_power_lbl = ttk.Label(self.mk_row_char, text="", foreground="#ff9500",
+                                      font=("Segoe UI", 9))
+        self.mk_power_lbl.pack(side="left", padx=10)
+
+        self.mk_row_item = ttk.Frame(sel)
+        ttk.Label(self.mk_row_item, text="Категория:", width=10, anchor="w").pack(side="left")
+        self.mk_cat = ttk.Combobox(self.mk_row_item, state="readonly", width=18)
+        self.mk_cat.pack(side="left", padx=4)
+        self.mk_cat.bind("<<ComboboxSelected>>", lambda e: self._mk_on_cat())
+        ttk.Label(self.mk_row_item, text="Предмет:").pack(side="left", padx=(10, 2))
+        self.mk_item = ttk.Combobox(self.mk_row_item, state="readonly", width=26)
+        self.mk_item.pack(side="left", padx=4)
+        self.mk_item.bind("<<ComboboxSelected>>", lambda e: self._mk_on_cat())
+
+        self.mk_row_addons = ttk.Frame(sel)
+        self.mk_row_addons.pack(fill="x", padx=8, pady=2)
+        ttk.Label(self.mk_row_addons, text="Аддоны:", width=10, anchor="w").pack(side="left")
+        self.mk_addons = []
+        for _ in range(2):
+            cb = ttk.Combobox(self.mk_row_addons, width=28)
+            cb.pack(side="left", padx=4)
+            self.mk_addons.append(cb)
+
+        self.mk_perks = []
+        for i in range(4):
+            prow = ttk.Frame(sel)
+            prow.pack(fill="x", padx=8, pady=2)
+            ttk.Label(prow, text=f"Навык {i + 1}:", width=10, anchor="w").pack(side="left")
+            cb = ttk.Combobox(prow, width=44)
+            cb.pack(side="left", padx=4)
+            self.mk_perks.append(cb)
+
+        btns = ttk.Frame(self.tab_maker)
+        btns.pack(fill="x", padx=10, pady=(4, 10))
+        ttk.Button(btns, text="🎲 Случайные перки",
+                   command=self._mk_random_perks).pack(side="left", padx=3)
+        ttk.Button(btns, text="👁 В карточку",
+                   command=lambda: self._mk_to_card(False)).pack(side="left", padx=3)
+        ttk.Button(btns, text="📋 Копировать", command=self._mk_copy).pack(side="left", padx=3)
+        ttk.Button(btns, text="⚡ Экипировать", style="Equip.TButton",
+                   command=self._mk_equip).pack(side="left", padx=3)
+        ttk.Button(btns, text="🌍 Опубликовать", command=self._mk_publish).pack(side="left", padx=3)
+        self._mk_on_side()
+
+    # -- вспомогательные для конструктора --------------------------------------
+    def _mk_chars(self):
+        names = self.db["killers"] if self.mk_side_var.get() == "KILLER" else self.db["survivors"]
+        return sorted(names)
+
+    def _mk_perk_pool(self):
+        side = self.mk_side_var.get()
+        common = (self.db.get("killer_common_perks") if side == "KILLER"
+                  else self.db.get("surv_common_perks"))
+        return list(dict.fromkeys(list(common) + all_unique_perks(self.db, side)))
+
+    def _mk_addon_pool(self):
+        side, char = self.mk_side_var.get(), self.mk_char.get()
+        if side == "KILLER":
+            return list(self.db["killers"].get(char, {}).get("addons", []))
+        return list(self.db["survivor_items"].get(self.mk_cat.get(), {}).get("addons", []))
+
+    def _mk_on_side(self):
+        chars = self._mk_chars()
+        self.mk_char.configure(values=chars)
+        if self.mk_char.get() not in chars:
+            self.mk_char.set(chars[0] if chars else "")
+        if self.mk_side_var.get() == "SURVIVOR":
+            cats = sorted(self.db["survivor_items"])
+            self.mk_cat.configure(values=cats)
+            if self.mk_cat.get() not in cats:
+                self.mk_cat.set(cats[0] if cats else "")
+            self.mk_row_item.pack(fill="x", padx=8, pady=2, before=self.mk_row_addons)
+        else:
+            self.mk_row_item.pack_forget()
+        self._mk_on_char()
+
+    def _mk_on_char(self):
+        side, char = self.mk_side_var.get(), self.mk_char.get()
+        pool = self._mk_perk_pool()
+        for cb in self.mk_perks:
+            cb.configure(values=pool)
+        if side == "KILLER":
+            self.mk_power_lbl.config(text=f"⚡ {self.db['killers'].get(char, {}).get('power', '')}")
+        else:
+            self.mk_power_lbl.config(text="")
+            self._mk_on_cat()
+            return
+        self._mk_fill_addons()
+
+    def _mk_on_cat(self):
+        cat = self.mk_cat.get()
+        items = list(self.db["survivor_items"].get(cat, {}).get("items", []))
+        self.mk_item.configure(values=items)
+        if self.mk_item.get() not in items:
+            self.mk_item.set(items[0] if items else "")
+        self._mk_fill_addons()
+
+    def _mk_fill_addons(self):
+        pool = self._mk_addon_pool()
+        for cb in self.mk_addons:
+            cur = cb.get()
+            cb.configure(values=pool)
+            if cur not in pool:
+                cb.set("")
+
+    def _mk_random_perks(self):
+        for cb, perk in zip(self.mk_perks, _pick(self._mk_perk_pool(), 4)):
+            cb.set(perk)
+
+    def _mk_collect(self):
+        char = self.mk_char.get().strip()
+        if not char:
+            messagebox.showwarning("Конструктор", "Выберите персонажа.")
+            return None
+        side = self.mk_side_var.get()
+        if side == "KILLER":
+            power = self.db["killers"].get(char, {}).get("power", EMPTY)
+            cat = ""
+        else:
+            power = self.mk_item.get().strip() or EMPTY
+            cat = self.mk_cat.get()
+        perks = [cb.get().strip() for cb in self.mk_perks]
+        if len(perks) < 4 or any(not p for p in perks) or len(set(perks)) < 4:
+            messagebox.showwarning("Конструктор",
+                                   "Заполните 4 РАЗНЫХ навыка (или нажмите «🎲 Случайные перки»).")
+            return None
+        addons = [cb.get().strip() or EMPTY for cb in self.mk_addons]
+        return {
+            "side": side,
+            "char": char,
+            "power_or_item": power,
+            "category": cat,
+            "power_is_item": side == "SURVIVOR",
+            "addons": addons[:2],
+            "perks": perks[:4],
+            "title": self.mk_title.get().strip()[:60],
+            "description": self.mk_desc.get("1.0", "end").strip()[:300],
+        }
+
+    def _mk_to_card(self, equip):
+        b = self._mk_collect()
+        if not b:
+            return
+        self.build = b
+        self._render_build()
+        self.btn_equip.config(state="normal")
+        self.notebook.select(self.tab_main)
+        if equip:
+            self.start_equip()
+
+    def _mk_copy(self):
+        b = self._mk_collect()
+        if not b:
+            return
+        try:
+            pyperclip.copy(build_to_clipboard_text(b))
+            self.set_status("Билд из конструктора скопирован.", "#34c759")
+        except Exception as exc:
+            messagebox.showerror("Буфер обмена", str(exc))
+
+    def _mk_equip(self):
+        self._mk_to_card(True)
+
+    def _mk_publish(self):
+        b = self._mk_collect()
+        if not b:
+            return
+        self.build = b
+        self._render_build()
+        self.publish_current_build()
+
+    def _on_backend_change(self):
+        if not getattr(self, "backend_var", None):
+            return
+        if self.backend_var.get() == "anon":
+            if not self.bucket_entry.get().strip():
+                self.bucket_entry.delete(0, "end")
+                self.bucket_entry.insert(0, GH.ANON_BUCKET_DEFAULT)
+            hint = ("Без токена: билд уходит в общую корзину kvdb.io и виден всем, кто читает "
+                    "этот канал. Запись анонимная, без паролей и писем.")
+        else:
+            hint = ("Через GitHub Contents API: нужен токен с правом Contents: Write "
+                    "(вкладка хранит его локально).")
+        self.lbl_backend_hint.config(text=hint)
 
     # ---- вкладка «Персонажи» -------------------------------------------------
     def _make_scrolled(self, parent):
@@ -1536,8 +1775,17 @@ class App:
         b = self.build
         if not b:
             return
-        self.card_hint.config(text="")
-        self.card_author.config(text=f"🌍 билд сообщества от {b['author']}" if b.get("author") else "")
+        title = (b.get("title") or "").strip()
+        desc = (b.get("description") or "").strip()
+        self.card_hint.config(text=desc)
+        head = ""
+        if b.get("author"):
+            head = f"🌍 билд сообщества от {b['author']}"
+        elif title or desc:
+            head = "🛠 собрано в конструкторе"
+        if title:
+            head = (head + " · " if head else "") + f"«{title}»"
+        self.card_author.config(text=head)
         if b["side"] == "KILLER":
             self.card_char.config(text=f"👹 {b['char']}", fg="#ff6b60")
             self.card_main.config(text=f"⚡ {b['power_or_item']}")
@@ -1810,11 +2058,14 @@ class App:
 
         list_frame = ttk.Frame(self.tab_builds)
         list_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        self.builds_tree = ttk.Treeview(list_frame, columns=("side", "author", "char", "main", "perks"),
+        self.builds_tree = ttk.Treeview(list_frame,
+                                        columns=("side", "author", "title", "char", "main", "perks"),
                                         show="headings", height=12)
-        for col, text, width, anch in (("side", "Сторона", 90, "center"), ("author", "Автор", 110, "w"),
-                                       ("char", "Персонаж", 150, "w"), ("main", "Сила / Предмет", 190, "w"),
-                                       ("perks", "Навыки", 360, "w")):
+        for col, text, width, anch in (("side", "Сторона", 84, "center"), ("author", "Автор", 96, "w"),
+                                       ("title", "Название", 130, "w"),
+                                       ("char", "Персонаж", 130, "w"),
+                                       ("main", "Сила / Предмет", 160, "w"),
+                                       ("perks", "Навыки", 320, "w")):
             self.builds_tree.heading(col, text=text)
             self.builds_tree.column(col, width=width, anchor=anch)
         tsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.builds_tree.yview)
@@ -1865,6 +2116,31 @@ class App:
         tk.Checkbutton(r2, text="показать", variable=self.show_token_var, bg="#121212", fg="#8e8e93",
                        selectcolor="#232323", activebackground="#121212", font=("Segoe UI", 8),
                        command=self._toggle_token_visibility).pack(side="left")
+        rbx = ttk.LabelFrame(sett, text=" КАК ПУБЛИКОВАТЬ ")
+        rbx.pack(fill="x", padx=8, pady=(6, 2))
+        self.backend_var = tk.StringVar(value=self.cfg["publish"].get("backend", "github"))
+        tk.Radiobutton(rbx, text="GitHub (нужен токен)", variable=self.backend_var,
+                       value="github", bg="#121212", fg="#e0e0e0", selectcolor="#232323",
+                       activebackground="#121212", activeforeground="#ffffff",
+                       font=("Segoe UI", 9), anchor="w",
+                       command=self._on_backend_change).pack(fill="x", padx=8, pady=(4, 0))
+        tk.Radiobutton(rbx, text="Анонимное облако kvdb.io (БЕЗ токена)",
+                       variable=self.backend_var, value="anon", bg="#121212", fg="#e0e0e0",
+                       selectcolor="#232323", activebackground="#121212",
+                       activeforeground="#ffffff", font=("Segoe UI", 9), anchor="w",
+                       command=self._on_backend_change).pack(fill="x", padx=8)
+        brow = ttk.Frame(rbx)
+        brow.pack(fill="x", padx=8, pady=(0, 6))
+        ttk.Label(brow, text="Корзина:", font=("Segoe UI", 8)).pack(side="left")
+        self.bucket_entry = tk.Entry(brow, width=26, bg="#232323", fg="#ffffff",
+                                     insertbackground="white", bd=1, relief="solid")
+        self.bucket_entry.insert(0, self.cfg["publish"].get("anon_bucket", ""))
+        self.bucket_entry.pack(side="left", padx=4)
+        self.lbl_backend_hint = ttk.Label(rbx, text="", foreground="#8e8e93",
+                                          font=("Segoe UI", 8), justify="left", wraplength=380)
+        self.lbl_backend_hint.pack(fill="x", padx=8, pady=(0, 6))
+        self._on_backend_change()
+
         r3 = ttk.Frame(sett)
         r3.pack(fill="x", padx=8, pady=(2, 8))
         ttk.Button(r3, text="💾 Сохранить настройки", command=self.save_publish_settings).pack(side="left")
@@ -1890,6 +2166,8 @@ class App:
     def save_publish_settings(self):
         self.cfg["publish"]["nickname"] = self.nick_entry.get().strip()
         self.cfg["publish"]["gh_token"] = self.token_entry.get().strip()
+        self.cfg["publish"]["backend"] = self.backend_var.get()
+        self.cfg["publish"]["anon_bucket"] = self.bucket_entry.get().strip()
         save_config(self.cfg)
         self.set_status("Настройки публикации сохранены.", "#34c759")
         self.log("Сохранены ник и токен публикации (токен — только в локальном конфиге).")
@@ -1899,7 +2177,18 @@ class App:
 
     def _load_builds_worker(self, manual):
         builds, online = GH.load_community_builds(APP_DIR)
+        builds = list(builds or [])
+        bucket = self.anon_bucket()
+        anon = GH.load_anon_builds(bucket=bucket) if bucket else None
+        if anon:
+            have = {b.get("id") for b in builds if isinstance(b, dict)}
+            builds += [b for b in anon if isinstance(b, dict) and b.get("id") not in have]
+            online = True
         self.ui_q.put(("builds", (builds, online, manual)))
+
+    def anon_bucket(self):
+        return (str(self.cfg["publish"].get("anon_bucket") or "").strip()
+                or GH.ANON_BUCKET_DEFAULT)
 
     def _on_builds_loaded(self, builds, online, manual):
         self.community_builds = builds if isinstance(builds, list) else []
@@ -1946,8 +2235,8 @@ class App:
             perks = " | ".join(str(x) for x in b.get("perks", []))
             tag = "mine" if b.get("local") else ("killer" if b.get("side") == "KILLER" else "survivor")
             tree.insert("", "end", iid=str(i), tags=(tag,),
-                        values=(side_txt, b.get("author", "—"), b.get("char", "—"),
-                                b.get("power_or_item", "—"), perks))
+                        values=(side_txt, b.get("author", "—"), b.get("title") or "—",
+                                b.get("char", "—"), b.get("power_or_item", "—"), perks))
         if selected is not None and tree.exists(selected):
             tree.selection_set(selected)
 
@@ -2033,24 +2322,35 @@ class App:
             except Exception:
                 pass
             save_config(self.cfg)
-        token = GH.resolve_token(self.cfg)
-        if not token:
-            token = simpledialog.askstring("Публикация",
-                                           "Введите токен GitHub (нужны права на запись в репозиторий).\n"
-                                           "Сохранить навсегда можно во вкладке «БИЛДЫ»:",
-                                           show="*", parent=self.root)
+        backend = self.backend_var.get() if getattr(self, "backend_var", None) else \
+            self.cfg["publish"].get("backend", "github")
+        token, bucket = None, self.anon_bucket()
+        if backend != "anon":
+            token = GH.resolve_token(self.cfg)
             if not token:
-                return
-            token = token.strip()
+                token = simpledialog.askstring("Публикация",
+                                               "Введите токен GitHub (нужны права на запись в репозиторий).\n"
+                                               "Сохранить навсегда можно во вкладке «БИЛДЫ».\n"
+                                               "Хотите публиковать БЕЗ токена? Отмените ввод и выберите\n"
+                                               "«Анонимное облако» в настройках вкладки «БИЛДЫ».",
+                                               show="*", parent=self.root)
+                if not token:
+                    return
+                token = token.strip()
         addons = [EMPTY if a == NO_ADDONS else a for a in b["addons"]]
         payload = GH.make_build_payload(b["side"], b["char"], b["power_or_item"], addons,
-                                        b["perks"], author)
+                                        b["perks"], author,
+                                        title=b.get("title", ""), description=b.get("description", ""))
         self.btn_publish.config(state="disabled")
-        self.set_status("Публикуем билд на GitHub…", "#ffcc00")
-        threading.Thread(target=self._publish_worker, args=(payload, token), daemon=True).start()
+        self.set_status("Публикуем билд…", "#ffcc00")
+        threading.Thread(target=self._publish_worker,
+                         args=(payload, token, bucket), daemon=True).start()
 
-    def _publish_worker(self, payload, token):
-        ok, msg = GH.publish_build_to_github(payload, token)
+    def _publish_worker(self, payload, token, bucket=None):
+        if token:
+            ok, msg = GH.publish_build_to_github(payload, token)
+        else:
+            ok, msg = GH.publish_build_anon(payload, bucket=bucket or self.anon_bucket())
 
         def done():
             self.btn_publish.config(state="normal")
@@ -2452,7 +2752,7 @@ def selftest():
     ok = True
     for side in ("KILLER", "SURVIVOR"):
         pool = sorted(db["killers"] if side == "KILLER" else db["survivors"])
-        for mode in ("general", "unique", "mixed"):
+        for mode in ("general", "unique", "mixed", "any"):
             for _ in range(60):
                 fn = make_killer_build if side == "KILLER" else make_survivor_build
                 b = fn(db, pool, perk_mode=mode)
