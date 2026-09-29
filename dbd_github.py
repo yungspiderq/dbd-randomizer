@@ -34,7 +34,7 @@ import time
 import urllib.error
 import urllib.request
 
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 GITHUB_REPO = "yungspiderq/dbd-randomizer"
 API = "https://api.github.com"
 
@@ -43,7 +43,7 @@ BUILDS_FILE_NAME = "community_builds.json"
 # Проект создаёт владелец (бесплатно, без карты); правила дают всем чтение и
 # СОЗДАНИЕ записей (create-only), поэтому чужие билды нельзя править или удалять.
 # Запись = append (POST с push-ключом) — гонок с перезаписью чужих данных нет.
-FIREBASE_BASE_DEFAULT = ""          # вшивается в релиз после создания проекта
+FIREBASE_BASE_DEFAULT = "https://dbdbuilds-41c0c-default-rtdb.firebaseio.com"
 FIREBASE_NODE = "community_builds"
 BUILDS_LOCAL_CACHE = "community_builds_cache.json"
 MAX_COMMUNITY_BUILDS = 200
