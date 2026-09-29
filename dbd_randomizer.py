@@ -1119,14 +1119,25 @@ class App:
 
         self.card_author = tk.Label(self.card, anchor="w", fg="#ffd60a", bg="#161616",
                                     font=("Segoe UI", 9, "italic"))
-        self.card_char = tk.Label(self.card, anchor="w", fg="#ffffff", bg="#161616",
+        self.card_author.pack(fill="x", padx=14, pady=(2, 0))
+        row_char = tk.Frame(self.card, **pad)
+        row_char.pack(fill="x", padx=14, pady=(2, 0))
+        self.card_char_img = tk.Label(row_char, bg="#161616",
+                                      width=ICON_SIZE + 12, height=ICON_SIZE + 12)
+        self.card_char_img.pack(side="left", padx=(0, 8))
+        self.card_char = tk.Label(row_char, anchor="w", fg="#ffffff", bg="#161616",
                                   font=("Segoe UI", 15, "bold"))
-        self.card_main = tk.Label(self.card, anchor="w", fg="#ff9500", bg="#161616",
-                                  font=("Segoe UI", 11, "bold"), wraplength=420, justify="left")
+        self.card_char.pack(side="left", fill="x", expand=True)
+        row_main = tk.Frame(self.card, **pad)
+        row_main.pack(fill="x", padx=14, pady=(2, 0))
+        self.card_main_img = tk.Label(row_main, bg="#161616", width=ICON_SIZE, height=ICON_SIZE)
+        self.card_main_img.pack(side="left", padx=(0, 8))
+        self.card_main = tk.Label(row_main, anchor="w", fg="#ff9500", bg="#161616",
+                                  font=("Segoe UI", 11, "bold"), wraplength=380, justify="left")
+        self.card_main.pack(side="left", fill="x", expand=True)
         self.card_sub = tk.Label(self.card, anchor="w", fg="#6e6e73", bg="#161616",
                                  font=("Segoe UI", 9, "italic"))
-        for w in (self.card_author, self.card_char, self.card_main, self.card_sub):
-            w.pack(fill="x", padx=14, pady=(2, 0))
+        self.card_sub.pack(fill="x", padx=14, pady=(2, 0))
 
         self._card_section("🔧 АДДОНЫ")
         self.card_addons = []
@@ -1765,6 +1776,8 @@ class App:
         self.card_char.config(text="Билд не сгенерирован" if text else filler)
         self.card_main.config(text="")
         self.card_sub.config(text="")
+        self.card_char_img.config(image="", text="")
+        self.card_main_img.config(image="", text="")
         for img, lbl in self.card_addons:
             img.config(image="", text="")
             lbl.config(text=filler, fg="#4a4a4a")
@@ -1795,6 +1808,16 @@ class App:
             self.card_char.config(text=f"👤 {b['char']}", fg="#5ac8fa")
             self.card_main.config(text=f"📦 {b['power_or_item']}")
             self.card_sub.config(text=f"категория: {b.get('category', '')}")
+
+        for img_label, name in ((self.card_char_img, b["char"]),
+                                (self.card_main_img, b["power_or_item"])):
+            photo = self._icon_photo(name) if name and name not in (EMPTY, NO_ADDONS) else None
+            if photo is not None:
+                img_label.config(image=photo, text="")
+            else:
+                img_label.config(image="", text="")
+        want_extra = [n for n in (b["char"], b["power_or_item"])
+                      if n and n not in (EMPTY, NO_ADDONS)]
 
         want_addons = []
         for (img, lbl), addon in zip(self.card_addons, list(b["addons"]) + ["", ""]):
@@ -1829,7 +1852,7 @@ class App:
             lbl.config(text=f"{i + 1}.  {perk}", fg="#34c759")
             want.append(perk)
         self._render_details_icons(want)
-        self._request_icons(want + want_addons)
+        self._request_icons(want + want_addons + want_extra)
 
     def get_coord(self, key):
         ent = self._coord_widgets.get(key)

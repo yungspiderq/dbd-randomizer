@@ -278,13 +278,55 @@ class TestIcons(unittest.TestCase):
             self.assertTrue(fname.lower().endswith(".png"), (name, fname))
             self.assertNotIn(" ", fname, (name, fname))
 
+    def test_character_power_item_icons_coverage(self):
+        """Портреты/силы/предметы покрыты иконками; исключения — контент, у которого
+        на вики физически нет файлов (новые убийцы K38+ и две старыми карты)."""
+        icons = R.ICONS
+        miss_s = [k for k in self.db["survivors"] if k not in icons.SURVIVOR_PORTRAITS]
+        miss_p = [self.db["killers"][k]["power"] for k in self.db["killers"]
+                  if self.db["killers"][k]["power"] not in icons.POWER_ICONS]
+        miss_i = [i for v in self.db["survivor_items"].values() for i in v["items"]
+                  if i not in icons.ITEM_ICONS]
+        miss_k = [k for k in self.db["killers"] if k not in icons.KILLER_SPRITE["ports"]]
+        self.assertEqual(miss_s, [])
+        self.assertEqual(set(miss_p), {"Одноглазый ужас", "Страх Фазбера", "Плоть без тела"})
+        self.assertEqual(set(miss_i), {"Небрежная карта", "Карта с подписями"})
+        self.assertEqual(set(miss_k),
+                         {"Егерь", "Гуль", "Аниматроник", "Красу", "Первый", "Слэшер", "Правосудие"})
+
+    def test_sprite_filename_and_crop(self):
+        import os, tempfile
+        from PIL import Image
+        st = R.IconStore(tempfile.mkdtemp(), enabled=True)
+        if not st.enabled:
+            self.skipTest("Pillow недоступен")
+        self.assertEqual(st.filename("Охотник"),
+                         "KP_%03d.png" % R.ICONS.KILLER_SPRITE["ports"]["Охотник"])
+        meta = {"url": "http://127.0.0.1:9/sprite.png", "size": 8, "cols": 2,
+                "ports": {"Охотник": 3}}            # фейковый спрайт: pos 3 -> ряд 1, колонка 0
+        im = Image.new("RGBA", (32, 32), (10, 20, 30, 255))
+        for x in range(0, 8):
+            for y in range(8, 16):
+                im.putpixel((x, y), (255, 0, 0, 255))
+        for y in range(32):                                  # шум: файл > MIN_SIZE
+            for x in range(16, 32):
+                im.putpixel((x, y), ((x * 7 + y * 13) % 256, x % 256, y % 256, 255))
+        im.save(os.path.join(st.cache_dir, "KillerPortraitsSprite.png"), compress_level=0)
+        path = st._fetch_killer_portrait("Охотник", meta)           # сеть не нужна: спрайт на диске
+        self.assertTrue(path and os.path.exists(path))
+        crop = Image.open(path)
+        self.assertEqual(crop.size, (8, 8))
+        self.assertEqual(crop.getpixel((0, 0))[:3], (255, 0, 0))
+
     def test_stats_count_perks_and_addons(self):
         import tempfile
         st = R.IconStore(tempfile.mkdtemp(), enabled=True)
         if not st.enabled:
             self.skipTest("Pillow недоступен")
         have, total = st.stats()
-        self.assertEqual(total, len(R.ICONS.PERK_ICONS) + len(R.ICONS.ADDON_ICONS))
+        self.assertEqual(total, len(R.ICONS.PERK_ICONS) + len(R.ICONS.ADDON_ICONS)
+                         + len(R.ICONS.SURVIVOR_PORTRAITS) + len(R.ICONS.POWER_ICONS)
+                         + len(R.ICONS.ITEM_ICONS) + len(R.ICONS.KILLER_SPRITE["ports"]))
         self.assertEqual(have, 0)
 
     def test_store_resolves_addon_icons(self):

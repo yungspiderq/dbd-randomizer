@@ -45,10 +45,16 @@ class IconStore:
     # ---------------------------------------------------------------- пути --
     @staticmethod
     def _maps():
-        """Все карты «имя -> файл»: навыки и аддоны."""
+        """Все карты «имя -> файл»: навыки, аддоны, портреты, силы, предметы."""
         if not ICONS:
             return ()
-        return (ICONS.PERK_ICONS, getattr(ICONS, "ADDON_ICONS", {}))
+        return (ICONS.PERK_ICONS, getattr(ICONS, "ADDON_ICONS", {}),
+                getattr(ICONS, "SURVIVOR_PORTRAITS", {}), getattr(ICONS, "POWER_ICONS", {}),
+                getattr(ICONS, "ITEM_ICONS", {}))
+
+    @staticmethod
+    def _sprite():
+        return getattr(ICONS, "KILLER_SPRITE", None) or None
 
     def filename(self, name):
         """Имя файла в кэше — из URL-карты, с защитой от странных символов."""
@@ -59,10 +65,12 @@ class IconStore:
             rel = mapping.get(name)
             if rel:
                 break
-        if not rel:
-            return None
-        safe = urllib.parse.quote(rel, safe="._-")
-        return safe
+        if rel:
+            return urllib.parse.quote(rel, safe="._-")
+        meta = self._sprite()
+        if meta and name in meta.get("ports", {}):
+            return f"KP_{meta['ports'][name]:03d}.png"     # кроп спрайт-листа
+        return None
 
     def local_path(self, name):
         fname = self.filename(name)
@@ -84,6 +92,9 @@ class IconStore:
         total = 0
         for mapping in self._maps():
             total += len(mapping)
+        meta = self._sprite()
+        if meta:
+            total += len(meta.get("ports", {}))
         try:
             have = len([f for f in os.listdir(self.cache_dir) if f.endswith(".png")])
         except OSError:
@@ -92,9 +103,12 @@ class IconStore:
 
     # ------------------------------------------------------------- загрузка --
     def fetch_one(self, name):
-        """Скачивает одну иконку (навыка ИЛИ аддона). Возвращает путь или None."""
+        """Скачивает одну иконку (навык, аддон, портрет, сила, предмет). Путь или None."""
         if not self.enabled:
             return None
+        meta = self._sprite()
+        if meta and name in meta.get("ports", {}):
+            return self._fetch_killer_portrait(name, meta)
         rel = None
         for mapping in self._maps():
             rel = mapping.get(name)
@@ -123,6 +137,50 @@ class IconStore:
                     os.remove(tmp)
             except OSError:
                 pass
+            return None
+
+    def _fetch_killer_portrait(self, name, meta):
+        """Кроп кадра из спрайт-листа портретов маньяков (качается один раз)."""
+        path = self.local_path(name)
+        if not path:
+            return None
+        try:
+            if os.path.getsize(path) > MIN_SIZE:
+                return path
+        except OSError:
+            pass
+        sprite_path = os.path.join(self.cache_dir, "KillerPortraitsSprite.png")
+        try:
+            if os.path.getsize(sprite_path) < MIN_SIZE:
+                raise OSError("нет спрайта")
+        except OSError:
+            tmp = sprite_path + ".part"
+            try:
+                req = urllib.request.Request(meta["url"], headers=UA)
+                with urllib.request.urlopen(req, timeout=self.timeout * 4) as r:
+                    data = r.read()
+                if len(data) < MIN_SIZE or not data.startswith(PNG_MAGIC):
+                    self._failed.add(name)
+                    return None
+                with open(tmp, "wb") as fh:
+                    fh.write(data)
+                os.replace(tmp, sprite_path)
+            except Exception:
+                self._failed.add(name)
+                return None
+        try:
+            from PIL import Image
+            im = Image.open(sprite_path).convert("RGBA")
+            size, cols = int(meta["size"]), int(meta["cols"])
+            pos = int(meta["ports"][name]) - 1
+            row, col = pos // cols, pos % cols
+            crop = im.crop((col * size, row * size, col * size + size, row * size + size))
+            tmp = path + ".part"
+            crop.save(tmp, "PNG")
+            os.replace(tmp, path)
+            return path
+        except Exception:
+            self._failed.add(name)
             return None
 
     def request(self, names, on_ready=None, limit=None):
@@ -165,6 +223,9 @@ class IconStore:
         names = []
         for mapping in self._maps():
             names += list(mapping)
+        meta = self._sprite()
+        if meta:
+            names += list(meta.get("ports", {}))
         todo = self.missing(names)
         done = 0
         for i, name in enumerate(todo, 1):
