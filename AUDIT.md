@@ -517,3 +517,20 @@ Firebase Realtime Database: бесплатно без карты, REST без SD
   на диске файл лежит с подчёркиванием. Поэтому генератор валидирует имена не через
   `imageinfo` (который «видит» оба написания), а по списку реально залитых файлов
   (`list=allimages`) и кладёт в карту только рабочее написание.
+
+### I1 🔴 Способ публикации не переключался на Firebase (v2.5.1)
+После перевода канала с kvdb на Firebase значение радиокнопки стало `"firebase"`,
+но условие в `publish_current_build` осталось от v2.3: `if backend != "anon":` —
+любой выбор, кроме призрачного `"anon"`, уводил в ветку GitHub с запросом токена.
+Плюс общая кнопка «💾 Сохранить настройки» (`collect_settings`) не писала
+`publish.backend`/`publish.firebase_url`, поэтому после перезапуска способ
+сбрасывался на дефолт. Исправлено; регрессия закрыта тестом
+`TestPublishBackend.test_collect_settings_persists_backend`.
+
+### I2 🟡 Запуск без Python (v2.5.0+)
+PyInstaller onefile распаковывает модули во временный `_MEIPASS`, и `APP_DIR` от
+`__file__` уводил конфиг/базу/кэш во временную папку (всё терялось при выходе).
+`APP_DIR` берётся от `sys.executable` при `sys.frozen`; автозамена .py-файлов в
+EXE отключена (`check_for_updates` даёт подсказку про Releases); добавлены
+`build_exe.bat` и workflow `.github/workflows/build-exe.yml` (windows-latest,
+скрытые импорты ленивых модулей, прикрепление exe к релизу с ожиданием релиза).

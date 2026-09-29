@@ -348,6 +348,31 @@ class TestIcons(unittest.TestCase):
         self.assertEqual(st.missing([]), [])
 
 
+class TestPublishBackend(unittest.TestCase):
+    """v2.5.1: способ публикации обязан сохраняться любой кнопкой сохранения."""
+
+    def test_collect_settings_persists_backend(self):
+        app = make_app()
+        app.backend_var.set("firebase")
+        app.firebase_entry.get = lambda *a: "https://example.firebaseio.com"
+        app.collect_settings()
+        self.assertEqual(app.cfg["publish"]["backend"], "firebase")
+        self.assertEqual(app.cfg["publish"]["firebase_url"], "https://example.firebaseio.com")
+        app.backend_var.set("github")
+        app.collect_settings()
+        self.assertEqual(app.cfg["publish"]["backend"], "github")
+
+    def test_frozen_mode_skips_self_update(self):
+        import sys
+        app = make_app()
+        sys.frozen = True                       # изображаем EXE-сборку
+        try:
+            app.check_for_updates(silent=True)  # не должно ходить в сеть и падать
+            self.assertFalse(app._updating)
+        finally:
+            del sys.frozen
+
+
 class TestBuildPassport(unittest.TestCase):
     """v2.3: название/описание билда и анонимная публикация без токена."""
 

@@ -59,7 +59,10 @@ except ImportError:                       # запуск из другой ди�
     import dbd_icons as ICONS
     from dbd_icons_store import IconStore, pil_available
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):                 # сборка PyInstaller: файлы рядом с .exe
+    APP_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_VERSION = GH.APP_VERSION
 ICONS_DIR = os.path.join(APP_DIR, "icons_cache")
 ICON_SIZE = 34
@@ -1926,6 +1929,9 @@ class App:
         self.cfg["options"]["select_char"] = bool(self.selchar_var.get())
         self.cfg["publish"]["nickname"] = _entry_text(self.nick_entry)
         self.cfg["publish"]["gh_token"] = _entry_text(self.token_entry)
+        if getattr(self, "backend_var", None):
+            self.cfg["publish"]["backend"] = self.backend_var.get()
+            self.cfg["publish"]["firebase_url"] = self.firebase_entry.get().strip()
         self.cfg["update"]["auto"] = bool(self.auto_update_var.get())
         self.cfg["update"]["allow_branch"] = bool(self.allow_branch_var.get())
         self.cfg["options"]["addons_enabled"] = bool(self.addons_var.get())
@@ -2350,7 +2356,7 @@ class App:
         backend = self.backend_var.get() if getattr(self, "backend_var", None) else \
             self.cfg["publish"].get("backend", "github")
         token, base = None, self.firebase_url()
-        if backend != "anon":
+        if backend != "firebase":
             token = GH.resolve_token(self.cfg)
             if not token:
                 token = simpledialog.askstring("Публикация",
@@ -2400,6 +2406,15 @@ class App:
 
     def check_for_updates(self, silent=False):
         if self._updating:
+            return
+        if getattr(sys, "frozen", False):
+            msg = (f"У вас EXE-сборка v{APP_VERSION}: обновления приходят готовым "
+                   "DBDRandomizer.exe в Releases на GitHub (автозамена файлов работает "
+                   "только в Python-версии).")
+            if silent:
+                self.log(msg)
+            else:
+                self.ui_q.put(("info", msg))
             return
         self._updating = True
         if not silent:
