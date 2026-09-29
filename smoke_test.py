@@ -251,6 +251,43 @@ class TestIcons(unittest.TestCase):
             self.assertTrue(fname.lower().endswith(".png"), (name, fname))
             self.assertNotIn(" ", fname, (name, fname))
 
+    def test_every_addon_has_icon(self):
+        """Аддоны из базы обязаны иметь иконки; исключение — полностью удалённые
+        из игры (их нет даже в таблице wiki.gg)."""
+        removed = {
+            "Переливчатый кирпич", "Свеча зажигания", "Ржавая цепь", "Универсальная смазка",
+            "Маленькая отвертка", "Глубокая гравировка", "Белый шумовой генератор",
+            "Крепкая швейная игла", "Тяжелый ремень", "Ржавый щипцы", "Смолистое яблоко",
+            "Палитра", "Растворитель", "Кисть", "Живописная прихоть",
+        }
+        icons = getattr(R.ICONS, "ADDON_ICONS", {})
+        names = []
+        for info in self.db["killers"].values():
+            names += info.get("addons", [])
+        for entry in self.db["survivor_items"].values():
+            names += entry.get("addons", [])
+        missing = sorted({n for n in names if n and n not in icons} - removed)
+        self.assertEqual(missing, [], f"нет иконок для аддонов: {missing}")
+        coverage = len([n for n in set(names) if n in icons]) / max(1, len(set(names)))
+        self.assertGreaterEqual(coverage, 0.95, f"покрытие иконками аддонов {coverage:.0%}")
+
+    def test_addon_icons_are_wiki_png(self):
+        icons = getattr(R.ICONS, "ADDON_ICONS", {})
+        self.assertGreater(len(icons), 500)
+        for name, fname in icons.items():
+            self.assertTrue(fname.lower().endswith(".png"), (name, fname))
+            self.assertNotIn(" ", fname, (name, fname))
+
+    def test_store_resolves_addon_icons(self):
+        import tempfile
+        st = R.IconStore(tempfile.mkdtemp(), enabled=True)
+        if not st.enabled:
+            self.skipTest("Pillow недоступен")
+        self.assertIsNotNone(st.filename("Точильный камень"))       # аддон Охотника
+        self.assertIsNotNone(st.filename("Батарейка"))             # аддон фонарика
+        self.assertTrue(st.is_cached("Точильный камень") is False)  # ещё не скачана
+        self.assertIn("Точильный камень", st.missing(["Точильный камень"]))
+
     def test_store_disabled_is_safe(self):
         import tempfile
         st = R.IconStore(tempfile.mkdtemp(), enabled=False)
@@ -258,6 +295,75 @@ class TestIcons(unittest.TestCase):
         self.assertFalse(st.is_cached("Надежда"))
         st.request(["Надежда"], on_ready=lambda r: None)      # не должно падать
         self.assertEqual(st.missing([]), [])
+
+
+class TestPerkModes(unittest.TestCase):
+    """v2.2: режим «mixed» обязан давать своих перков, а не только общие."""
+
+    def setUp(self):
+        self.db = R.db_defaults()
+
+    def test_default_mode_is_mixed(self):
+        self.assertEqual(R.OPTION_DEFAULTS["perk_mode"], "mixed")
+
+    def _own(self, side, char):
+        if side == "KILLER":
+            return set(self.db["killers"][char].get("perks", []))
+        return set(self.db["survivors"][char])
+
+    def test_mixed_gives_three_own_plus_common(self):
+        for side, chars in (("KILLER", self.db["killers"]), ("SURVIVOR", self.db["survivors"])):
+            common = set(self.db["killer_common_perks" if side == "KILLER"
+                                 else "surv_common_perks"])
+            for char in list(chars)[:12]:
+                b = (R.make_killer_build if side == "KILLER" else R.make_survivor_build)(
+                    self.db, [char], perk_mode="mixed")
+                own = self._own(side, char)
+                self.assertEqual(len(b["perks"]), 4)
+                self.assertEqual(len(set(b["perks"])), 4)
+                self.assertEqual(len(own & set(b["perks"])), min(3, len(own)), b["perks"])
+                self.assertTrue(set(b["perks"]) <= own | common |
+                                set(R.all_unique_perks(self.db, side)))
+                # ровно один добивающий слот занят общим навыком (свои не в счёт:
+                # в базе Сенобита «Мертвая хватка» дублируется в общем списке)
+                self.assertEqual(len((set(b["perks"]) - own) & common), 1, b["perks"])
+
+    def test_unique_gives_three_own_plus_foreign_unique(self):
+        for char in list(self.db["killers"])[:12]:
+            b = R.make_killer_build(self.db, [char], perk_mode="unique")
+            own = self._own("KILLER", char)
+            self.assertEqual(len(own & set(b["perks"])), 3, b["perks"])
+            rest = (set(b["perks"]) - own).pop()
+            self.assertNotIn(rest, self.db["killer_common_perks"], b["perks"])
+
+    def test_general_is_common_only(self):
+        b = R.make_killer_build(self.db, ["Каннибал"], perk_mode="general")
+        self.assertTrue(set(b["perks"]) <= set(self.db["killer_common_perks"]), b["perks"])
+
+    def test_legacy_config_with_general_is_migrated_once(self):
+        import json, os, tempfile
+        tmp = tempfile.mkdtemp()
+        cfg_file = os.path.join(tmp, "dbd_randomizer_config.json")
+        old_cfg = R.default_config()
+        old_cfg["options"]["perk_mode"] = "general"
+        with open(cfg_file, "w", encoding="utf-8") as fh:
+            json.dump(old_cfg, fh)
+        saved = (R.CONFIG_FILE, R.DB_FILE)
+        R.CONFIG_FILE = cfg_file
+        R.DB_FILE = os.path.join(tmp, "dbd_database.json")
+        try:
+            cfg, migrated = R.load_config()
+            self.assertTrue(migrated)
+            self.assertEqual(cfg["options"]["perk_mode"], "mixed")
+            R.save_config(cfg)
+            cfg2, migrated2 = R.load_config()
+            self.assertFalse(migrated2)
+            cfg2["options"]["perk_mode"] = "general"     # явный выбор пользователя
+            R.save_config(cfg2)
+            cfg3, _ = R.load_config()
+            self.assertEqual(cfg3["options"]["perk_mode"], "general")   # не затираем
+        finally:
+            R.CONFIG_FILE, R.DB_FILE = saved
 
 
 class TestValidation(unittest.TestCase):

@@ -34,7 +34,7 @@ import time
 import urllib.error
 import urllib.request
 
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 GITHUB_REPO = "yungspiderq/dbd-randomizer"
 API = "https://api.github.com"
 

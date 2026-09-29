@@ -43,11 +43,22 @@ class IconStore:
                 self.enabled = False
 
     # ---------------------------------------------------------------- пути --
+    @staticmethod
+    def _maps():
+        """Все карты «имя -> файл»: навыки и аддоны."""
+        if not ICONS:
+            return ()
+        return (ICONS.PERK_ICONS, getattr(ICONS, "ADDON_ICONS", {}))
+
     def filename(self, name):
         """Имя файла в кэше — из URL-карты, с защитой от странных символов."""
         if not ICONS:
             return None
-        rel = ICONS.PERK_ICONS.get(name)
+        rel = None
+        for mapping in self._maps():
+            rel = mapping.get(name)
+            if rel:
+                break
         if not rel:
             return None
         safe = urllib.parse.quote(rel, safe="._-")
@@ -70,7 +81,9 @@ class IconStore:
         return [n for n in names if not self.is_cached(n) and n not in self._failed]
 
     def stats(self):
-        total = len(ICONS.PERK_ICONS) if ICONS else 0
+        total = 0
+        for mapping in self._maps():
+            total += len(mapping)
         try:
             have = len([f for f in os.listdir(self.cache_dir) if f.endswith(".png")])
         except OSError:

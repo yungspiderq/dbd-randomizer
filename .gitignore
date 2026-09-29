@@ -21,3 +21,5 @@ dbd_data_report.txt
 *.bak
 *.new
 *.tmp
+tools/wiki_cache/
+tools/addon_unresolved.json

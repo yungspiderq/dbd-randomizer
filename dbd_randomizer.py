@@ -72,6 +72,25 @@ BACKEND_NAME = "pydirectinput"            # DirectInput нужен для пол
 # Windows: DPI awareness ДО создания окон, иначе координаты мыши и координаты
 # игры разъезжаются при масштабе != 100%.
 # ----------------------------------------------------------------------------
+def _set_dark_titlebar(window):
+    """Windows 10/11: тёмная рамка окна, чтобы приложение не выглядело «наполовину»."""
+    if os.name != "nt":
+        return
+    try:
+        window.update_idletasks()
+        frame = window.wm_frame()
+        hwnd = int(frame, 16) if frame else 0
+        if not hwnd:
+            return
+        hwnd = ctypes.windll.user32.GetParent(hwnd) or hwnd
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        value = ctypes.c_int(1)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(value), ctypes.sizeof(value))
+    except Exception:
+        pass
+
+
 def _set_dpi_awareness():
     if os.name != "nt":
         return
@@ -252,7 +271,7 @@ OPTION_DEFAULTS = {
     "result_index":    1,      # 1..9 — какую иконку выдачи считать нужной
     "abort_key":       "f9",
     "select_char":     False,       # искать персонажа по имени и выбирать его
-    "perk_mode":       "general",   # general | unique | mixed
+    "perk_mode":       "mixed",     # mixed | unique | general
     "respect_owned":   False,       # учитывать белые списки OWNED_*
     "addons_enabled":  True,
 }
@@ -310,7 +329,8 @@ def load_config():
                                 cfg["coords"].setdefault(key, {"x": "", "y": ""}).update(val)
                     else:
                         cfg[section].update(user[section])
-            return cfg, False
+            cfg, mig = _migrate_options(cfg)
+            return cfg, mig
         except Exception:
             backup = CONFIG_FILE + ".broken"
             try:
@@ -332,7 +352,23 @@ def load_config():
                 os.replace(LEGACY_CONFIG, LEGACY_CONFIG + ".migrated")
             except Exception:
                 pass
-    return cfg, migrated
+    cfg, extra = _migrate_options(cfg)
+    return cfg, migrated or extra
+
+
+def _migrate_options(cfg):
+    """v2.1 и старше: дефолтом был режим «общие навыки», из-за чего падали только
+    общие перки. Один раз переводим сохранённый конфиг на честный дефолт «mixed».
+    Явный выбор пользователя после этого не затирается (флаг остаётся в конфиге).
+    """
+    opts = cfg.setdefault("options", {})
+    if opts.get("perk_mode_mixed_default_v22"):
+        return cfg, False
+    opts["perk_mode_mixed_default_v22"] = True
+    if opts.get("perk_mode") == "general":
+        opts["perk_mode"] = "mixed"
+        return cfg, True
+    return cfg, False
 
 
 def save_config(cfg):
@@ -443,7 +479,54 @@ def _fill_perks(perks, pools, respect_owned=False):
     return perks[:4]
 
 
-def make_killer_build(db, available, perk_mode="general", respect_owned=False, addons_enabled=True):
+def all_unique_perks(db, side):
+    """Все уникальные навыки стороны (свои + чужие) — для режима «уникальные»."""
+    out = []
+    src = db["killers"].values() if side == "KILLER" else db["survivors"].values()
+    for entry in src:
+        out.extend(entry.get("perks", []) if isinstance(entry, dict) else entry)
+    return list(dict.fromkeys(out))
+
+
+def pick_perks(db, side, char, perk_mode="mixed", respect_owned=False):
+    """Ровно 4 навыка без повторов по режиму:
+
+    ``general`` — только общие (есть у всех);
+    ``mixed``   — 3 своих уникальных + 1 общий;
+    ``unique``  — 3 своих уникальных + 1 уникальный любого другого персонажа.
+
+    При respect_owned=True каждый подпул фильтруется белым списком, а недостающие
+    слоты остаются EMPTY (автоэкипировка не будет тыкать в то, чего нет).
+    """
+    if side == "KILLER":
+        unique = list(db["killers"].get(char, {}).get("perks", []))
+        common = list(db.get("killer_common_perks", []))
+        owned = db.get("owned", {}).get("killer_perks")
+    else:
+        unique = list(db["survivors"].get(char, []))
+        common = list(db.get("surv_common_perks", []))
+        owned = db.get("owned", {}).get("survivor_perks")
+    foreign = [p for p in all_unique_perks(db, side)
+               if p not in unique and p not in set(common)]
+
+    if perk_mode == "unique":
+        stages = ((unique, len(unique)), (foreign, 4), (common, 4))
+    elif perk_mode == "mixed":
+        stages = ((unique, len(unique)), (common, 4), (foreign, 4))
+    else:
+        stages = ((common, 4), (unique, 4), (foreign, 4))
+
+    perks = []
+    for pool, take in stages:
+        if len(perks) >= 4:
+            break
+        candidates = _filter_owned([p for p in dict.fromkeys(pool) if p not in perks],
+                                   owned, respect_owned)
+        perks += _pick(candidates, min(take, 4 - len(perks)))
+    return _fill_perks(perks, [], respect_owned) if respect_owned else perks[:4]
+
+
+def make_killer_build(db, available, perk_mode="mixed", respect_owned=False, addons_enabled=True):
     owned = db.get("owned", {})
     name = random.choice(sorted(available))
     info = db["killers"][name]
@@ -457,18 +540,7 @@ def make_killer_build(db, available, perk_mode="general", respect_owned=False, a
         addons.append(NO_ADDONS if not addons else EMPTY)
 
 
-    unique = list(info.get("perks", []))
-    common = list(db.get("killer_common_perks", []))
-    if perk_mode == "unique":
-        pool = _filter_owned(unique, owned.get("killer_perks"), respect_owned)
-    elif perk_mode == "mixed":
-        pool = _filter_owned(unique + common, owned.get("killer_perks"), respect_owned)
-    else:
-        pool = _filter_owned(common, owned.get("killer_perks"), respect_owned)
-    perks = _pick(pool, 4)
-    if len(perks) < 4:                        # уникальных всего 3 — добираем общими
-        perks = _fill_perks(perks, [common, unique + common], respect_owned)
-
+    perks = pick_perks(db, "KILLER", name, perk_mode, respect_owned)
 
     return {
         "side": "KILLER",
@@ -480,7 +552,7 @@ def make_killer_build(db, available, perk_mode="general", respect_owned=False, a
     }
 
 
-def make_survivor_build(db, available, perk_mode="general", respect_owned=False, addons_enabled=True):
+def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False, addons_enabled=True):
     owned = db.get("owned", {})
     name = random.choice(sorted(available))
 
@@ -501,17 +573,7 @@ def make_survivor_build(db, available, perk_mode="general", respect_owned=False,
     while len(addons) < 2:
         addons.append(EMPTY)
 
-    unique = list(db["survivors"].get(name, []))
-    common = list(db.get("surv_common_perks", []))
-    if perk_mode == "unique":
-        pool = _filter_owned(unique, owned.get("survivor_perks"), respect_owned)
-    elif perk_mode == "mixed":
-        pool = _filter_owned(unique + common, owned.get("survivor_perks"), respect_owned)
-    else:
-        pool = _filter_owned(common, owned.get("survivor_perks"), respect_owned)
-    perks = _pick(pool, 4)
-    if len(perks) < 4:
-        perks = _fill_perks(perks, [common, unique + common], respect_owned)
+    perks = pick_perks(db, "SURVIVOR", name, perk_mode, respect_owned)
 
     return {
         "side": "SURVIVOR",
@@ -796,6 +858,7 @@ class App:
         root.minsize(900, 620)
 
         self._setup_style()
+        _set_dark_titlebar(root)
         self._build_ui()
         self._poll_ui_queue()
         self._register_abort_hotkey()
@@ -850,7 +913,49 @@ class App:
         style.configure("Stop.TButton", background="#ff3b30", foreground="#1a0d0c",
                         font=("Segoe UI", 11, "bold"), padding=9)
         style.map("Stop.TButton", background=[("active", "#ff6a5f")])
-        style.configure("Vertical.TScrollbar", background="#2c2c2c", troughcolor=bg)
+        style.configure("Vertical.TScrollbar", background="#2c2c2c", troughcolor="#161616",
+                        bordercolor="#161616", arrowcolor="#9a9a9a", lightcolor="#2c2c2c",
+                        darkcolor="#2c2c2c", gripcolor="#3a3a3a")
+        style.configure("Horizontal.TScrollbar", background="#2c2c2c", troughcolor="#161616",
+                        bordercolor="#161616", arrowcolor="#9a9a9a", lightcolor="#2c2c2c",
+                        darkcolor="#2c2c2c", gripcolor="#3a3a3a")
+        style.map("Vertical.TScrollbar", background=[("active", "#3a3a3a"), ("disabled", "#232323")])
+        style.map("Horizontal.TScrollbar", background=[("active", "#3a3a3a"), ("disabled", "#232323")])
+        # Поля ввода: у clam свой белый fieldbackground — гасим явно.
+        style.configure("TEntry", fieldbackground="#232323", foreground="#ffffff",
+                        insertcolor="#ffffff", bordercolor="#3a3a3a", lightcolor="#3a3a3a",
+                        darkcolor="#3a3a3a", padding=3)
+        style.map("TEntry", fieldbackground=[("focus", "#2a2a2a"), ("disabled", "#1c1c1c")],
+                  bordercolor=[("focus", acc)], foreground=[("disabled", "#6e6e73")])
+        style.configure("TCombobox", fieldbackground="#232323", foreground="#ffffff",
+                        arrowcolor=acc, bordercolor="#3a3a3a", lightcolor="#3a3a3a",
+                        darkcolor="#3a3a3a", padding=3)
+        style.map("TCombobox", fieldbackground=[("readonly", "#232323"), ("focus", "#2a2a2a")],
+                  arrowcolor=[("focus", "#ffb04d")])
+        self.root.option_add("*TCombobox*Listbox.background", "#232323")
+        self.root.option_add("*TCombobox*Listbox.foreground", "#e6e6e6")
+        self.root.option_add("*TCombobox*Listbox.selectBackground", acc)
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#121212")
+        style.configure("TSpinbox", fieldbackground="#232323", foreground="#ffffff",
+                        arrowcolor=acc, bordercolor="#3a3a3a")
+        # Список билдов сообщества: Treeview в clam по умолчанию белый.
+        style.configure("Treeview", background="#161616", fieldbackground="#161616",
+                        foreground="#e6e6e6", bordercolor="#2c2c2c", lightcolor="#2c2c2c",
+                        darkcolor="#2c2c2c", rowheight=26, font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", background="#232323", foreground="#e6e6e6",
+                        bordercolor="#2c2c2c", relief="flat", font=("Segoe UI", 9, "bold"))
+        style.map("Treeview", background=[("selected", "#3a2a12")],
+                  foreground=[("selected", "#ffd60a")])
+        style.map("Treeview.Heading", background=[("active", "#2c2c2c")])
+        style.configure("TProgressbar", troughcolor="#232323", background=acc,
+                        bordercolor="#232323", lightcolor=acc, darkcolor=acc)
+        style.configure("Horizontal.TProgressbar", troughcolor="#232323", background=acc)
+        style.configure("TPanedwindow", background=bg)
+        style.configure("Sash", sashthickness=8, gripcolor="#3a3a3a", background="#2c2c2c")
+        style.configure("TSeparator", background="#2c2c2c")
+        style.configure("TMenubutton", background=bg, foreground=fg, arrowcolor=acc)
+        style.configure("Toolbutton", background="#2c2c2c", foreground="#ffffff")
+        style.map("Toolbutton", background=[("active", "#3a3a3a")])
 
     # ------------------------------------------------------------- интерфейс --
     def _build_ui(self):
@@ -922,9 +1027,9 @@ class App:
         opt = ttk.LabelFrame(right, text=" НАСТРОЙКИ ГЕНЕРАЦИИ ")
         opt.grid(row=0, column=0, sticky="ew")
         self.perk_mode_var = tk.StringVar(value=self.cfg["options"].get("perk_mode", "general"))
-        for text, value, hint in (("Общие навыки (есть у всех)", "general", ""),
-                                  ("Уникальные навыки персонажа", "unique", ""),
-                                  ("Смешанные (3 своих + 1 общий и т.п.)", "mixed", "")):
+        for text, value, hint in (("Смешанные: 3 своих + 1 общий", "mixed", ""),
+                                  ("Уникальные: 3 своих + 1 чужой уникальный", "unique", ""),
+                                  ("Общие: только навыки, которые есть у всех", "general", "")):
             ttk.Radiobutton(opt, text=text, value=value, variable=self.perk_mode_var).pack(anchor="w", padx=8, pady=1)
         self.addons_var = tk.BooleanVar(value=self.cfg["options"].get("addons_enabled", True))
         ttk.Checkbutton(opt, text="Подбирать аддоны", variable=self.addons_var).pack(anchor="w", padx=8, pady=1)
@@ -1015,10 +1120,14 @@ class App:
         self._card_section("🔧 АДДОНЫ")
         self.card_addons = []
         for _ in range(2):
-            lbl = tk.Label(self.card, anchor="w", fg="#dcdcdc", bg="#161616",
-                           font=("Segoe UI", 10), wraplength=400, justify="left")
-            lbl.pack(fill="x", padx=26)
-            self.card_addons.append(lbl)
+            row = tk.Frame(self.card, **pad)
+            row.pack(fill="x", padx=20, pady=2)
+            img = tk.Label(row, bg="#161616", width=ICON_SIZE, height=ICON_SIZE)
+            img.pack(side="left", padx=(0, 8))
+            txt = tk.Label(row, anchor="w", fg="#dcdcdc", bg="#161616",
+                           font=("Segoe UI", 10), wraplength=340, justify="left")
+            txt.pack(side="left", fill="x", expand=True)
+            self.card_addons.append((img, txt))
 
         self._card_section("🔮 НАВЫКИ")
         self.card_perks = []
@@ -1416,8 +1525,9 @@ class App:
         self.card_char.config(text="Билд не сгенерирован" if text else filler)
         self.card_main.config(text="")
         self.card_sub.config(text="")
-        for lbl in self.card_addons:
-            lbl.config(text=filler)
+        for img, lbl in self.card_addons:
+            img.config(image="", text="")
+            lbl.config(text=filler, fg="#4a4a4a")
         for img, lbl in self.card_perks:
             img.config(image="", text="" if not text else "")
             lbl.config(text=filler, fg="#4a4a4a")
@@ -1437,13 +1547,23 @@ class App:
             self.card_main.config(text=f"📦 {b['power_or_item']}")
             self.card_sub.config(text=f"категория: {b.get('category', '')}")
 
-        for lbl, addon in zip(self.card_addons, list(b["addons"]) + ["", ""]):
+        want_addons = []
+        for (img, lbl), addon in zip(self.card_addons, list(b["addons"]) + ["", ""]):
             if not addon or addon == EMPTY:
+                img.config(image="", text="")
                 lbl.config(text="   •  —", fg="#4a4a4a")
-            elif addon == NO_ADDONS:
+                continue
+            if addon == NO_ADDONS:
+                img.config(image="", text="")
                 lbl.config(text="   •  🚫 аддон не подобран", fg="#6e6e73")
+                continue
+            photo = self._icon_photo(addon)
+            if photo is not None:
+                img.config(image=photo, text="")
             else:
-                lbl.config(text=f"   •  {addon}", fg="#dcdcdc")
+                img.config(image="", text="▢")
+            lbl.config(text=f"   •  {addon}", fg="#dcdcdc")
+            want_addons.append(addon)
 
         want = []
         for i, (img, lbl) in enumerate(self.card_perks):
@@ -1460,7 +1580,7 @@ class App:
             lbl.config(text=f"{i + 1}.  {perk}", fg="#34c759")
             want.append(perk)
         self._render_details_icons(want)
-        self._request_icons(want)
+        self._request_icons(want + want_addons)
 
     def get_coord(self, key):
         ent = self._coord_widgets.get(key)
@@ -1643,18 +1763,8 @@ class App:
             messagebox.showwarning("Внимание", "Сначала сгенерируйте билд.")
             return
         b = self.build
-        if b["side"] == "KILLER":
-            unique = list(self.db["killers"][b["char"]].get("perks", []))
-            common = list(self.db.get("killer_common_perks", []))
-        else:
-            unique = list(self.db["survivors"].get(b["char"], []))
-            common = list(self.db.get("surv_common_perks", []))
-        mode = self.perk_mode_var.get()
-        pool = unique if mode == "unique" else (unique + common if mode == "mixed" else common)
-        perks = _pick(pool, 4)
-        if len(perks) < 4:
-            perks = _fill_perks(perks, [common, unique + common], bool(self.owned_var.get()))
-        b["perks"] = perks
+        b["perks"] = pick_perks(self.db, b["side"], b["char"],
+                                self.perk_mode_var.get(), bool(self.owned_var.get()))
         self._render_build()
         self.log("Перки перегенерированы: " + ", ".join(b["perks"]))
 
