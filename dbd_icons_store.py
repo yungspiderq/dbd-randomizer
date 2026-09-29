@@ -66,7 +66,9 @@ class IconStore:
             if rel:
                 break
         if rel:
-            return urllib.parse.quote(rel, safe="._-")
+            # safe включает "%": часть имён уже содержит percent-encoding
+            # (IconPerks_coupDeGr%C3%A2ce.png) — повторное экранирование давало 404
+            return urllib.parse.quote(rel, safe="._-%")
         meta = self._sprite()
         if meta and name in meta.get("ports", {}):
             return f"KP_{meta['ports'][name]:03d}.png"     # кроп спрайт-листа
@@ -116,7 +118,7 @@ class IconStore:
                 break
         if not rel:
             return None
-        url = ICONS.ICON_BASE + urllib.parse.quote(rel)
+        url = ICONS.ICON_BASE + self.filename(name)
         path = self.local_path(name)
         tmp = path + ".part"
         try:

@@ -320,6 +320,13 @@ class TestIcons(unittest.TestCase):
         self.assertEqual(crop.size, (8, 8))
         self.assertEqual(crop.getpixel((0, 0))[:3], (255, 0, 0))
 
+    def test_filename_keeps_preencoded_percent(self):
+        import tempfile
+        st = R.IconStore(tempfile.mkdtemp(), enabled=True)
+        fn = st.filename("Добивание")          # IconPerks_coupDeGr%C3%A2ce.png
+        self.assertIn("%C3%A2", fn)
+        self.assertNotIn("%25", fn)            # без двойного экранирования
+
     def test_stats_count_perks_and_addons(self):
         import tempfile
         st = R.IconStore(tempfile.mkdtemp(), enabled=True)

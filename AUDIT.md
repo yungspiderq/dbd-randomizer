@@ -622,3 +622,9 @@ EXE отключена (`check_for_updates` даёт подсказку про R
 файлами `K38_TheHoundmaster_Portrait.png` … `K44_TheJudgment_Portrait.png`
 (на диске — с подчёркиваниями). Новая карта `KILLER_PORTRAITS` в dbd_icons.py;
 покрытие портретов маньяков 44/44.
+
+### N4 🟠 Двойное percent-экранирование имён файлов (v2.9.2)
+`IconPerks_coupDeGr%C3%A2ce.png` («Добивание») уже содержит percent-encoding;
+`urllib.parse.quote(rel, safe="._-")` превращал `%` в `%25` → URL 404, иконка
+вечно оставалась плейсхолдером. `filename()` теперь quote'ит с safe="._-%",
+`fetch_one` строит URL через `filename()` (единая точка экранирования).

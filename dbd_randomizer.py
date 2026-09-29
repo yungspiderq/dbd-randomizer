@@ -1500,7 +1500,7 @@ class App:
             img = None
         if img is None:
             try:
-                img = Image.new("RGBA", (size, size), (28, 34, 42, 255))
+                img = Image.new("RGBA", (size, size), (44, 52, 64, 255))
             except Exception:
                 return None
         else:
