@@ -58,10 +58,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from char_map_ru import KILLER_EN_RU, SURVIVOR_EN_RU, RARITIES   # noqa: E402
 import dbd_data as DATA                                          # noqa: E402
-try:                                                             # заполняется tools/fetch_ru_skins.py
-    from skin_names_ru import FILE_TO_RU as SKIN_RU_NAMES
+# RU-названия (заполняется tools/fetch_ru_skins.py). Импорт МОДУЛЕМ, а не
+# `from … import A, B`: таблицы добавлялись постепенно, и ImportError на одной
+# из них обнулял бы обе.
+try:
+    import skin_names_ru as _RU
 except ImportError:                                              # pragma: no cover
-    SKIN_RU_NAMES = {}
+    _RU = None
+SKIN_RU_NAMES = dict(getattr(_RU, "FILE_TO_RU", {}) or {}) if _RU else {}
+PIECE_RU_NAMES = dict(getattr(_RU, "PIECE_FILE_TO_RU", {}) or {}) if _RU else {}
 
 API = "https://deadbydaylight.wiki.gg/api.php"
 UA = {"User-Agent": "DBDskinFetcher/2.11 (skins; see repository)"}
@@ -252,6 +257,11 @@ def parse_coschars(cos_wt, killers_ru, survivors_ru):
     return out
 
 
+def norm_file(name):
+    """Имя файла к сравнению: MediaWiki считает «x y.png» и «x_y.png» одним файлом."""
+    return name.strip().lower().replace(" ", "_")
+
+
 def parse_pieces(pieces_wt):
     """{(таблица, id детали): файл} — запасные превью."""
     pieces = {}
@@ -268,6 +278,23 @@ def parse_pieces(pieces_wt):
     return pieces
 
 
+def parse_piece_names(pieces_wt):
+    """{(таблица, id детали): EN-имя детали} — для цепочки RU-имён наборов."""
+    names = {}
+    for table in ("heads", "masks", "torsos", "bodies", "upperBodies", "legs",
+                  "weapons", "arms", "hands"):
+        try:
+            block = lua_block(pieces_wt, table)
+        except ValueError:
+            continue
+        for row in re.findall(r"\{id = \d+,.*", block):
+            i = re.search(r"\{id = (\d+),", row)
+            n = re.search(r'name = "((?:[^"\\]|\\.)*)"', row)
+            if i and n:
+                names[(table, int(i.group(1)))] = n.group(1)
+    return names
+
+
 def pieces_of(rec):
     """[(таблица, id)] из `pieces = {heads = 5, torsos = 21}`."""
     out = []
@@ -278,6 +305,43 @@ def pieces_of(rec):
 
 PIECE_PRIORITY = ("heads", "masks", "torsos", "bodies", "upperBodies", "legs",
                   "weapons", "arms", "hands")
+
+
+def ru_names_by_pieces(recs, pieces, piece_names):
+    """RU-названия наборов через имена их элементов (статьи «(кастомизация)»).
+
+    Зачем: статьи «(наборы одежды)» покрывают не всё. Не хватает
+    * дефолтных и «кровавых» наборов — их на русской вики нет в списке одежды,
+      зато есть их элементы («Эван» / «Кровавый Эван»);
+    * наборов новых персонажей: у Авроры и Правосудия вместо картинок стоит
+      `Missing.png`, то есть сопоставить по файлу нельзя в принципе;
+    * редких наборов, которые лежат в статьях «(кастомизация)».
+
+    Цепочка: файл элемента (RU-статья) -> (таблица, id) элемента по
+    Module:Datatable/Cosmetics/Pieces -> наборы, в чьём `pieces` есть этот id.
+    Название присваивается, только если ВСЕ известные RU-имена элементов набора
+    совпадают (одно имя на набор) — иначе запись остаётся с английским названием:
+    лучше никак, чем неверно.
+    """
+    if not PIECE_RU_NAMES:
+        return {}, {}
+    file_to_key = {norm_file(f): key for key, f in pieces.items()}
+    ru_by_key = {}                                   # (таблица, id) -> {RU-имя}
+    unmatched = set()
+    for fn, ru in PIECE_RU_NAMES.items():
+        key = file_to_key.get(norm_file(fn))
+        if key is None:
+            unmatched.add(fn)
+            continue
+        ru_by_key.setdefault(key, set()).add(ru)
+    owners = {}                                      # id набора -> {RU-имя}
+    for rec in recs:
+        names = set()
+        for key in pieces_of(rec):
+            names |= ru_by_key.get(key, set())
+        if len(names) == 1:
+            owners[rec["id"]] = next(iter(names))
+    return owners, unmatched
 
 
 def fallback_file(rec, pieces, exists):
@@ -349,6 +413,8 @@ def write_module(path, skins, char_skins, skin_files, fakes_by_char, game_versio
                      f"'kind': {q(s['kind'])}")
             if s.get("name_ru"):
                 fh.write(f", 'name_ru': {q(s['name_ru'])}")
+                if s.get("ru_from") == "piece":
+                    fh.write(", 'name_ru_from': 'piece'")
             if s.get("date"):
                 fh.write(f", 'date': {q(s['date'])}")
             fh.write("},\n")
@@ -393,6 +459,7 @@ def main(force=False):
     outfits, fakes = parse_outfits(cos_wt, killers_ru, survivors_ru)
     coschars = parse_coschars(cos_wt, killers_ru, survivors_ru)
     pieces = parse_pieces(pieces_wt)
+    piece_names = parse_piece_names(pieces_wt)
     print(f"наборов: {len(outfits)}, скинов персонажей: {len(coschars)}, "
           f"одиночных предметов (fakeOutfit): {len(fakes)}, деталей в Pieces: {len(pieces)}")
 
@@ -418,8 +485,23 @@ def main(force=False):
               f"проверяю {len(set(cand))} файлов деталей…")
         exists.update(file_exists_map(cand))
 
+    # RU-названия: сначала по файлу набора (точный источник), затем — для
+    # непокрытых — по русским именам их элементов (статьи «(кастомизация)»).
+    for rec in coschars + outfits:
+        rec["name_ru"] = SKIN_RU_NAMES.get(rec["file"].strip().lower(), "") if rec["file"] else ""
+    by_pieces, unmatched_pieces = ru_names_by_pieces(outfits, pieces, piece_names)
+    n_by_pieces = 0
+    for rec in outfits:
+        if not rec["name_ru"] and rec["id"] in by_pieces:
+            rec["name_ru"] = by_pieces[rec["id"]]
+            rec["ru_from"] = "piece"
+            n_by_pieces += 1
+    print(f"RU-названий: по файлу набора {sum(1 for r in outfits + coschars if r['name_ru']) - n_by_pieces}, "
+          f"по элементам {n_by_pieces}; имён элементов в таблице {len(PIECE_RU_NAMES)}"
+          + (f", из них не сопоставлено {len(unmatched_pieces)}" if unmatched_pieces else ""))
+
     skins, char_skins, skin_files = {}, {}, {}
-    stats = {"no_image": 0, "fallback": 0, "ru": 0}
+    stats = {"no_image": 0, "fallback": 0, "ru": 0, "ru_piece": n_by_pieces}
     for rec in coschars + outfits:
         sid = rec["id"]
         fn = rec["file"] if exists.get(rec["file"]) else None
@@ -431,7 +513,7 @@ def main(force=False):
             else:
                 stats["no_image"] += 1
         rar = rec["rarity"]
-        name_ru = SKIN_RU_NAMES.get(rec["file"].strip().lower(), "") if rec["file"] else ""
+        name_ru = rec["name_ru"]
         if name_ru:
             stats["ru"] += 1
         skins[sid] = {
@@ -439,6 +521,7 @@ def main(force=False):
             "char": rec["char"], "side": rec["side"],
             "rarity": rar, "rarity_ru": RARITIES.get(rar, ("?", "?"))[1],
             "file": fn or "", "date": rec["date"], "kind": rec["kind"],
+            "ru_from": rec.get("ru_from", "file" if name_ru else ""),
         }
         if fn:
             skin_files[f"skin:{sid}"] = thumb_rel(fn)
@@ -469,7 +552,18 @@ def main(force=False):
     print(f"записей: {n_outfit} наборов + {n_char} скинов персонажей, "
           f"с превью {n_img} ({stats['fallback']} — превью детали вместо отсутствующего файла набора), "
           f"без превью {stats['no_image']}")
-    print(f"с RU-названием (tools/skin_names_ru.py): {stats['ru']} из {len(skins)}")
+    print(f"с RU-названием: {stats['ru']} из {len(skins)} "
+          f"(по файлу {stats['ru'] - stats['ru_piece']}, по элементам {stats['ru_piece']})")
+    left = [s for s in skins.values() if not s.get("name_ru")]
+    by_char = {}
+    for s in left:
+        by_char[s["char"]] = by_char.get(s["char"], 0) + 1
+    print(f"без RU-названия: {len(left)} "
+          f"(наборов {sum(1 for s in left if s['kind'] == 'outfit')}, "
+          f"скинов персонажей {sum(1 for s in left if s['kind'] == 'coschar')}); "
+          f"персонажей затронуто {len(by_char)}")
+    if unmatched_pieces:
+        print(f"  имён элементов, не найденных в Module:…/Pieces: {len(unmatched_pieces)}")
     print(f"одиночных предметов (FAKE_SKINS): {len(fakes)}")
     print(f"Записано: {out} ({os.path.getsize(out) // 1024} КБ)")
     return 0
