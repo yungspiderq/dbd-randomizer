@@ -22,6 +22,11 @@ dbd_data_report.txt
 *.new
 *.tmp
 tools/wiki_cache/
+# НО кэш статей про классы «2 против 8» коммитится: он маленький (9 статей) и
+# нужен, чтобы tools/resolve_classes.py работал офлайн (Fandom пускает не всех).
+!tools/wiki_cache/
+tools/wiki_cache/*
+!tools/wiki_cache/ru_classes/
 tools/addon_unresolved.json
 
 # локальный кэш статей русской вики (снимается tools/fetch_ru_skins.py)

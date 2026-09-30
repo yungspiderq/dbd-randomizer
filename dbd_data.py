@@ -670,3 +670,118 @@ OWNED_SURVIVOR_ITEMS = []   # например: ["Фонарик", "Аптечк
 OWNED_SURVIVOR_ADDONS = []  # например: ["Батарейка", "Бинты"]
 OWNED_KILLER_ADDONS = []    # например: ["Точильный камень"]
 OWNED_KILLER_PERKS = []     # например: ["Барбекю и чили", "Тиннитус"]
+
+
+# === CLASSES_2V8 BEGIN (сгенерировано tools/resolve_classes.py) ===
+# Классы режима «2 против 8» (русские названия и описания — дословно из
+# статей русской вики «<Класс> (класс)», категория «2 против 8»;
+# часть описаний на вики не переведена — такие куски оставлены английскими).
+# icon/url — абсолютные адреса картинок на RU-вики: ассеты Behaviour,
+# в репозитории не хранятся (см. IconStore).
+CLASSES_2V8 = {
+    "SURVIVOR": [
+        {
+            "ru": 'Беглец', "en": 'Escapist',
+            "icon": 'IconClass_Runner.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/cf/IconClass_Runner.png/revision/latest?cb=20240727115504&path-prefix=ru',
+            "skills": [
+                {"role": 'Навык обнаружения', "icon": 'IconSkills_RunnerAura.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/5/59/IconSkills_RunnerAura.png/revision/latest?cb=20240727115644&path-prefix=ru', "text": 'Показывает ауры досок и мест для прыжка в радиусе 16 м'},
+                {"role": 'Командный навык', "icon": 'IconSkills_RunnerInnate.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/b/b4/IconSkills_RunnerInnate.png/revision/latest?cb=20240727115656&path-prefix=ru', "text": 'Нажмите кнопку активной способности 2 для активации тихого ускорения\nВыжившие в радиусе 12м получают 50% "Спешки" на 3 сек. и могут тихо выполнять ускоренные действия в течение 8 сек.\nПосле окончания эффекта выжившие получают эффект "Усталость" на 20 сек.\nСпособность перезаряжается 30 сек.\n"Спешка" повышает скорость передвижения выжившего. "Усталость" не дает выжившим активировать утомляющие навыки'},
+                {"role": 'Открываемый навык', "icon": 'IconSkills_SurvivorSelfcare_Generic.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/a/a1/IconSkills_SurvivorSelfcare_Generic.png/revision/latest?cb=20240727120439&path-prefix=ru', "text": 'После одного попадания в клетку Беглец получает способность, позволяющую ему лечить себя без аптечки, но со скоростью 70% от обычной'},
+            ],
+        },
+        {
+            "ru": 'Проводник', "en": 'Guide',
+            "icon": 'iconClass_Mechanic.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/3/34/IconClass_Mechanic.png/revision/latest?cb=20240727115446&path-prefix=ru',
+            "skills": [
+                {"role": 'Навык обнаружения', "icon": 'iconSkills_MechanicAura.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/1/1c/IconSkills_MechanicAura.png/revision/latest?cb=20240727115544&path-prefix=ru', "text": "Показывает ауры 4 генераторов, находящихся ближе всех друг к другу\nПоказывает ауру генераторов в радиусе 32 м, починка которых не завершена\nReveals the Killer's aura for 5 seconds if they are within 24 meters when successfully completing a Skill Check"},
+                {"role": 'Командный навык', "icon": 'iconSkills_MechanicInnate.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/f/f2/IconSkills_MechanicInnate.png/revision/latest?cb=20240727115554&path-prefix=ru', "text": 'Во время ремонта ваша аура и аура генератора видны другим выжившим\nВстаньте рядом с генератором, чтобы установить ловушку. Эта способность заряжается 90 сек., и починка ускоряет зарядку\nЛовушка оглушит и ослепит убийцу, который попытается сломать генератор. Аура генератора с ловушкой светится желтым для других выживших. Ловушка отключается после срабатывания или через 120 сек.\nВорота открываются на 15% быстрее, а ваша аура видна другим выжившим в радиусе 128м'},
+                {"role": 'Открываемый навык', "icon": 'T_UI_iconSkills_Wiretap.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/7/74/T_UI_iconSkills_Wiretap.png/revision/latest?cb=20250824131050&path-prefix=ru', "text": 'Попав в клетку, вы получаете подслушивающее устройство, которое устанавливается автоматически по достижении 35% ремонта\nАура генератора с жучком светится желтым, видна выжившим и делает видимой ауру убийцы на расстоянии 14м. Устройство отключается при повреждении генератора или через 60 сек.\nЕсли установить еще одно подслушивающее устройство на генератор с жучком, таймер сбросится'},
+            ],
+        },
+        {
+            "ru": 'Медик', "en": 'Medic',
+            "icon": 'IconClass_Medic.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/5/55/IconClass_Medic.png/revision/latest?cb=20240727115455&path-prefix=ru',
+            "skills": [
+                {"role": 'Навык обнаружения', "icon": 'IconSkills_MedicAura.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/c4/IconSkills_MedicAura.png/revision/latest?cb=20240727120535&path-prefix=ru', "text": 'Показывает ауру раненых выживших, находящихся в пределах 128м.'},
+                {"role": 'Командный навык', "icon": 'IconSkills_MedicInnate.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/5/56/IconSkills_MedicInnate.png/revision/latest?cb=20240727115621&path-prefix=ru', "text": 'Выжившие, находящиеся в пределах 8 м радиуса здоровья Медика, получают бонус к скорости лечения в размере 50%, а их стоны от боли становятся на 50% тише\nПри исцелении аура выжившего становится видна другим выжившим\nДает бонус к лечению, который заряжается 120 сек. Активируйте его, чтобы немедленно вернуть всем выжившим в пределах радиуса здоровья 50% от их здоровья, после чего бонус уходит на перезарядку'},
+                {"role": 'Открываемый навык', "icon": 'iconSkills_MedicUnlock.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/7/72/IconSkills_MedicUnlock.png/revision/latest?cb=20241117072204&path-prefix=ru', "text": 'После одного попадания в клетку, если медик ранен, его следы-трещины скрываются, а аура видна всем остальным выжившим'},
+            ],
+        },
+        {
+            "ru": 'Разведчик', "en": 'Scout',
+            "icon": 'IconClass_Scout.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/9/93/IconClass_Scout.png/revision/latest?cb=20240727115515&path-prefix=ru',
+            "skills": [
+                {"role": 'Навык обнаружения', "icon": 'IconSkills_ScoutAura.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/b/b6/IconSkills_ScoutAura.png/revision/latest?cb=20240727115717&path-prefix=ru', "text": 'Показывает ауру ломающих или повреждающих что-то убийц в течение 6 сек.'},
+                {"role": 'Командный навык', "icon": 'IconSkills_ScoutInnate.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/7/75/IconSkills_ScoutInnate.png/revision/latest?cb=20240727115728&path-prefix=ru', "text": 'Выжившие, находящиеся в пределах 8 м радиуса скрытности Разведчика, передвигаются в приседе на 100% быстрее\nЕсли Разведчик видит убийцу в пределах 64 м, все выжившие могу видеть ауру убийцы\nДает бонус к поднятию доски, который заряжается 60 сек. Когда способность заряжена, замрите, чтобы увидеть ауры всех упавших или сломанных досок. Активируйте навык у павшей или сломанной доски, чтобы поднять или починить ее за 3 сек., после чего способность перезаряжается.'},
+                {"role": 'Открываемый навык', "icon": 'iconSkills_DoubleDipping.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/cf/IconSkills_DoubleDipping.png/revision/latest?cb=20241117070419&path-prefix=ru', "text": 'После одного попадания в клетку Разведчик больше не кричит, если ранен, и не стонет от боли. Его скорость ходьбы увеличивается на 25%'},
+            ],
+        },
+        {
+            "ru": 'Факельщик', "en": 'Torchbearer',
+            "icon": 'T_UI_iconClass_Beacon.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/0/0f/T_UI_iconClass_Beacon.png/revision/latest?cb=20260211181750&path-prefix=ru',
+            "skills": [
+                {"role": 'Навык обнаружения', "icon": 'T_UI_iconSkills_BeaconAura.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/d/da/T_UI_iconSkills_BeaconAura.png/revision/latest?cb=20260211183335&path-prefix=ru', "text": 'Показывает ауры преследуемых выживших на расстоянии до 32 м\nНаправляя фонарик на убийцу в течение 0,5 сек., вы показываете его ауру своим товарищам на 2 сек.'},
+                {"role": 'Командный навык', "icon": 'T_UI_iconSkills_BeaconInnate.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/9/98/T_UI_iconSkills_BeaconInnate.png/revision/latest?cb=20260211183345&path-prefix=ru', "text": 'Начните матч с фонариком необычной редкости\nПолучите способность "Световая граната", которая заряжается 60 сек. Нажмите кнопку активной способности 2, чтобы бросить световую гранату. Она громко взрывается, ослепляя и оглушая всех поблизости\nНавык перезаряжается 60 сек. после использования световой гранаты'},
+                {"role": 'Открываемый навык', "icon": 'T_UI_iconSkills_BeaconTeam.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/a/a8/T_UI_iconSkills_BeaconTeam.png/revision/latest?cb=20260211183354&path-prefix=ru', "text": 'После одного попадания в клетку наделяет эффектом "Стойкость" выживших, которых вы подняли из состояния "при смерти", и раненых выживших, которые освободили вас из клетки'},
+            ],
+        },
+    ],
+    "KILLER": [
+        {
+            "ru": 'Громила', "en": 'Brute',
+            "icon": 'iconClass_Brute.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/6/64/IconClass_Brute.png/revision/latest?cb=20241117114735&path-prefix=ru',
+            "skills": [
+                {"role": 'Командный навык', "icon": 'iconSkills_BloodyRampage.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/6/68/IconSkills_BloodyRampage.png/revision/latest?cb=20241117114748&path-prefix=ru', "text": 'Повышает скорость поломки на 25%\nПовреждаемый генератор подсвечивается желтым. Когда выживший восстанавливает такой генератор свыше точки разрушения, тот взрывается, издавая громкий звук и обдавая несчастного паром. На выжившего накладывается 5% эффект "Замедление" на 12 сек.\nНавык перезаряжается 60 сек., в это время бонус к скорости поломки не действует\n"Замедление" снижает скорость передвижения выжившего'},
+                {"role": 'Навык обнаружения', "icon": 'iconSkills_RelentlessPursuit.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/9/9a/IconSkills_RelentlessPursuit.png/revision/latest?cb=20241117114759&path-prefix=ru', "text": 'Когда вы повреждаете генератор, ауры выживших видно на 8 м дальше\nРадиус увеличивается только для Громилы'},
+            ],
+        },
+        {
+            "ru": 'Наводящий ужас', "en": 'Fearmonger',
+            "icon": 'iconClass_Fearmonger.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/a/af/IconClass_Fearmonger.png/revision/latest?cb=20241117115849&path-prefix=ru',
+            "skills": [
+                {"role": 'Командный навык', "icon": 'iconSkills_SeparationAnxiety.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/9/9c/IconSkills_SeparationAnxiety.png/revision/latest?cb=20241117115823&path-prefix=ru', "text": 'Дает +5% к "Спешке", пока вы невидимы\nРанив одного выжившего, вы вынуждаете еще двоих в радиусе 12 м закричать, раскрывая свои ауры для вашего соратника на 2 сек.\nНавык перезаряжается 60 сек., в это время бонус "Спешки" не действует\n"Спешка" повышает скорость передвижения убийцы'},
+                {"role": 'Навык обнаружения', "icon": 'iconSkills_HauntingPresence.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/d/d3/IconSkills_HauntingPresence.png/revision/latest?cb=20241117115833&path-prefix=ru', "text": 'Каждый раз, когда завершается ремонт генератора, ауры выживших, которые еще не побывали в клетке скверны, виднеются на 4 сек. дольше\nПоказ ауры продлевается только для Наводящего ужас'},
+            ],
+        },
+        {
+            "ru": 'Наемный убийца', "en": 'Enforcer',
+            "icon": 'iconClass_Assassin.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/c4/IconClass_Assassin.png/revision/latest?cb=20241117120813&path-prefix=ru',
+            "skills": [
+                {"role": 'Командный навык', "icon": 'iconSkills_DeadlyMark.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/4/49/IconSkills_DeadlyMark.png/revision/latest?cb=20241117120829&path-prefix=ru', "text": 'Получите 3% "Спешки", когда преследуете раненого выжившего\nКогда вы раните выжившего, на того накладывается "Метка Громилы" на 45 сек. Каждые 8 сек. аура этого выжившего открывается и вам и вашему соратнику на 1 сек. Если любой из вас смертельно ранит этого выжившего, "Метка Громилы" будет снята, а дальность вашей атаки выпадом увеличится на 60% на 15 сек.\nНавык перезаряжается 60 сек., в это время бонус "Спешки" не действует\n"Спешка" повышает скорость передвижения убийцы.'},
+                {"role": 'Навык обнаружения', "icon": 'iconSkills_RemoteRevelation.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/6/67/IconSkills_RemoteRevelation.png/revision/latest?cb=20241117120843&path-prefix=ru', "text": 'Когда вы повреждаете генератор, ауры выживших становятся видны на 4 сек. дольше\nПродолжительность увеличивается только для Наемного убийцы'},
+            ],
+        },
+        {
+            "ru": 'Тень', "en": 'Shadow',
+            "icon": 'iconClass_Stalker.png', "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/2/2f/IconClass_Stalker.png/revision/latest?cb=20241117121826&path-prefix=ru',
+            "skills": [
+                {"role": 'Командный навык', "icon": 'iconSkills_SilentStrike.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/c8/IconSkills_SilentStrike.png/revision/latest?cb=20241117121812&path-prefix=ru', "text": 'Бросьте выжившего в клетку скверны, чтобы получить "Незаметность" на 60 сек. с перезарядкой 60 сек.\nВо время перезарядки и в пределах 32м от напарника вы получаете 5% "Спешки", а перезарядка ускоряется на 25%\nДо полной перезарядки эта способность недоступна\n"Незаметность" скрывает ауру, радиус террора и красное свечение убийцы. "Спешка" повышает скорость передвижения убийцы'},
+                {"role": 'Навык обнаружения', "icon": 'iconSkills_DetectPrey.png',
+                 "url": 'https://static.wikia.nocookie.net/dead-by-daylight/images/7/79/IconSkills_DetectPrey.png/revision/latest?cb=20241117121801&path-prefix=ru', "text": 'Когда ваш союзник бросается в погоню за выжившим, его аура видна на 4 сек. дольше\nВ течение этого дополнительного времени аура видна только Тени'},
+            ],
+        },
+    ],
+}
+# === CLASSES_2V8 END ===

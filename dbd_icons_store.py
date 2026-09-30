@@ -58,6 +58,7 @@ class IconStore:
         if not ICONS:
             return ()
         maps = [ICONS.PERK_ICONS, getattr(ICONS, "ADDON_ICONS", {}),
+                getattr(ICONS, "CLASS_ICONS", {}),
                 getattr(ICONS, "SURVIVOR_PORTRAITS", {}), getattr(ICONS, "KILLER_PORTRAITS", {}),
                 getattr(ICONS, "POWER_ICONS", {}), getattr(ICONS, "ITEM_ICONS", {})]
         if SKINS_MOD is not None:

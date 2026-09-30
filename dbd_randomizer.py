@@ -449,6 +449,43 @@ OPTION_DEFAULTS = {
     "respect_owned":   False,       # учитывать белые списки OWNED_*
     "addons_enabled":  True,
     "skin_enabled":    True,        # подбирать набор одежды к билду
+    "class_enabled":   False,       # добавлять к билду случайный класс «2 против 8»
+}
+
+
+# Как ещё могут искать персонажа в поле поиска внешности (транслит/английское имя).
+SKIN_SEARCH_ALIASES = {
+    "Фенг Мин": "Feng Min фэн минь",
+    "Нея Карлссон": "Nea Karlsson неа",
+    "Ёити Асакава": "Yoichi Asakawa ёичи йоичи",
+    "Элоди Ракото": "Elodie Rakoto элоди",
+    "Квон Тхэён": "Kwon Tae-young квон тхэен тэён",
+    "Ли Юнчин": "Lee Yun-jin ли юн-джин",
+    "Аэстри Язар": "Aestri Yazar Baermar Uraz Troupe труппа",
+    "Детектив Тэпп": "David Tapp тапп",
+    "Уильям Овербек": "Bill Overbeck билл",
+    "Эшли Уильямс": "Ash Williams эш",
+    "Джефф Йохансен": "Jeff Johansen джефф",
+    "Шейн Уиигваас": "Shane Wiigwaas",
+    "Ви Бунясак": "Vee Boonyasak ви",
+    "Одиннадцать": "Eleven одиннадцать",
+    "Хэдди Каур": "Haddie Kaur хэдди",
+    "Торговка черепами": "Skull Merchant",
+    "Тёмный властелин": "Dark Lord Dracula дракула",
+    "Ксеноморф": "Xenomorph",
+    "Неведомое": "Unknown",
+    "Онрё": "Onryo Sadako садако",
+    "Сенобит": "Cenobite Pinhead пинхед",
+    "Тень": "Shape Michael Myers майерс",
+    "Ведьма": "Hag",
+    "Гуль": "Ghoul Kaneki канеки",
+    "Аниматроник": "Animatronic Springtrap спрингтрап",
+    "Первый": "First Vecna Henry Creel векна",
+    "Лич": "Lich Vecna",
+    "Правосудие": "Judgment",
+    "Егерь": "Houndmaster",
+    "Красу": "Krasue",
+    "Слэшер": "Slasher Jason джейсон",
 }
 
 
@@ -754,6 +791,29 @@ def pick_skin(char, owned_skins=None):
             "display": info.get("name_ru") or info.get("name", "?")}
 
 
+CLASS_SIDES = (("SURVIVOR", "Выживший"), ("KILLER", "Убийца"))
+
+
+def pick_class(side):
+    """Случайный класс режима «2 против 8» для стороны (None, если данных нет)."""
+    classes = (getattr(DATA, "CLASSES_2V8", {}) or {}).get(side) or []
+    return random.choice(classes) if classes else None
+
+
+def classes_to_text(entries):
+    """Класс(ы) в читаемый текст: имя, EN-имя и навыки с их ролями."""
+    lines = []
+    for side, entry in entries:
+        if not entry:
+            continue
+        label = dict(CLASS_SIDES).get(side, side)
+        lines.append(f"{label}: {entry['ru']} ({entry['en']})")
+        for sk in entry.get("skills", []):
+            first = (sk.get("text") or "").split("\n")[0]
+            lines.append(f"   • {sk.get('role', '')}: {first}")
+    return "\n".join(lines)
+
+
 def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
                       addons_enabled=True, skin_enabled=True, owned_skins=None):
     owned = db.get("owned", {})
@@ -834,6 +894,9 @@ def build_to_text(b):
     if isinstance(skin, dict) and skin:
         lines.append(f"👗 Внешность (случайный набор): "
                      f"{skin.get('display') or skin.get('name', '?')}")
+    cls = b.get("class")
+    if isinstance(cls, dict) and cls:
+        lines.append(f"🎭 Класс (2 против 8): {cls.get('ru', '?')} ({cls.get('en', '')})")
     elif isinstance(skin, str) and skin.strip():
         lines.append(f"👗 Внешность: {skin.strip()}")
     return "\n".join(lines)
@@ -860,7 +923,11 @@ def _norm(s):
 
 
 def _entry_text(entry):
-    """Текст из Entry; всё, что не строка (например, заглушка в тестах), -> ''."""
+    """Текст из Entry; всё, что не строка (например, заглушка в тестах), -> ''.
+
+    Используется и для полей поиска: в headless-тестах `tkinter` подменён моками,
+    и `entry.get()` возвращает MagicMock — без проверки фильтр «нашёл» бы всё.
+    """
     try:
         val = entry.get()
     except Exception:
@@ -1089,6 +1156,8 @@ class App:
         self._grabber = None                 # защита от сборщика мусора
         self._hotkey_handle = None
         self._char_widgets = {}
+        self._class_widgets = {}
+        self.cfg_classes = {}                  # side -> выпавший класс «2 против 8»
         self._coord_widgets = {}
         self._timing_widgets = {}
         self._option_vars = {}
@@ -1362,6 +1431,7 @@ class App:
         left = ttk.Frame(self.tab_main)
         left.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=8)
         left.rowconfigure(0, weight=1)
+        left.rowconfigure(1, weight=0)
         left.columnconfigure(0, weight=1)
 
         box = ttk.LabelFrame(left, text=" ВАШ БИЛД ")
@@ -1369,6 +1439,10 @@ class App:
         box.rowconfigure(0, weight=1)
         box.columnconfigure(0, weight=1)
         self._build_card(box)
+
+        cls_box = ttk.LabelFrame(left, text=" 🎭 КЛАССЫ РЕЖИМА «2 ПРОТИВ 8» ")
+        cls_box.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self._build_class_panel(cls_box)
 
         right = ttk.Frame(self.tab_main)
         right.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=8)
@@ -1489,6 +1563,11 @@ class App:
         row_skin.pack(fill="x", padx=16, pady=(6, 0))
         self.card_skin_img = tk.Label(row_skin, bg="#151a21", width=24, height=24)
         self.card_skin_img.pack(side="left", padx=(0, 8))
+        row_class = tk.Frame(self.card, **pad)
+        row_class.pack(fill="x", padx=16, pady=(6, 0))
+        self.card_class = tk.Label(row_class, anchor="w", fg="#8d99a6", bg="#151a21",
+                                   font=("Segoe UI", 10), justify="left", wraplength=430)
+        self.card_class.pack(side="left", fill="x", expand=True)
         self.card_skin = tk.Label(row_skin, anchor="w", fg="#8d99a6", bg="#151a21",
                                   font=("Segoe UI", 9, "italic"))
         self.card_skin.pack(side="left", fill="x", expand=True)
@@ -1919,6 +1998,98 @@ class App:
                     "(вкладка хранит его локально).")
         self.lbl_backend_hint.config(text=hint)
 
+    # ---- классы режима «2 против 8» -----------------------------------------
+    def _build_class_panel(self, parent):
+        """Отдельная рулетка классов: своя для выживших и своя для убийц.
+
+        Класс в DBD не привязан к персонажу и выбирается в режиме «2 против 8»
+        отдельно от билда, поэтому он не смешивается с генератором: крутится
+        своей кнопкой и показывается под карточкой билда.
+        """
+        self.class_var = tk.BooleanVar(value=self.cfg["options"].get("class_enabled", False))
+        ttk.Checkbutton(parent,
+                        text="Добавлять случайный класс к билду (строка в карточке и в тексте)",
+                        variable=self.class_var).pack(anchor="w", padx=8, pady=(4, 2))
+        body = tk.Frame(parent, bg=self._pal["panel"])
+        body.pack(fill="x", padx=8, pady=(0, 8))
+        for col, (side, label) in enumerate(CLASS_SIDES):
+            colf = tk.Frame(body, bg="#1c232c", highlightbackground="#2a323d",
+                            highlightthickness=1)
+            colf.grid(row=0, column=col, sticky="nsew", padx=(0, 6) if col == 0 else 0)
+            body.columnconfigure(col, weight=1)
+            head = tk.Frame(colf, bg="#1c232c")
+            head.pack(fill="x", padx=6, pady=(6, 2))
+            tk.Label(head, text=label, bg="#1c232c", fg="#8d99a6",
+                     font=("Segoe UI", 9, "bold")).pack(side="left")
+            ttk.Button(head, text="🎲", width=3,
+                       command=lambda sd=side: self.roll_class(sd)).pack(side="right")
+            row = tk.Frame(colf, bg="#1c232c")
+            row.pack(fill="x", padx=6, pady=(0, 2))
+            img = tk.Label(row, bg="#1c232c", width=28, height=28)
+            img.pack(side="left", padx=(0, 6))
+            name = tk.Label(row, text="—", bg="#1c232c", fg="#e6ebf0", anchor="w",
+                            font=("Segoe UI", 10, "bold"))
+            name.pack(side="left", fill="x", expand=True)
+            skills = tk.Label(colf, text="нажмите 🎲 — класс в режиме «2 против 8» "
+                                         "выбирается отдельно от билда",
+                              bg="#1c232c", fg="#8d99a6", anchor="w", justify="left",
+                              font=("Segoe UI", 9), wraplength=250)
+            skills.pack(fill="x", padx=6, pady=(0, 6))
+            self._class_widgets[side] = (img, name, skills)
+
+    def roll_class(self, side=None):
+        """Случайный класс: для одной стороны или сразу для обеих (2v8)."""
+        sides = [side] if side else [sd for sd, _lbl in CLASS_SIDES]
+        entries = []
+        for sd in sides:
+            entry = pick_class(sd)
+            self.cfg_classes[sd] = entry
+            entries.append((sd, entry))
+            widgets = self._class_widgets.get(sd)
+            if not widgets:
+                continue
+            img, name, skills = widgets
+            if not entry:
+                name.config(text="нет данных")
+                skills.config(text="Классы не найдены в dbd_data.py (CLASSES_2V8).")
+                img.config(image=self._icon_photo(None, 28), text="")
+                continue
+            name.config(text=f"{entry['ru']}  ({entry['en']})")
+            skills.config(text="\n".join(
+                f"• {sk.get('role', '')}: {(sk.get('text') or '').split(chr(10))[0]}"
+                for sk in entry.get("skills", [])))
+            img.config(image=self._icon_photo(f"class:{entry['ru']}", 28), text="")
+        want = [f"class:{e['ru']}" for _sd, e in entries if e]
+        want += [f"classskill:{sk['icon']}" for _sd, e in entries if e
+                 for sk in e.get("skills", []) if sk.get("icon")]
+        self._request_icons(want)
+        text = classes_to_text(entries)
+        if text:
+            self.log("🎲 Класс «2 против 8»:\n" + text)
+            self.set_status("Класс выбран: " + ", ".join(
+                f"{e['ru']}" for _sd, e in entries if e), "#3fb950")
+        if self.build and self.class_var.get():
+            self._render_build()
+
+    def _refresh_class_icons(self):
+        """Докачались иконки — перерисовываем значки классов."""
+        for side, entry in (self.cfg_classes or {}).items():
+            widgets = self._class_widgets.get(side)
+            if widgets and entry:
+                widgets[0].config(image=self._icon_photo(f"class:{entry['ru']}", 28), text="")
+
+    def copy_classes(self):
+        entries = [(sd, self.cfg_classes.get(sd)) for sd, _lbl in CLASS_SIDES
+                   if self.cfg_classes.get(sd)]
+        if not entries:
+            messagebox.showwarning("Классы", "Сначала нажмите 🎲 — класс ещё не выбран.")
+            return
+        try:
+            pyperclip.copy(classes_to_text(entries))
+            self.set_status("Классы скопированы в буфер обмена.", "#3fb950")
+        except Exception as exc:
+            messagebox.showerror("Буфер обмена", str(exc))
+
     # ---- вкладка «Внешность» -------------------------------------------------
     def _build_skins_tab(self):
         if SKINS is None:
@@ -1929,20 +2100,29 @@ class App:
                       foreground="#e5534b", font=("Segoe UI", 10),
                       justify="left").pack(padx=16, pady=16)
             self._sk_widgets = {}
+            self._sk_rows = {}
             return
         top = ttk.Frame(self.tab_skins)
         top.pack(fill="x", padx=10, pady=(8, 2))
         ttk.Label(top, text="Персонаж:").pack(side="left")
         chars = sorted(getattr(SKINS, "CHAR_SKINS", {}))
+        self._sk_all_chars = chars
         self.sk_char = ttk.Combobox(top, state="readonly", width=24, values=chars)
         self.sk_char.pack(side="left", padx=6)
         self.sk_char.bind("<<ComboboxSelected>>", lambda e: self._sk_on_char())
+        # «readonly» не запрещает ввод с клавиатуры: используем его как поиск по персонажу
+        self.sk_char.bind("<KeyRelease>", lambda e: self._sk_filter_chars())
         ttk.Button(top, text="🎲 Случайный набор", command=self._sk_random).pack(side="left", padx=4)
         ttk.Button(top, text="Все", command=lambda: self._sk_set_all(True)).pack(side="left", padx=3)
         ttk.Button(top, text="Никого", command=lambda: self._sk_set_all(False)).pack(side="left", padx=3)
         ttk.Button(top, text="💾 Сохранить", command=self._sk_save).pack(side="left", padx=3)
         self.sk_count = ttk.Label(top, text="", foreground="#8d99a6", font=("Segoe UI", 9))
         self.sk_count.pack(side="right")
+        ttk.Label(top, text="Поиск:").pack(side="left", padx=(10, 0))
+        self.sk_filter = ttk.Entry(top, width=26)
+        self.sk_filter.pack(side="left", padx=4)
+        self.sk_filter.bind("<KeyRelease>", lambda e: self._sk_apply_filter())
+        ttk.Button(top, text="✕", width=3, command=self._sk_clear_filter).pack(side="left")
         all_skins = getattr(SKINS, "SKINS_BY_ID", {}) or {}
         total, chars_n = len(all_skins), len(getattr(SKINS, "CHAR_SKINS", {}) or {})
         n_ru = sum(1 for i in all_skins.values() if i.get("name_ru"))
@@ -1995,6 +2175,7 @@ class App:
         for w in self.sk_inner.winfo_children():
             w.destroy()
         self._sk_widgets = {}
+        self._sk_rows = {}
         owned = (self.cfg.get("skins") or {}).get(char)
         owned_set = set(owned) if owned is not None else None
         for sid in ids:
@@ -2012,6 +2193,8 @@ class App:
                                 command=lambda s=sid: self._sk_preview_id(s))
             cb.pack(side="left", fill="x", expand=True)
             self._sk_widgets[sid] = (var, img)
+            self._sk_rows[sid] = (row, self._sk_search_text(sid, info))
+        self._sk_apply_filter()
         self._update_sk_count()
         self._request_icons([f"skin:{i}" for i in ids])
         self._sk_preview_id(ids[0] if ids else None)
@@ -2056,6 +2239,52 @@ class App:
         self.sk_meta.config(text=self._sk_meta_text(char, info))
         self._request_icons([f"skin:{sid}"])
 
+    def _sk_search_text(self, sid, info):
+        """Строка для поиска: RU/EN название, персонаж (+транслит), редкость, тип, дата."""
+        char = info.get("char", "")
+        parts = [str(sid), info.get("name", ""), info.get("name_ru", ""), char,
+                 SKIN_SEARCH_ALIASES.get(char, ""),
+                 info.get("rarity_ru", ""), str(info.get("rarity", "")),
+                 "скин персонажа" if info.get("kind") == "coschar" else "набор",
+                 info.get("date", "")]
+        return _norm(" ".join(p for p in parts if p))
+
+    def _sk_apply_filter(self):
+        """Скрывает строки наборов, не подходящие под поиск (галочки не трогаем:
+        «💾 Сохранить» и «Все/Никого» по-прежнему работают по всему списку)."""
+        q = _norm(_entry_text(getattr(self, "sk_filter", None)))
+        shown = 0
+        for sid, (row, hay) in getattr(self, "_sk_rows", {}).items():
+            ok = (not q) or (q in hay)
+            try:
+                if ok:
+                    row.pack(fill="x", padx=4, pady=1)
+                else:
+                    row.pack_forget()
+            except Exception:
+                pass
+            shown += 1 if ok else 0
+        self._update_sk_count(shown)
+
+    def _sk_clear_filter(self):
+        try:
+            self.sk_filter.delete(0, "end")
+        except Exception:
+            pass
+        self._sk_apply_filter()
+
+    def _sk_filter_chars(self):
+        """Поиск по списку персонажей: оставляем в дропдауне только подходящих."""
+        q = _norm(_entry_text(getattr(self, "sk_char", None)))
+        chars = [c for c in getattr(self, "_sk_all_chars", []) if not q or q in _norm(c)]
+        try:
+            self.sk_char.config(values=chars or ["ничего не найдено"])
+            if len(chars) == 1:
+                self.sk_char.set(chars[0])
+                self._sk_on_char()
+        except Exception:
+            pass
+
     def _sk_random(self):
         ids = [sid for sid, (var, _i) in self._sk_widgets.items() if var.get()]
         if not ids:
@@ -2070,10 +2299,13 @@ class App:
             var.set(value)
         self._update_sk_count()
 
-    def _update_sk_count(self):
+    def _update_sk_count(self, shown=None):
         total = len(self._sk_widgets)
         on = sum(1 for var, _i in self._sk_widgets.values() if var.get())
-        self.sk_count.config(text=f"отмечено {on}/{total}")
+        text = f"отмечено {on}/{total}"
+        if shown is not None and shown != total:
+            text = f"показано {shown} из {total} · " + text
+        self.sk_count.config(text=text)
 
     def _sk_save(self):
         char = self.sk_char.get()
@@ -2407,6 +2639,7 @@ class App:
         self.card_main_img.config(image=self._icon_photo(None, ICON_SIZE), text="")
         self.card_skin_img.config(image=self._icon_photo(None, 24), text="")
         self.card_skin.config(text="" if text else "—", fg="#56606c")
+        self.card_class.config(text="", fg="#56606c")
         for img, lbl in self.card_addons:
             img.config(image=self._icon_photo(None, ICON_SIZE), text="")
             lbl.config(text=filler, fg="#56606c")
@@ -2431,6 +2664,13 @@ class App:
         self.card_author.config(text=head)
         self.card_stripe.config(bg=self._pal["killer"] if b["side"] == "KILLER"
                                 else self._pal["surv"])
+        cls = b.get("class")
+        if cls:
+            self.card_class.config(
+                text=f"🎭 Класс (2 против 8): {cls.get('ru', '?')} ({cls.get('en', '')})",
+                fg="#8d99a6")
+        else:
+            self.card_class.config(text="", fg="#56606c")
         skin = b.get("skin")
         if skin:
             shown = skin.get("display") or skin.get("name") or str(skin)
@@ -2565,6 +2805,7 @@ class App:
         self.cfg["update"]["allow_branch"] = bool(self.allow_branch_var.get())
         self.cfg["options"]["addons_enabled"] = bool(self.addons_var.get())
         self.cfg["options"]["skin_enabled"] = bool(self.skin_var.get())
+        self.cfg["options"]["class_enabled"] = bool(self.class_var.get())
         self.cfg["options"]["respect_owned"] = bool(self.owned_var.get())
 
     def save_settings(self):
@@ -2662,6 +2903,25 @@ class App:
         except Exception as exc:
             messagebox.showerror("Генерация", f"Не удалось собрать билд:\n{exc}")
             return
+        # класс режима «2 против 8»: отдельная рулетка, но по желанию добавляется
+        # к билду (в карточку, в текст и в журнал)
+        if self.class_var.get():
+            cls = pick_class(side)
+            self.build["class"] = cls
+            self.cfg_classes[side] = cls
+            if cls:
+                widgets = self._class_widgets.get(side)
+                if widgets:
+                    widgets[1].config(text=f"{cls['ru']}  ({cls['en']})")
+                    widgets[2].config(text="\n".join(
+                        f"• {sk.get('role', '')}: {(sk.get('text') or '').splitlines()[0]}"
+                        for sk in cls.get("skills", [])))
+                    widgets[0].config(image=self._icon_photo(f"class:{cls['ru']}", 28), text="")
+                self._request_icons([f"class:{cls['ru']}"]
+                                    + [f"classskill:{sk['icon']}" for sk in cls.get("skills", [])
+                                       if sk.get("icon")])
+                self.log("🎭 Класс «2 против 8» к билду:\n"
+                         + classes_to_text([(side, cls)]))
         self._render_build()
         self.btn_equip.config(state="normal")
         self.set_status("Билд готов. Откройте в игре меню снаряжения этого персонажа и жмите «ЭКИПИРОВАТЬ».",
@@ -3533,6 +3793,10 @@ def selftest():
               f"(патч {getattr(SKINS, 'GAME_VERSION', '?')})")
     else:
         print("  внешность: модуль dbd_skins.py не найден")
+    cls = getattr(DATA, "CLASSES_2V8", {}) or {}
+    print(f"  классы «2 против 8»: выживших {len(cls.get('SURVIVOR', []))}, "
+          f"убийц {len(cls.get('KILLER', []))}, навыков "
+          f"{sum(len(c['skills']) for v in cls.values() for c in v)}")
     print(f"  ошибок: {len(errors)}, предупреждений: {len(warnings)}")
     for e in errors:
         print("   ✖", e)

@@ -350,6 +350,7 @@ class TestIcons(unittest.TestCase):
         have, total = st.stats()
         import dbd_skins as SK
         self.assertEqual(total, len(R.ICONS.PERK_ICONS) + len(R.ICONS.ADDON_ICONS)
+                         + len(getattr(R.ICONS, "CLASS_ICONS", {}))
                          + len(R.ICONS.SURVIVOR_PORTRAITS)
                          + len(getattr(R.ICONS, "KILLER_PORTRAITS", {}))
                          + len(R.ICONS.POWER_ICONS) + len(R.ICONS.ITEM_ICONS)
@@ -603,6 +604,48 @@ class TestSkins(unittest.TestCase):
             self.assertEqual(k, k.strip().lower())
             self.assertTrue(v.strip())
             self.assertLessEqual(len(v), 90)
+
+    def test_skins_search_matches_ru_en_rarity_and_date(self):
+        """Поиск на вкладке «ВНЕШНОСТЬ»: RU/EN имя, редкость, дата, id, транслит."""
+        import dbd_skins as SK
+        app = make_app()
+        char = "Фенг Мин"
+        app.sk_char = ST_VAR(app, char)
+        app._sk_on_char()
+        rows = dict(app._sk_rows)
+        self.assertEqual(len(rows), len(SK.CHAR_SKINS[char]))
+        hay = {sid: text for sid, (_row, text) in rows.items()}
+
+        def find(q):
+            n = R._norm(q)
+            return {sid for sid, text in hay.items() if n in text}
+
+        self.assertIn("Bloody Feng Min",
+                      [SK.SKINS_BY_ID[i]["name"] for i in find("кровавая")])
+        self.assertTrue({SK.SKINS_BY_ID[i]["name"] for i in find("arcade")} >=
+                        {"Arcade Tournament"})
+        self.assertTrue(all(SK.SKINS_BY_ID[i]["rarity_ru"] == "очень редкий"
+                            for i in find("очень редкий")))
+        self.assertTrue(all("2026" in (SK.SKINS_BY_ID[i].get("date") or "")
+                            for i in find("2026")))
+        self.assertTrue(find("1179"))                       # поиск по id
+        self.assertEqual(find("такого нет точно"), set())
+        self.assertTrue(find("фэн"), "транслит имени персонажа не работает")
+        self.assertTrue(find(char.lower()))                 # сам персонаж
+        # фильтр скрывает строки, но НЕ трогает галочки владения
+        app.sk_filter = ST_VAR(app, "arcade")
+        app._sk_apply_filter()
+        self.assertEqual(len(app._sk_widgets), len(rows))
+        app._sk_clear_filter()
+
+    def test_skins_search_survives_missing_widgets(self):
+        """Поиск не падает, если поле/строки ещё не созданы (вкладка без модуля)."""
+        app = make_app()
+        app._sk_rows = {}
+        app.sk_filter = None
+        app._sk_apply_filter()
+        app._sk_clear_filter()
+        app._sk_filter_chars()
 
     def test_ru_names_cover_most_of_base(self):
         """RU-названия (русская вики) покрывают большую часть базы."""
@@ -1468,6 +1511,112 @@ class TestCommunityBuildsUI(unittest.TestCase):
         self.app.builds_filter_var.set("ВСЕ")
         self.app.builds_search_entry = mock.MagicMock(get=lambda: "spiderq")
         self.assertEqual(len(self.app._filtered_builds()), 1)
+
+
+
+
+class TestClasses2v8(unittest.TestCase):
+    """Классы режима «2 против 8»: данные, рулетка, интеграция с билдом."""
+
+    def setUp(self):
+        self.db = R.db_defaults()
+
+    def test_class_data_sane(self):
+        data = R.DATA.CLASSES_2V8
+        self.assertEqual(len(data["SURVIVOR"]), 5)
+        self.assertEqual(len(data["KILLER"]), 4)
+        for side, classes in data.items():
+            for c in classes:
+                self.assertTrue(c["ru"] and c["en"], c)
+                self.assertTrue(c["skills"], c["ru"])
+                for sk in c["skills"]:
+                    self.assertTrue(sk["role"] and sk["text"], (c["ru"], sk))
+                self.assertTrue(c["url"].startswith("https://"), c["ru"])
+
+    def test_official_names_and_sides(self):
+        """Русские имена классов и их стороны — как на русской вики."""
+        data = R.DATA.CLASSES_2V8
+        self.assertEqual([c["ru"] for c in data["SURVIVOR"]],
+                         ["Беглец", "Проводник", "Медик", "Разведчик", "Факельщик"])
+        self.assertEqual([c["ru"] for c in data["KILLER"]],
+                         ["Громила", "Наводящий ужас", "Наемный убийца", "Тень"])
+        by_ru = {c["ru"]: c for side in data for c in data[side]}
+        self.assertEqual(by_ru["Беглец"]["en"], "Escapist")
+        self.assertEqual(by_ru["Факельщик"]["en"], "Torchbearer")
+        self.assertEqual(by_ru["Наемный убийца"]["en"], "Enforcer")
+        self.assertEqual(by_ru["Наводящий ужас"]["en"], "Fearmonger")
+
+    def test_pick_class(self):
+        for side in ("SURVIVOR", "KILLER"):
+            for _ in range(40):
+                c = R.pick_class(side)
+                self.assertIn(c, R.DATA.CLASSES_2V8[side])
+        self.assertIsNone(R.pick_class("НЕТУ"))
+
+    def test_classes_text(self):
+        c = R.DATA.CLASSES_2V8["SURVIVOR"][0]
+        text = R.classes_to_text([("SURVIVOR", c), ("KILLER", None)])
+        self.assertIn(f"Выживший: {c['ru']} ({c['en']})", text)
+        self.assertIn(c["skills"][0]["role"], text)
+        self.assertNotIn("Убийца:", text)          # пустая сторона не печатается
+        self.assertEqual(R.classes_to_text([("SURVIVOR", None)]), "")
+
+    def test_build_carries_class_when_enabled(self):
+        app = make_app()
+        app.mode_var = ST_VAR(app, "KILLER")
+        app.class_var.set(True)
+        app.db = self.db
+        app._char_widgets = {}
+        logged = []
+        app.log = lambda msg: logged.append(msg)
+        app.set_status = lambda *a, **kw: None
+        app._render_build = lambda: None
+        app.generate_build()
+        cls = app.build.get("class")
+        self.assertIsNotNone(cls)
+        self.assertIn(cls, R.DATA.CLASSES_2V8["KILLER"])
+        self.assertEqual(app.cfg_classes["KILLER"], cls)
+        self.assertIn(f"🎭 Класс (2 против 8): {cls['ru']} ({cls['en']})",
+                      R.build_to_text(app.build))
+        self.assertTrue(any("🎭 Класс" in m for m in logged))
+
+    def test_build_without_class_by_default(self):
+        app = make_app()
+        app.mode_var = ST_VAR(app, "SURVIVOR")
+        app.db = self.db
+        app._char_widgets = {}
+        app.log = lambda msg: None
+        app.set_status = lambda *a, **kw: None
+        app._render_build = lambda: None
+        self.assertFalse(app.class_var.get())          # по умолчанию выключено
+        app.generate_build()
+        self.assertIsNone(app.build.get("class"))
+        self.assertNotIn("Класс", R.build_to_text(app.build))
+
+    def test_roll_class_fills_both_sides_and_icons(self):
+        app = make_app()
+        app.roll_class()
+        for side, _label in R.CLASS_SIDES:
+            entry = app.cfg_classes.get(side)
+            self.assertIn(entry, R.DATA.CLASSES_2V8[side])
+            self.assertTrue(app._class_widgets[side])
+        app.roll_class("KILLER")
+        self.assertIn(app.cfg_classes["KILLER"], R.DATA.CLASSES_2V8["KILLER"])
+        # иконки классов и навыков лежат отдельной картой с абсолютными URL
+        icons = R.ICONS.CLASS_ICONS
+        for side in R.DATA.CLASSES_2V8:
+            for c in R.DATA.CLASSES_2V8[side]:
+                self.assertIn(f"class:{c['ru']}", icons)
+                self.assertTrue(icons[f"class:{c['ru']}"].startswith("https://"))
+        covered = sum(1 for side in R.DATA.CLASSES_2V8
+                      for c in R.DATA.CLASSES_2V8[side]
+                      for sk in c["skills"] if f"classskill:{sk['icon']}" in icons)
+        self.assertGreaterEqual(covered, 20)
+
+    def test_class_option_is_saved(self):
+        cfg = R.default_config()
+        self.assertIn("class_enabled", cfg["options"])
+        self.assertFalse(cfg["options"]["class_enabled"])
 
 
 if __name__ == "__main__":

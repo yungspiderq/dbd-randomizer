@@ -1298,3 +1298,44 @@ KILLER_SPRITE = {
         'Чума': 16,
     },
 }
+
+
+# Иконки классов режима «2 против 8» и их навыков. Значения — АБСОЛЮТНЫЕ URL
+# русской вики (dead-by-daylight.fandom.com/ru): на wiki.gg этих файлов нет, а
+# IconStore умеет и абсолютные адреса (см. fetch_one). Ключи:
+#   "class:<RU имя класса>"      — иконка класса
+#   "classskill:<имя файла>"     — иконка навыка класса
+CLASS_ICONS = {
+    'class:Беглец': 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/cf/IconClass_Runner.png/revision/latest?cb=20240727115504&path-prefix=ru',
+    'classskill:IconSkills_RunnerAura.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/5/59/IconSkills_RunnerAura.png/revision/latest?cb=20240727115644&path-prefix=ru',
+    'classskill:IconSkills_RunnerInnate.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/b/b4/IconSkills_RunnerInnate.png/revision/latest?cb=20240727115656&path-prefix=ru',
+    'classskill:IconSkills_SurvivorSelfcare_Generic.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/a/a1/IconSkills_SurvivorSelfcare_Generic.png/revision/latest?cb=20240727120439&path-prefix=ru',
+    'class:Проводник': 'https://static.wikia.nocookie.net/dead-by-daylight/images/3/34/IconClass_Mechanic.png/revision/latest?cb=20240727115446&path-prefix=ru',
+    'classskill:iconSkills_MechanicAura.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/1/1c/IconSkills_MechanicAura.png/revision/latest?cb=20240727115544&path-prefix=ru',
+    'classskill:iconSkills_MechanicInnate.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/f/f2/IconSkills_MechanicInnate.png/revision/latest?cb=20240727115554&path-prefix=ru',
+    'classskill:T_UI_iconSkills_Wiretap.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/7/74/T_UI_iconSkills_Wiretap.png/revision/latest?cb=20250824131050&path-prefix=ru',
+    'class:Медик': 'https://static.wikia.nocookie.net/dead-by-daylight/images/5/55/IconClass_Medic.png/revision/latest?cb=20240727115455&path-prefix=ru',
+    'classskill:IconSkills_MedicAura.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/c4/IconSkills_MedicAura.png/revision/latest?cb=20240727120535&path-prefix=ru',
+    'classskill:IconSkills_MedicInnate.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/5/56/IconSkills_MedicInnate.png/revision/latest?cb=20240727115621&path-prefix=ru',
+    'classskill:iconSkills_MedicUnlock.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/7/72/IconSkills_MedicUnlock.png/revision/latest?cb=20241117072204&path-prefix=ru',
+    'class:Разведчик': 'https://static.wikia.nocookie.net/dead-by-daylight/images/9/93/IconClass_Scout.png/revision/latest?cb=20240727115515&path-prefix=ru',
+    'classskill:IconSkills_ScoutAura.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/b/b6/IconSkills_ScoutAura.png/revision/latest?cb=20240727115717&path-prefix=ru',
+    'classskill:IconSkills_ScoutInnate.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/7/75/IconSkills_ScoutInnate.png/revision/latest?cb=20240727115728&path-prefix=ru',
+    'classskill:iconSkills_DoubleDipping.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/cf/IconSkills_DoubleDipping.png/revision/latest?cb=20241117070419&path-prefix=ru',
+    'class:Факельщик': 'https://static.wikia.nocookie.net/dead-by-daylight/images/0/0f/T_UI_iconClass_Beacon.png/revision/latest?cb=20260211181750&path-prefix=ru',
+    'classskill:T_UI_iconSkills_BeaconAura.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/d/da/T_UI_iconSkills_BeaconAura.png/revision/latest?cb=20260211183335&path-prefix=ru',
+    'classskill:T_UI_iconSkills_BeaconInnate.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/9/98/T_UI_iconSkills_BeaconInnate.png/revision/latest?cb=20260211183345&path-prefix=ru',
+    'classskill:T_UI_iconSkills_BeaconTeam.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/a/a8/T_UI_iconSkills_BeaconTeam.png/revision/latest?cb=20260211183354&path-prefix=ru',
+    'class:Громила': 'https://static.wikia.nocookie.net/dead-by-daylight/images/6/64/IconClass_Brute.png/revision/latest?cb=20241117114735&path-prefix=ru',
+    'classskill:iconSkills_BloodyRampage.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/6/68/IconSkills_BloodyRampage.png/revision/latest?cb=20241117114748&path-prefix=ru',
+    'classskill:iconSkills_RelentlessPursuit.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/9/9a/IconSkills_RelentlessPursuit.png/revision/latest?cb=20241117114759&path-prefix=ru',
+    'class:Наводящий ужас': 'https://static.wikia.nocookie.net/dead-by-daylight/images/a/af/IconClass_Fearmonger.png/revision/latest?cb=20241117115849&path-prefix=ru',
+    'classskill:iconSkills_SeparationAnxiety.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/9/9c/IconSkills_SeparationAnxiety.png/revision/latest?cb=20241117115823&path-prefix=ru',
+    'classskill:iconSkills_HauntingPresence.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/d/d3/IconSkills_HauntingPresence.png/revision/latest?cb=20241117115833&path-prefix=ru',
+    'class:Наемный убийца': 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/c4/IconClass_Assassin.png/revision/latest?cb=20241117120813&path-prefix=ru',
+    'classskill:iconSkills_DeadlyMark.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/4/49/IconSkills_DeadlyMark.png/revision/latest?cb=20241117120829&path-prefix=ru',
+    'classskill:iconSkills_RemoteRevelation.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/6/67/IconSkills_RemoteRevelation.png/revision/latest?cb=20241117120843&path-prefix=ru',
+    'class:Тень': 'https://static.wikia.nocookie.net/dead-by-daylight/images/2/2f/IconClass_Stalker.png/revision/latest?cb=20241117121826&path-prefix=ru',
+    'classskill:iconSkills_SilentStrike.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/c/c8/IconSkills_SilentStrike.png/revision/latest?cb=20241117121812&path-prefix=ru',
+    'classskill:iconSkills_DetectPrey.png': 'https://static.wikia.nocookie.net/dead-by-daylight/images/7/79/IconSkills_DetectPrey.png/revision/latest?cb=20241117121801&path-prefix=ru',
+}
