@@ -50,7 +50,11 @@ class IconStore:
     # ---------------------------------------------------------------- пути --
     @staticmethod
     def _maps():
-        """Все карты «имя -> файл»: навыки, аддоны, портреты, силы, предметы."""
+        """Все карты «имя -> файл»: навыки, аддоны, портреты, силы, предметы, скины.
+
+        Значение — имя файла (его прибавит ICON_BASE), относительный путь
+        (`thumb/S39_outfit_013.png/256px-…` — миниатюры скинов) или полный URL.
+        """
         if not ICONS:
             return ()
         maps = [ICONS.PERK_ICONS, getattr(ICONS, "ADDON_ICONS", {}),
@@ -126,7 +130,12 @@ class IconStore:
                 break
         if not rel:
             return None
-        url = ICONS.ICON_BASE + self.filename(name)
+        if rel.startswith(("http://", "https://")):
+            url = rel
+        else:
+            # "/" не экранируется: у скинов значение карты — путь миниатюры
+            # (thumb/<file>/256px-<file>), а не одно имя файла.
+            url = ICONS.ICON_BASE + urllib.parse.quote(rel, safe="/._-%~")
         path = self.local_path(name)
         tmp = path + ".part"
         try:

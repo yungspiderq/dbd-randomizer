@@ -1,31 +1,50 @@
 # -*- coding: utf-8 -*-
-"""Генерирует dbd_skins.py: наборы одежды (скины) с картинками.
+"""Генерирует dbd_skins.py: ВСЕ наборы одежды (скины) с wiki.gg.
 
 Запуск:  python tools/resolve_skins.py
 Сеть:    https://deadbydaylight.wiki.gg/api.php (кэш в tools/wiki_cache/)
 
 Источники
 ---------
-* Module:Datatable/Cosmetics  — наборы: id, персонаж (killer/survivor = номер),
-  редкость, англ. имя;
-* Module:Datatable/Loadout    — p.skills: номер персонажа -> англ. имя (чтобы
-  привязать набор к русскому имени персонажа из dbd_data.py);
-* Module:Datatable/Various    — p.rarities: номер редкости -> англ. ярлык;
-* файлы CC{id:03d}_charSelect_portrait.png на wiki.gg — превью набора
-  (проверяются по списку реально залитых файлов, fallback — iconFile из
-  Module:Datatable/Icons).
+* Module:Datatable/Cosmetics
+    - p.outfits  — все наборы: id, персонаж (killer/survivor = id), редкость,
+      англ. имя, файл превью (filename), дата выхода, цена;
+    - p.cosChars — «скины персонажей» (Look-See, Krampus, Baba Yaga, Xenomorph
+      Queen и т.п.): отдельная таблица со СВОЕЙ нумерацией id, превью —
+      CC{id:03d}_charSelect_portrait.png;
+    - комментарий в шапке модуля — таблица номеров редкости.
+* Module:Datatable — p.killers / p.survivors: id персонажа -> англ. имя
+  (единственный надёжный способ сопоставить число из Cosmetics с персонажем:
+  номера спрайт-файлов K01..K37 НЕ совпадают с id, у Hag/Shape порядок другой).
+* Module:Datatable/Cosmetics/Pieces — p.heads / p.masks / p.torsos / …: id
+  детали -> файл. Используется как запасное превью, если файла набора на вики
+  нет (например K44_outfit_01.png у Правосудия ещё не залит).
+* tools/char_map_ru.py — англ. имя персонажа -> русское имя из dbd_data.py.
 
-RU-названий наборов в открытых данных НЕТ (ру-вики хранит их в статьях
-«<Персонаж> (наборы одежды)», парсинг ~50 страниц пока не оправдан), поэтому
-v1 показывает английские имена + картинку + редкость: по картинке набор
-находится в русском клиенте игры мгновенно. Карта построена по id наборов,
-так что RU-имена можно добавить позже таблицей SKIN_RU_OVERRIDES без ломающих
-изменений.
+Картинки
+--------
+Превью берётся не полноразмерным файлом (512x512, ~100-300 КБ), а миниатюрой
+MediaWiki `images/thumb/<file>/256px-<file>` (~40 КБ): приложение показывает
+их размером 26 px и 110 px, а «скачать все иконки» не тянет сотни мегабайт.
+Существование каждого файла проверяется через action=query (titles=File:…),
+результат кэшируется в tools/wiki_cache/skin_file_exists.json — повторный запуск
+без правок данных сети не требует.
+
+RU-названий наборов в открытых данных нет (русская вики хранит их внутри статей
+«<Персонаж> (наборы одежды)», это ~100 страниц ручной разметки), поэтому v2
+показывает английские имена + картинку + редкость: по картинке набор находится в
+русском клиенте мгновенно. Ключи стабильны (id набора), так что RU-имена можно
+добавить позже таблицей SKIN_RU_OVERRIDES без ломающих изменений.
+
+«fakeOutfit» (одиночные предметы — торс/голова без полного набора, 912 шт.) в
+основной список НЕ попадают: у них в данных вики нет ни имени, ни картинки.
+Они выгружаются отдельной компактной таблицей FAKE_SKINS на будущее.
 """
 import json
 import os
 import re
 import sys
+import time
 import urllib.parse
 import urllib.request
 
@@ -33,32 +52,41 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from char_names_ru_en import (SURVIVOR_RU_EN, KILLER_RU_SPRITE,
-                              KILLER_RU_PORTRAIT)  # noqa: E402
+from char_map_ru import KILLER_EN_RU, SURVIVOR_EN_RU, RARITIES   # noqa: E402
 import dbd_data as DATA                                          # noqa: E402
 
 API = "https://deadbydaylight.wiki.gg/api.php"
-UA = {"User-Agent": "DBDskinFetcher/2.10 (skins; see repository)"}
+UA = {"User-Agent": "DBDskinFetcher/2.11 (skins; see repository)"}
 CACHE = os.path.join(ROOT, "tools", "wiki_cache")
+THUMB_WIDTH = 256
+# id «скинов персонажей» (p.cosChars) нумеруются отдельно и пересекаются с id
+# наборов (1..111 есть в обеих таблицах) — сдвигаем их, чтобы ключи не слипались.
+COSCHAR_ID_OFFSET = 10000
+TITLES_PER_REQUEST = 50
 
-RARITY_RU = {
-    "Common": "обычный", "Rare": "редкий", "Very Rare": "очень редкий",
-    "Ultra Rare": "крайне редкий", "Iridescent": "радужный", "Limited": "лимитированный",
-    "Event": "ивентовый", "Uncommon": "необычный", "Special": "особый",
-}
 
-
-def api(**kw):
+# ============================================================================
+# сеть + кэш
+# ============================================================================
+def api(retries=3, **kw):
     kw.setdefault("format", "json")
     url = API + "?" + urllib.parse.urlencode(kw)
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+    last = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=120) as r:
+                return json.load(r)
+        except Exception as exc:                            # pragma: no cover
+            last = exc
+            time.sleep(1.5 * (attempt + 1))
+    raise RuntimeError(f"API-запрос не удался: {last}")
 
 
-def module_wikitext(page, cache_name):
+def module_wikitext(page, cache_name, force=False):
+    os.makedirs(CACHE, exist_ok=True)
     path = os.path.join(CACHE, cache_name)
-    if os.path.exists(path):
+    if os.path.exists(path) and not force:
         with open(path, encoding="utf-8") as fh:
             return fh.read()
     wt = api(action="parse", page=page, prop="wikitext")["parse"]["wikitext"]["*"]
@@ -67,132 +95,366 @@ def module_wikitext(page, cache_name):
     return wt
 
 
-def stored_file_names():
-    path = os.path.join(CACHE, "skin_files.json")
-    if os.path.exists(path):
-        with open(path, encoding="utf-8") as fh:
-            return set(json.load(fh))
-    out = set()
-    for prefix in ("CC0", "CC1", "S0", "S1", "S2", "S3", "S4", "S5", "K0", "K1", "K2"):
-        cont = None
-        while True:
-            kw = dict(action="query", list="allimages", aiprefix=prefix, ailimit="500")
-            if cont:
-                kw["aicontinue"] = cont
-            d = api(**kw)
-            got = [i["name"] for i in d["query"]["allimages"]]
-            out.update(g for g in got if "charSelect" in g or "outfit" in g.lower())
-            if "continue" in d:
-                cont = d["continue"]["aicontinue"]
-            else:
-                break
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(sorted(out), fh, ensure_ascii=False)
+def lua_block(wikitext, table):
+    """Тело таблицы `<table> = { ... }` из Lua-модуля вики.
+
+    В Module:Datatable таблицы объявлены как `killers = {` с последующим
+    `p.killers = killers`, в Cosmetics — сразу как `p.outfits = {`; берём
+    первое объявление (однострочные `p.x = x` нас не интересуют).
+    """
+    m = re.search(rf"^(?:local\s+|p\.)?{re.escape(table)}\s*=\s*\{{", wikitext, re.M)
+    if not m:
+        raise ValueError(f"таблица {table} не найдена")
+    end = wikitext.index("\n}\n", m.start())
+    return wikitext[m.start():end]
+
+
+def row_fields(row):
+    """Поля одной Lua-строки: {'id': '5', 'name': '"Krampus"', 'rarity': '7'}."""
+    out = {}
+    for m in re.finditer(r'(\w+) = (?:"((?:[^"\\]|\\.)*)"|\'([^\']*)\'|(\{[^{}]*\})|([\w.\-]+))', row):
+        key = m.group(1)
+        val = m.group(2) if m.group(2) is not None else (
+            m.group(3) if m.group(3) is not None else (
+                m.group(4) if m.group(4) is not None else m.group(5)))
+        out[key] = val
     return out
 
 
-def main():
-    cos = module_wikitext("Module:Datatable/Cosmetics", "Module_Datatable_Cosmetics.wiki")
-    load = module_wikitext("Module:Datatable/Loadout", "Module_Datatable_Loadout.wiki")
-    various = module_wikitext("Module:Datatable/Various", "Module_Datatable_Various.wiki")
-    icons_wt = module_wikitext("Module:Datatable/Icons", "Module_Datatable_Icons.wiki")
+# ============================================================================
+# персонажи: id -> русское имя
+# ============================================================================
+def character_names(datatable_wt):
+    """(убийцы id->RU, выжившие id->RU) по Module:Datatable + char_map_ru."""
+    killers, survivors, unknown = {}, {}, []
 
-    # номер персонажа -> RU имя (из спрайт-модулей: K01..K44, S01..S44)
-    knum_ru = {}
-    for ru, sid in KILLER_RU_SPRITE.items():
-        knum_ru[int(sid[1:3])] = ru
-    for ru, fname in KILLER_RU_PORTRAIT.items():
-        m0 = re.match(r"K(\d+)", fname)
-        if m0:
-            knum_ru[int(m0.group(1))] = ru
-    spr_s = module_wikitext("Module:SurvivorPortraitsSprite",
-                            "Module_SurvivorPortraitsSprite.wiki")
-    def norm(s):
-        return re.sub(r"[^a-z0-9]", "", s.lower())
-    surv_by_norm = {norm(v): k for k, v in SURVIVOR_RU_EN.items()}
-    MANUAL_S = {"S42": "Аэстри Язар"}          # TheTroupe -> дуо из dbd_data
-    snum_ru = {}
-    for sid, token, _pos in re.findall(
-            r"\['(S\d+) ([A-Za-z'\- ]+) Portrait'\]\s*=\s*\{ pos = (\d+)", spr_s):
-        snum_ru[int(sid[1:])] = MANUAL_S.get(sid) or surv_by_norm.get(norm(token))
-    # редкости
-    rarities = {}
-    m = re.search(r"p\.rarities\s*=\s*\{(.*?)\n\}", various, re.S)
-    if m:
-        for mm in re.finditer(r"\[(\d+)\]\s*=\s*\"([^\"]+)\"", m.group(1)):
-            rarities[int(mm.group(1))] = mm.group(2)
-    # iconFile fallback
-    icons = {}
-    for mm in re.finditer(r'\[(["\'])(.*?)\1\]\s*=\s*\{[^{}]*?iconFile\s*=\s*"([^"]+)"', icons_wt):
-        icons[mm.group(2)] = mm.group(3)
+    def collect(table, mapping, dest):
+        for m in re.finditer(r'\{id = (\d+), name = ([\"\'])(.*?)\2', lua_block(datatable_wt, table)):
+            cid, en = int(m.group(1)), m.group(3)
+            ru = mapping.get(en)
+            if ru is None:
+                unknown.append(f"{table}:{cid} {en!r}")
+                continue
+            dest[cid] = ru
 
-    stored = stored_file_names()
+    collect("killers", KILLER_EN_RU, killers)
+    collect("survivors", SURVIVOR_EN_RU, survivors)
+    if unknown:
+        raise SystemExit("Нет русского имени для персонажей (дополните tools/char_map_ru.py): "
+                         + ", ".join(unknown))
+    # страховка: имя обязано совпадать с тем, что в базе приложения
+    bad = [ru for ru in killers.values() if ru not in DATA.KILLERS]
+    bad += [ru for ru in survivors.values() if ru not in DATA.SURVIVORS]
+    if bad:
+        raise SystemExit("Имена не совпадают с dbd_data.py: " + ", ".join(sorted(set(bad))))
+    return killers, survivors
 
-    def variant_ok(name):
-        return name in stored
 
-    skins_by_id, char_skins = {}, {}
-    missing_img = 0
-    for m in re.finditer(r"\{id = (\d+), (killer|survivor) = (\d+),\s*rarity = (\d+), "
-                         r"name = \"([^\"]+)\"", cos):
-        sid, side, cnum, rar, name = (int(m.group(1)), m.group(2), int(m.group(3)),
-                                      int(m.group(4)), m.group(5))
-        ru_char = knum_ru.get(cnum) if side == "killer" else snum_ru.get(cnum)
-        if not ru_char:
+# ============================================================================
+# файлы картинок
+# ============================================================================
+def file_exists_map(names):
+    """{имя файла: True/False} — проверка через action=query с кэшем на диске."""
+    os.makedirs(CACHE, exist_ok=True)
+    path = os.path.join(CACHE, "skin_file_exists.json")
+    cached = {}
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                cached = json.load(fh)
+        except (OSError, ValueError):
+            cached = {}
+    todo = [n for n in dict.fromkeys(names) if n not in cached]
+    for i in range(0, len(todo), TITLES_PER_REQUEST):
+        chunk = todo[i:i + TITLES_PER_REQUEST]
+        d = api(action="query", titles="|".join("File:" + n for n in chunk))
+        q = d.get("query") or {}
+        pages = {}
+        for p in (q.get("pages") or {}).values():
+            pages[p["title"]] = p
+        for n in q.get("normalized", []):
+            if n["to"] in pages:
+                pages[n["from"]] = pages[n["to"]]
+        for n in chunk:
+            p = pages.get("File:" + n) or pages.get("File:" + n.replace("_", " "))
+            cached[n] = bool(p and "missing" not in p and not p.get("invalid"))
+        print(f"  файлы: проверено {min(i + TITLES_PER_REQUEST, len(todo))}/{len(todo)}", flush=True)
+    if todo:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(cached, fh, ensure_ascii=False, sort_keys=True)
+    return cached
+
+
+def thumb_rel(filename):
+    """Относительный путь миниатюры 256 px (IconStore прибавит ICON_BASE)."""
+    return f"thumb/{filename}/{THUMB_WIDTH}px-{filename}"
+
+
+# ============================================================================
+# разбор данных
+# ============================================================================
+def clean_name(name):
+    """Неразрывные пробелы и «типографские» кавычки вики -> обычные."""
+    return (name.replace("\xa0", " ").replace("’", "'").replace("‘", "'")
+                .replace("“", '"').replace("”", '"').strip())
+
+
+def parse_outfits(cos_wt, killers_ru, survivors_ru):
+    """Полные наборы (fakeOutfit не берём) и отдельно одиночные предметы."""
+    outfits, fakes = [], []
+    for row in re.findall(r"\{id = \d+,.*", lua_block(cos_wt, "outfits")):
+        f = row_fields(row)
+        cid = int(f["id"])
+        side = "KILLER" if "killer" in f else ("SURVIVOR" if "survivor" in f else None)
+        cnum = int(f.get("killer") or f.get("survivor") or 0)
+        ru = (killers_ru if side == "KILLER" else survivors_ru).get(cnum)
+        if side is None or ru is None:
             continue
-        if ru_char not in DATA.KILLERS and ru_char not in DATA.SURVIVORS:
-            continue
-        fname = f"CC{sid:03d}_charSelect_portrait.png"
-        if not variant_ok(fname):
-            alt = icons.get(name)
-            fname = alt if alt and variant_ok(alt.replace(" ", "_")) or (alt and alt in stored) else None
-            if fname and fname not in stored:
-                fname = fname.replace(" ", "_") if fname.replace(" ", "_") in stored else None
-        if not fname:
-            missing_img += 1
-        rar_label = rarities.get(rar, "")
-        skins_by_id[sid] = {
-            "name": name,
-            "char": ru_char,
-            "side": "KILLER" if side == "killer" else "SURVIVOR",
-            "rarity": rar,
-            "rarity_ru": RARITY_RU.get(rar_label, rar_label),
-            "file": fname,
+        rec = {
+            "id": cid, "side": side, "char": ru,
+            "rarity": int(f.get("rarity") or 0),
+            "name": clean_name(f.get("name", "")),
+            "file": f.get("filename") or "",
+            "date": f.get("rDate") or "",
+            "pieces": f.get("pieces") or "",
+            "kind": "outfit",
+            "fake": f.get("fakeOutfit") == "true",
         }
-        char_skins.setdefault(ru_char, []).append(sid)
+        (fakes if rec["fake"] else outfits).append(rec)
+    return outfits, fakes
 
-    print(f"наборов: {len(skins_by_id)}, персонажей с наборами: {len(char_skins)}, "
-          f"без картинки: {missing_img}")
 
-    out = os.path.join(ROOT, "dbd_skins.py")
-    with open(out, "w", encoding="utf-8") as fh:
+def parse_coschars(cos_wt, killers_ru, survivors_ru):
+    out = []
+    for row in re.findall(r"\{id = \d+,.*", lua_block(cos_wt, "cosChars")):
+        f = row_fields(row)
+        side = "KILLER" if "killer" in f else "SURVIVOR"
+        cnum = int(f.get("killer") or f.get("survivor") or 0)
+        ru = (killers_ru if side == "KILLER" else survivors_ru).get(cnum)
+        if ru is None:
+            continue
+        cid = int(f["id"])
+        out.append({
+            "id": COSCHAR_ID_OFFSET + cid, "raw_id": cid, "side": side, "char": ru,
+            "rarity": int(f.get("rarity") or 0),
+            "name": clean_name(f.get("name", "")),
+            "file": f"CC{cid:03d}_charSelect_portrait.png",
+            "date": "", "pieces": "", "kind": "coschar", "fake": False,
+        })
+    return out
+
+
+def parse_pieces(pieces_wt):
+    """{(таблица, id детали): файл} — запасные превью."""
+    pieces = {}
+    for table in ("heads", "masks", "torsos", "bodies", "upperBodies", "legs", "weapons", "arms", "hands"):
+        try:
+            block = lua_block(pieces_wt, table)
+        except ValueError:
+            continue
+        for row in re.findall(r"\{id = \d+,.*", block):
+            m = re.search(r'filename = "([^"]+)"', row)
+            i = re.search(r"\{id = (\d+),", row)
+            if m and i:
+                pieces[(table, int(i.group(1)))] = m.group(1)
+    return pieces
+
+
+def pieces_of(rec):
+    """[(таблица, id)] из `pieces = {heads = 5, torsos = 21}`."""
+    out = []
+    for m in re.finditer(r"(\w+) = (\d+)", rec.get("pieces") or ""):
+        out.append((m.group(1), int(m.group(2))))
+    return out
+
+
+PIECE_PRIORITY = ("heads", "masks", "torsos", "bodies", "upperBodies", "legs",
+                  "weapons", "arms", "hands")
+
+
+def fallback_file(rec, pieces, exists):
+    """Превью из детали набора (голова/маска/торс), если файла набора нет."""
+    got = dict(pieces_of(rec))
+    for table in PIECE_PRIORITY:
+        if table in got:
+            fn = pieces.get((table, got[table]))
+            if fn and exists.get(fn):
+                return fn
+    for table, pid in sorted(got.items()):
+        fn = pieces.get((table, pid))
+        if fn and exists.get(fn):
+            return fn
+    return None
+
+
+# ============================================================================
+# запись dbd_skins.py
+# ============================================================================
+def q(s):
+    return repr(s)
+
+
+def write_module(path, skins, char_skins, skin_files, fakes_by_char, game_version, stamp):
+    n_outfit = sum(1 for s in skins.values() if s["kind"] == "outfit")
+    n_char = len(skins) - n_outfit
+    n_img = sum(1 for s in skins.values() if s["file"])
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write('# -*- coding: utf-8 -*-\n')
         fh.write('"""Сгенерировано tools/resolve_skins.py — НЕ править вручную.\n\n')
         fh.write('Наборы одежды (скины): id -> данные + файл превью на wiki.gg.\n')
-        fh.write('Имена английские: RU-названий нет в открытых данных (v1), картинка\n')
-        fh.write('позволяет найти набор в русском клиенте. Ключи стабильны (id).\n"""\n\n')
-        fh.write('SKIN_BASE = "https://deadbydaylight.wiki.gg/images/"\n\n')
-        fh.write("SKINS_BY_ID = {\n")
-        for sid in sorted(skins_by_id):
-            s = skins_by_id[sid]
-            fh.write(f"    {sid}: {{'name': {s['name']!r}, 'char': {s['char']!r}, "
-                     f"'side': {s['side']!r}, 'rarity': {s['rarity']}, "
-                     f"'rarity_ru': {s['rarity_ru']!r}, 'file': {s['file']!r}}},\n")
+        fh.write(f'Источник: Module:Datatable/Cosmetics (патч {game_version}, снято {stamp}).\n')
+        fh.write(f'Наборов: {n_outfit}, «скинов персонажей» (cosChars): {n_char}, '
+                 f'с превью: {n_img}.\n\n')
+        fh.write('Имена английские: RU-названий нет в открытых данных, картинка позволяет\n')
+        fh.write('найти набор в русском клиенте. Ключи стабильны (id набора).\n\n')
+        fh.write('id «скина персонажа» = COSCHAR_ID_OFFSET + id из p.cosChars: у обеих\n')
+        fh.write('таблиц вики своя нумерация, и на 1..111 они пересекаются.\n\n')
+        fh.write('FAKE_SKINS — одиночные предметы (торс/голова без полного набора): в вики\n')
+        fh.write('у них нет ни имени, ни картинки, поэтому в розыгрыш они не попадают.\n')
+        fh.write('Превью — миниатюра 256 px: SKIN_FILES хранит путь `thumb/<файл>/256px-<файл>`\n')
+        fh.write('(IconStore прибавляет ICON_BASE из dbd_icons.py); полноразмерный файл лежит\n')
+        fh.write('по пути SKIN_BASE + поле `file`.\n"""\n\n')
+        fh.write('SKIN_BASE = "https://deadbydaylight.wiki.gg/images/"\n')
+        fh.write(f'THUMB_WIDTH = {THUMB_WIDTH}\n')
+        fh.write(f'COSCHAR_ID_OFFSET = {COSCHAR_ID_OFFSET}\n')
+        fh.write(f'GAME_VERSION = {q(game_version)}\n')
+        fh.write(f'DATA_STAMP = {q(stamp)}\n\n')
+        fh.write("RARITY_RU = {\n")
+        for num in sorted(RARITIES):
+            fh.write(f"    {num}: {q(RARITIES[num][1])},\n")
         fh.write("}\n\n")
+        fh.write("RARITY_EN = {\n")
+        for num in sorted(RARITIES):
+            fh.write(f"    {num}: {q(RARITIES[num][0])},\n")
+        fh.write("}\n\n")
+
+        fh.write("SKINS_BY_ID = {\n")
+        for sid in sorted(skins):
+            s = skins[sid]
+            fh.write(f"    {sid}: {{'name': {q(s['name'])}, 'char': {q(s['char'])}, "
+                     f"'side': {q(s['side'])}, 'rarity': {s['rarity']}, "
+                     f"'rarity_ru': {q(s['rarity_ru'])}, 'file': {q(s['file'] or '')}, "
+                     f"'kind': {q(s['kind'])}")
+            if s.get("date"):
+                fh.write(f", 'date': {q(s['date'])}")
+            fh.write("},\n")
+        fh.write("}\n\n")
+
+        fh.write("# RU имя персонажа -> id наборов (сортировка: по дате выхода, затем по id)\n")
         fh.write("CHAR_SKINS = {\n")
         for ru in sorted(char_skins):
-            fh.write(f"    {ru!r}: {sorted(char_skins[ru])!r},\n")
+            fh.write(f"    {q(ru)}: {list(char_skins[ru])!r},\n")
         fh.write("}\n\n")
-        fh.write("# ключи вида 'skin:<id>' — для общего IconStore\n")
+
+        fh.write("# ключи вида 'skin:<id>' -> путь миниатюры (для общего IconStore)\n")
         fh.write("SKIN_FILES = {\n")
-        for sid in sorted(skins_by_id):
-            f = skins_by_id[sid]["file"]
-            if f:
-                fh.write(f"    'skin:{sid}': {f!r},\n")
+        for key in sorted(skin_files, key=lambda k: int(k.split(':')[1])):
+            fh.write(f"    {q(key)}: {q(skin_files[key])},\n")
+        fh.write("}\n\n")
+
+        fh.write("# одиночные предметы без имени/картинки: RU имя -> [(id, редкость, сторона)]\n")
+        fh.write("FAKE_SKINS = {\n")
+        for ru in sorted(fakes_by_char):
+            items = ", ".join(f"({i}, {r}, {q(side)})" for i, r, side in fakes_by_char[ru])
+            fh.write(f"    {q(ru)}: [{items}],\n")
         fh.write("}\n")
-    print(f"Записано: {out}")
+    return n_outfit, n_char, n_img
+
+
+def main(force=False):
+    cos_wt = module_wikitext("Module:Datatable/Cosmetics", "Module_Datatable_Cosmetics.wiki", force)
+    dt_wt = module_wikitext("Module:Datatable", "Module_Datatable.wiki", force)
+    pieces_wt = module_wikitext("Module:Datatable/Cosmetics/Pieces",
+                                "Module_Datatable_Cosmetics_Pieces.wiki", force)
+
+    m = re.search(r"--Game Version: ([\w.]+)", cos_wt)
+    game_version = m.group(1) if m else "?"
+    m = re.search(r"--Timestamp: ([\d\-: .]+)", cos_wt)
+    stamp = (m.group(1).strip() if m else time.strftime("%Y-%m-%d"))[:19]
+
+    killers_ru, survivors_ru = character_names(dt_wt)
+    print(f"персонажей: убийц {len(killers_ru)}, выживших {len(survivors_ru)} "
+          f"(патч {game_version}, данные вики от {stamp})")
+
+    outfits, fakes = parse_outfits(cos_wt, killers_ru, survivors_ru)
+    coschars = parse_coschars(cos_wt, killers_ru, survivors_ru)
+    pieces = parse_pieces(pieces_wt)
+    print(f"наборов: {len(outfits)}, скинов персонажей: {len(coschars)}, "
+          f"одиночных предметов (fakeOutfit): {len(fakes)}, деталей в Pieces: {len(pieces)}")
+
+    wanted = [r["file"] for r in outfits if r["file"]] + [r["file"] for r in coschars]
+    print(f"проверяю {len(set(wanted))} файлов превью на вики…")
+    exists = file_exists_map(wanted)
+
+    # запасные превью нужны только тем записям, чей файл набора не залит
+    need_fallback = [r for r in outfits + coschars if r["file"] and not exists.get(r["file"])]
+    cand = []
+    for rec in need_fallback:
+        got = dict(pieces_of(rec))
+        for table in PIECE_PRIORITY:
+            fn = pieces.get((table, got[table])) if table in got else None
+            if fn:
+                cand.append(fn)
+        for table, pid in sorted(got.items()):
+            fn = pieces.get((table, pid))
+            if fn:
+                cand.append(fn)
+    if cand:
+        print(f"  у {len(need_fallback)} записей файла набора нет — "
+              f"проверяю {len(set(cand))} файлов деталей…")
+        exists.update(file_exists_map(cand))
+
+    skins, char_skins, skin_files = {}, {}, {}
+    stats = {"no_image": 0, "fallback": 0}
+    for rec in coschars + outfits:
+        sid = rec["id"]
+        fn = rec["file"] if exists.get(rec["file"]) else None
+        if fn is None:
+            # файла набора на вики нет (свежий контент): пробуем превью детали
+            fn = fallback_file(rec, pieces, exists)
+            if fn:
+                stats["fallback"] += 1
+            else:
+                stats["no_image"] += 1
+        rar = rec["rarity"]
+        skins[sid] = {
+            "name": rec["name"], "char": rec["char"], "side": rec["side"],
+            "rarity": rar, "rarity_ru": RARITIES.get(rar, ("?", "?"))[1],
+            "file": fn or "", "date": rec["date"], "kind": rec["kind"],
+        }
+        if fn:
+            skin_files[f"skin:{sid}"] = thumb_rel(fn)
+
+    # порядок в списке персонажа: сначала «скины персонажей», затем по дате выхода
+    def sort_key(sid):
+        s = skins[sid]
+        d = s.get("date") or ""
+        iso = ""
+        m = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", d)
+        if m:
+            iso = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+        return (0 if s["kind"] == "coschar" else 1, iso or "9999", sid)
+
+    for sid in sorted(skins, key=sort_key):
+        char_skins.setdefault(skins[sid]["char"], []).append(sid)
+
+    fakes_by_char = {}
+    for rec in fakes:
+        fakes_by_char.setdefault(rec["char"], []).append((rec["id"], rec["rarity"], rec["side"]))
+
+    out = os.path.join(ROOT, "dbd_skins.py")
+    n_outfit, n_char, n_img = write_module(out, skins, char_skins, skin_files,
+                                           fakes_by_char, game_version, stamp)
+    per_char = sorted((len(v), k) for k, v in char_skins.items())
+    print(f"персонажей с наборами: {len(char_skins)} "
+          f"(минимум {per_char[0][0]} у «{per_char[0][1]}», максимум {per_char[-1][0]} у «{per_char[-1][1]}»)")
+    print(f"записей: {n_outfit} наборов + {n_char} скинов персонажей, "
+          f"с превью {n_img} ({stats['fallback']} — превью детали вместо отсутствующего файла набора), "
+          f"без превью {stats['no_image']}")
+    print(f"одиночных предметов (FAKE_SKINS): {len(fakes)}")
+    print(f"Записано: {out} ({os.path.getsize(out) // 1024} КБ)")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(force="--force" in sys.argv))

@@ -13,6 +13,7 @@ import time
 import types
 import unittest
 import urllib.error
+import urllib.parse
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -343,6 +344,85 @@ class TestIcons(unittest.TestCase):
                          + len(getattr(SK, "SKIN_FILES", {})))
         self.assertEqual(have, 0)
 
+    def test_store_handles_skin_thumbnails(self):
+        """Превью скинов — миниатюры 256 px (не полноразмерные 512x512)."""
+        import tempfile
+        st = R.IconStore(tempfile.mkdtemp(), enabled=True)
+        if not st.enabled:
+            self.skipTest("Pillow недоступен")
+        import dbd_skins as SK
+        self.assertTrue(SK.SKIN_FILES)
+        key = sorted(SK.SKIN_FILES)[0]
+        rel = SK.SKIN_FILES[key]
+        self.assertTrue(rel.startswith("thumb/"))
+        self.assertIn(f"/{SK.THUMB_WIDTH}px-", rel)
+        fn = st.filename(key)                       # имя файла в кэше
+        self.assertEqual(fn, urllib.parse.quote(rel, safe="._-%"))
+        self.assertNotIn("/", fn)
+        self.assertTrue(st.local_path(key).endswith(fn))
+
+    def test_store_accepts_absolute_url(self):
+        """Карта может хранить полный URL — IconStore не приставляет ICON_BASE."""
+        import tempfile
+        st = R.IconStore(tempfile.mkdtemp(), enabled=True)
+        if not st.enabled:
+            self.skipTest("Pillow недоступен")
+        import dbd_icons as IC
+        saved = dict(IC.ITEM_ICONS)
+        IC.ITEM_ICONS["ТестАбсолют"] = "http://127.0.0.1:9/a/b.png"
+        try:
+            self.assertEqual(st.filename("ТестАбсолют"),
+                             urllib.parse.quote("http://127.0.0.1:9/a/b.png", safe="._-%"))
+            self.assertIsNone(st.fetch_one("ТестАбсолют"))   # хост недоступен -> None, не краш
+        finally:
+            IC.ITEM_ICONS.clear()
+            IC.ITEM_ICONS.update(saved)
+
+    def test_fetch_builds_urls_for_thumbs_and_preencoded_names(self):
+        """URL собирается без экранирования «/» (пути миниатюр) и без двойного
+        percent-экранирования имён (IconPerks_coupDeGr%C3%A2ce.png)."""
+        import tempfile
+        import urllib.request
+        st = R.IconStore(tempfile.mkdtemp(), enabled=True)
+        if not st.enabled:
+            self.skipTest("Pillow недоступен")
+        import dbd_skins as SK
+        png = b"\x89PNG\r\n\x1a\n" + b"0" * 600
+        got = []
+
+        class FakeResp:
+            def __init__(self, data):
+                self._data = data
+
+            def read(self):
+                return self._data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            got.append(req.full_url)
+            return FakeResp(png)
+
+        saved = urllib.request.urlopen
+        urllib.request.urlopen = fake_urlopen
+        try:
+            key = sorted(SK.SKIN_FILES)[0]
+            self.assertTrue(st.fetch_one(key))
+            self.assertTrue(st.fetch_one("Добивание"))
+        finally:
+            urllib.request.urlopen = saved
+        self.assertEqual(len(got), 2)
+        self.assertTrue(got[0].startswith(R.ICONS.ICON_BASE + "thumb/"))
+        self.assertIn(f"/{SK.THUMB_WIDTH}px-", got[0])
+        self.assertNotIn("%2F", got[0])
+        self.assertIn("%C3%A2", got[1])
+        self.assertNotIn("%25", got[1])
+        self.assertTrue(st.is_cached(key))
+
     def test_store_resolves_addon_icons(self):
         import tempfile
         st = R.IconStore(tempfile.mkdtemp(), enabled=True)
@@ -385,14 +465,93 @@ class TestSkins(unittest.TestCase):
 
     def test_skin_data_sane(self):
         import dbd_skins as SK
-        self.assertGreaterEqual(len(SK.SKINS_BY_ID), 80)
+        # v2.11: полная база wiki.gg — 2084 набора + 111 «скинов персонажей»
+        self.assertGreaterEqual(len(SK.SKINS_BY_ID), 2000)
+        self.assertGreaterEqual(len(SK.CHAR_SKINS), 90)
         for sid, info in SK.SKINS_BY_ID.items():
             self.assertIn(info["char"], self.db["killers"] if info["side"] == "KILLER"
                           else self.db["survivors"])
+            self.assertTrue(info["name"], sid)
+            self.assertIn(info["kind"], ("outfit", "coschar"))
+            self.assertIn(info["rarity"], SK.RARITY_RU)
+            self.assertTrue(info["rarity_ru"], sid)
             if info["file"]:
                 self.assertTrue(info["file"].lower().endswith(".png"))
+                self.assertEqual(SK.SKIN_FILES.get(f"skin:{sid}"),
+                                 f"thumb/{info['file']}/{SK.THUMB_WIDTH}px-{info['file']}")
         for ru, ids in SK.CHAR_SKINS.items():
+            self.assertTrue(ids)
+            self.assertEqual(len(set(ids)), len(ids))
             self.assertTrue(all(i in SK.SKINS_BY_ID for i in ids))
+            self.assertTrue(all(SK.SKINS_BY_ID[i]["char"] == ru for i in ids))
+
+    def test_skin_covers_every_character(self):
+        """Наборы есть у всех персонажей базы: 44 убийцы и 54 выживших."""
+        import dbd_skins as SK
+        for ru in self.db["killers"]:
+            self.assertIn(ru, SK.CHAR_SKINS, f"нет наборов у убийцы {ru}")
+        for ru in self.db["survivors"]:
+            self.assertIn(ru, SK.CHAR_SKINS, f"нет наборов у выжившего {ru}")
+
+    def test_coschar_ids_do_not_collide_with_outfits(self):
+        """id скинов персонажей сдвинуты: таблицы вики нумеруются независимо."""
+        import dbd_skins as SK
+        cos = [sid for sid, i in SK.SKINS_BY_ID.items() if i["kind"] == "coschar"]
+        outfits = [sid for sid, i in SK.SKINS_BY_ID.items() if i["kind"] == "outfit"]
+        self.assertTrue(cos and outfits)
+        self.assertFalse(set(cos) & set(outfits))
+        self.assertTrue(all(sid >= SK.COSCHAR_ID_OFFSET for sid in cos))
+        self.assertTrue(all(sid < SK.COSCHAR_ID_OFFSET for sid in outfits))
+
+    def test_hag_and_shape_not_swapped(self):
+        """Регрессия v2.10: номера спрайтов K05/K06 перепутали Ведьму и Тень.
+
+        Birch — скин персонажа Ведьмы (Hag, id 6), Look-See — Тени (Shape, id 5).
+        """
+        import dbd_skins as SK
+        by_name = {i["name"]: i for i in SK.SKINS_BY_ID.values()}
+        self.assertEqual(by_name["Birch"]["char"], "Ведьма")
+        self.assertEqual(by_name["Look-See"]["char"], "Доктор")
+        self.assertEqual(by_name["Minotaur"]["char"], "Они")
+        shape = SK.SKINS_BY_ID[[i for i in SK.CHAR_SKINS["Тень"]][0]]
+        self.assertTrue(shape["file"].startswith("MM_"))      # MM = Michael Myers
+
+    def test_old_skin_ownership_is_reset_on_schema_change(self):
+        """Отметки владения v2.10.x (id 1..111) сбрасываются: числа означают другое."""
+        import json, os, tempfile
+        tmp = tempfile.mkdtemp()
+        cfg_file = os.path.join(tmp, "dbd_randomizer_config.json")
+        old = R.default_config()
+        old["skins_schema"] = 1
+        old["skins"] = {"Охотник": [4, 5]}
+        with open(cfg_file, "w", encoding="utf-8") as fh:
+            json.dump(old, fh)
+        saved = (R.CONFIG_FILE, R.DB_FILE)
+        R.CONFIG_FILE = cfg_file
+        R.DB_FILE = os.path.join(tmp, "dbd_database.json")
+        try:
+            cfg, migrated = R.load_config()
+            self.assertTrue(migrated)
+            self.assertEqual(cfg["skins"], {})
+            self.assertEqual(cfg["skins_schema"], R.SKINS_SCHEMA)
+            R.save_config(cfg)
+            cfg["skins"] = {"Охотник": [49]}
+            R.save_config(cfg)
+            cfg2, migrated2 = R.load_config()
+            self.assertFalse(migrated2)
+            self.assertEqual(cfg2["skins"], {"Охотник": [49]})   # своя ревизия — не трогаем
+        finally:
+            R.CONFIG_FILE, R.DB_FILE = saved
+
+    def test_fake_outfits_are_separate(self):
+        """Одиночные предметы (fakeOutfit) не участвуют в розыгрыше."""
+        import dbd_skins as SK
+        self.assertGreaterEqual(sum(len(v) for v in SK.FAKE_SKINS.values()), 900)
+        real = set(SK.SKINS_BY_ID)
+        for ru, items in SK.FAKE_SKINS.items():
+            self.assertIn(ru, SK.CHAR_SKINS)
+            for sid, _rar, _side in items:
+                self.assertNotIn(sid, real)
 
     def test_pick_skin_respects_owned(self):
         import dbd_skins as SK

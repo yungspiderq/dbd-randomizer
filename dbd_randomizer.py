@@ -25,6 +25,7 @@ import json
 import os
 import queue
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -451,6 +452,13 @@ OPTION_DEFAULTS = {
 }
 
 
+# Ревизия пространства id в dbd_skins.py: v2.11.0 перешла с «скинов персонажей»
+# (p.cosChars, 1..111) на полную базу наборов (p.outfits, id 1..2996) + сдвиг
+# COSCHAR_ID_OFFSET для скинов персонажей. Старые отметки владения при другой
+# ревизии указывали бы на другие наборы, поэтому они сбрасываются (см. load_config).
+SKINS_SCHEMA = 2
+
+
 def default_config():
     cfg = {"coords": {}, "timings": {}, "options": {}, "owned": {}}
     for key, _ in COORD_FIELDS:
@@ -461,6 +469,7 @@ def default_config():
     cfg["options"] = dict(OPTION_DEFAULTS)
     cfg["owned"] = {"killers": [], "survivors": []}
     cfg["skins"] = {}                      # char -> список id имеющихся наборов
+    cfg["skins_schema"] = SKINS_SCHEMA     # ревизия id наборов (dbd_skins.py)
     cfg["publish"] = {"nickname": "", "gh_token": "", "backend": "github", "firebase_url": ""}
     cfg["update"] = {"auto": True, "allow_branch": False, "skip_tag": ""}
     return cfg
@@ -497,7 +506,14 @@ def load_config():
             with open(CONFIG_FILE, "r", encoding="utf-8") as fh:
                 user = json.load(fh)
             if isinstance(user.get("skins"), dict):
-                cfg["skins"] = user["skins"]
+                # v2.10.x хранил id «скинов персонажей» (1..111): с v2.11 полная база
+                # наборов использует те же числа для других записей — старые отметки
+                # означали бы чужие наборы, поэтому при смене ревизии они сбрасываются.
+                if user.get("skins_schema") == SKINS_SCHEMA:
+                    cfg["skins"] = user["skins"]
+                    cfg["skins_schema"] = SKINS_SCHEMA
+                elif user["skins"]:
+                    migrated = True
             for section in ("coords", "timings", "options", "owned", "publish", "update"):
                 if isinstance(user.get(section), dict):
                     if section == "coords":
@@ -507,7 +523,7 @@ def load_config():
                     else:
                         cfg[section].update(user[section])
             cfg, mig = _migrate_options(cfg)
-            return cfg, mig
+            return cfg, migrated or mig
         except Exception:
             backup = CONFIG_FILE + ".broken"
             try:
@@ -1919,10 +1935,15 @@ class App:
         ttk.Button(top, text="💾 Сохранить", command=self._sk_save).pack(side="left", padx=3)
         self.sk_count = ttk.Label(top, text="", foreground="#8d99a6", font=("Segoe UI", 9))
         self.sk_count.pack(side="right")
+        total = len(getattr(SKINS, "SKINS_BY_ID", {}) or {})
+        chars_n = len(getattr(SKINS, "CHAR_SKINS", {}) or {})
         ttk.Label(self.tab_skins,
-                  text="Отметьте наборы, которые у вас есть: неотмеченные не выпадают в билдах "
-                       "и в «🎲 Случайный набор». Названия наборов — английские (RU-названий нет "
-                       "в открытых данных), по картинке набор легко найти в русском клиенте.",
+                  text=f"База внешности: {total} записей у {chars_n} персонажей "
+                       f"(данные wiki.gg, патч {getattr(SKINS, 'GAME_VERSION', '?')}). "
+                       "Отметьте наборы, которые у вас есть: неотмеченные не выпадают в билдах "
+                       "и в «🎲 Случайный набор». ★ — скин персонажа (отдельная модель/голос), "
+                       "остальные — наборы одежды. Названия английские (RU-названий нет "
+                       "в открытых данных), по картинке и редкости набор легко найти в русском клиенте.",
                   foreground="#e5534b", font=("Segoe UI", 9, "italic"),
                   justify="left", wraplength=940).pack(fill="x", padx=10, pady=(0, 4))
         body = ttk.Frame(self.tab_skins)
@@ -1964,7 +1985,7 @@ class App:
             img = tk.Label(row, bg="#0e1116", width=26, height=26)
             img.pack(side="left", padx=(2, 6))
             img.config(image=self._icon_photo(f"skin:{sid}", 26))
-            cb = tk.Checkbutton(row, text=info.get("name", str(sid)), variable=var,
+            cb = tk.Checkbutton(row, text=self._sk_label(sid, info), variable=var,
                                 bg="#0e1116", fg="#dfe5ea", selectcolor="#1c232c",
                                 activebackground="#0e1116", anchor="w",
                                 font=("Segoe UI", 10), highlightthickness=0,
@@ -1975,6 +1996,25 @@ class App:
         self._request_icons([f"skin:{i}" for i in ids])
         self._sk_preview_id(ids[0] if ids else None)
 
+    @staticmethod
+    def _sk_label(sid, info):
+        """Подпись набора в списке: «★ имя» для скинов персонажей (отдельная модель)."""
+        name = info.get("name") or f"набор №{sid}"
+        return ("★ " + name) if info.get("kind") == "coschar" else name
+
+    @staticmethod
+    def _sk_meta_text(char, info):
+        """Строка под превью: персонаж, редкость, тип и дата выхода набора."""
+        parts = [char]
+        rar = info.get("rarity_ru") or (getattr(SKINS, "RARITY_RU", {}) or {}).get(info.get("rarity"))
+        if rar:
+            parts.append(rar)
+        parts.append("скин персонажа" if info.get("kind") == "coschar" else "набор одежды")
+        date = str(info.get("date") or "")
+        if re.fullmatch(r"\d{2}\.\d{2}\.\d{4}", date):
+            parts.append("вышел " + date)
+        return " · ".join(parts)
+
     def _sk_preview_id(self, sid):
         char = self.sk_char.get()
         info = (getattr(SKINS, "SKINS_BY_ID", {}) or {}).get(sid) if sid is not None else None
@@ -1984,8 +2024,8 @@ class App:
             self.sk_meta.config(text="")
             return
         self.sk_img.config(image=self._icon_photo(f"skin:{sid}", 110), text="")
-        self.sk_name.config(text=info.get("name", str(sid)))
-        self.sk_meta.config(text=f"{char} · набор №{sid}")
+        self.sk_name.config(text=self._sk_label(sid, info).removeprefix("★ "))
+        self.sk_meta.config(text=self._sk_meta_text(char, info))
         self._request_icons([f"skin:{sid}"])
 
     def _sk_random(self):
@@ -3446,6 +3486,13 @@ def selftest():
     errors, warnings = validate_db(db)
     print(f"  убийц: {len(db['killers'])}, выживших: {len(db['survivors'])}, "
           f"категорий предметов: {len(db['survivor_items'])}")
+    if SKINS is not None:
+        with_img = sum(1 for i in (getattr(SKINS, "SKINS_BY_ID", {}) or {}).values() if i.get("file"))
+        print(f"  внешность: {len(getattr(SKINS, 'SKINS_BY_ID', {}))} наборов "
+              f"у {len(getattr(SKINS, 'CHAR_SKINS', {}))} персонажей, превью у {with_img} "
+              f"(патч {getattr(SKINS, 'GAME_VERSION', '?')})")
+    else:
+        print("  внешность: модуль dbd_skins.py не найден")
     print(f"  ошибок: {len(errors)}, предупреждений: {len(warnings)}")
     for e in errors:
         print("   ✖", e)
