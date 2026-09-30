@@ -637,6 +637,42 @@ class TestSkins(unittest.TestCase):
             self.assertTrue(base.startswith("bloody") or info["kind"] == "outfit", sid)
         self.assertGreaterEqual(checked, 20)
 
+    def test_coschar_ru_names_come_from_same_character(self):
+        """RU-имя «скина персонажа» берётся у одноимённого набора ТОГО ЖЕ персонажа.
+
+        На русской вики образы (Krampus, Look-See, Xenomorph Queen…) описаны как
+        наборы одежды со своим файлом и переводом, а в данных wiki.gg это separate
+        сущность p.cosChars без файла — мостом служит EN-имя.
+        """
+        import re
+        import dbd_skins as SK
+
+        def norm(t):
+            t = re.sub(r"\bthe\b", " ", (t or "").lower().replace("ё", "е"))
+            return re.sub(r"[^0-9a-z\u0430-\u044f]+", "", t)
+
+        by_en = {}
+        for sid, i in SK.SKINS_BY_ID.items():
+            if i["kind"] == "outfit" and i.get("name_ru"):
+                by_en.setdefault(norm(i["name"]), []).append(sid)
+        bridged = 0
+        for sid, info in SK.SKINS_BY_ID.items():
+            if info.get("name_ru_from") != "coschar":
+                continue
+            bridged += 1
+            self.assertEqual(info["kind"], "coschar", sid)
+            src = [s for s in by_en.get(norm(info["name"]), [])
+                   if SK.SKINS_BY_ID[s]["char"] == info["char"]
+                   and SK.SKINS_BY_ID[s]["name_ru"] == info["name_ru"]]
+            self.assertTrue(src, f"не найден источник имени для {info['name']!r}")
+        self.assertGreaterEqual(bridged, 40)
+        # точечная сверка с официальными именами из игры
+        by_name = {i["name"]: i for i in SK.SKINS_BY_ID.values() if i["kind"] == "coschar"}
+        self.assertEqual(by_name["Krampus"]["name_ru"], "Крампус")
+        self.assertEqual(by_name["Look-See"]["name_ru"], "Видящий")
+        self.assertEqual(by_name["Chatterer"]["name_ru"], "Щелкунчик")
+        self.assertEqual(by_name["Xenomorph Queen"]["name_ru"], "Королева ксеноморфов")
+
     def test_manual_ru_pipeline(self):
         """Ручное дозаполнение: CSV -> skin_names_manual.py -> name_ru в базе."""
         sys.path.insert(0, os.path.join(HERE, "tools"))

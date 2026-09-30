@@ -382,6 +382,41 @@ def _norm_en(text):
     return re.sub(r"^the\s+", "", t)
 
 
+def _norm_name(text):
+    """Имя к сравнению: «The Krampus» и «Krampus» — одно и то же (латиница + кириллица)."""
+    t = re.sub(r"\bthe\b", " ", (text or "").lower().replace("ё", "е"))
+    return re.sub(r"[^0-9a-z\u0430-\u044f]+", "", t)
+
+
+def ru_names_coschars(coschars, skins):
+    """RU-имена «скинов персонажей» (p.cosChars) через одноимённый набор.
+
+    В данных wiki.gg «скин персонажа» — отдельная сущность без файла (превью
+    `CC{id:03d}_charSelect_portrait.png`), а на русской вики он описан КАК НАБОР
+    одежды — со своим файлом и русским названием в подписи таблицы («Крампус» =
+    `TR_outfit_012.png`). Связка: EN-имя набора == EN-имя скина персонажа
+    (с точностью до артикля «The») и тот же персонаж -> берём RU-имя набора.
+
+    Так находятся официальные русские имена, которые иначе не получить:
+    Look-See -> «Видящий», Chatterer -> «Щелкунчик», Half Spirits' Torments ->
+    «Поклянись», Xenomorph Queen -> «Королева ксеноморфов».
+    """
+    by_en = {}
+    for sid, info in skins.items():
+        if info.get("kind") != "outfit" or not info.get("name_ru"):
+            continue
+        by_en.setdefault(_norm_name(info["name"]), []).append(sid)
+    out = {}
+    for rec in coschars:
+        if rec["name_ru"]:
+            continue
+        for sid in by_en.get(_norm_name(rec["name"]), []):
+            if skins[sid]["char"] == rec["char"]:
+                out[rec["id"]] = skins[sid]["name_ru"]
+                break
+    return out
+
+
 def fallback_file(rec, pieces, exists):
     """Превью из детали набора (голова/маска/торс), если файла набора нет."""
     got = dict(pieces_of(rec))
@@ -451,7 +486,7 @@ def write_module(path, skins, char_skins, skin_files, fakes_by_char, game_versio
                      f"'kind': {q(s['kind'])}")
             if s.get("name_ru"):
                 fh.write(f", 'name_ru': {q(s['name_ru'])}")
-                if s.get("ru_from") in ("piece", "manual"):
+                if s.get("ru_from") in ("piece", "manual", "coschar"):
                     fh.write(f", 'name_ru_from': {q(s['ru_from'])}")
             if s.get("date"):
                 fh.write(f", 'date': {q(s['date'])}")
@@ -571,6 +606,14 @@ def main(force=False):
         if fn:
             skin_files[f"skin:{sid}"] = thumb_rel(fn)
 
+    # «скины персонажей»: RU-имя берём у одноимённого набора (на русской вики
+    # образы описаны как наборы одежды, со своим файлом и переводом)
+    cc_names = ru_names_coschars(coschars, skins)
+    for sid, name in cc_names.items():
+        skins[sid]["name_ru"] = name
+        skins[sid]["ru_from"] = "coschar"
+    print(f"RU-имён «скинов персонажей» через одноимённый набор: {len(cc_names)} из {len(coschars)}")
+
     # порядок в списке персонажа: сначала «скины персонажей», затем по дате выхода
     def sort_key(sid):
         s = skins[sid]
@@ -597,6 +640,7 @@ def main(force=False):
     print(f"записей: {n_outfit} наборов + {n_char} скинов персонажей, "
           f"с превью {n_img} ({stats['fallback']} — превью детали вместо отсутствующего файла набора), "
           f"без превью {stats['no_image']}")
+    stats["ru"] = sum(1 for x in skins.values() if x.get("name_ru"))
     print(f"с RU-названием: {stats['ru']} из {len(skins)} "
           f"(по файлу {stats['ru'] - stats['ru_piece'] - stats['ru_manual']}, "
           f"по элементам {stats['ru_piece']}, вручную {stats['ru_manual']})")
