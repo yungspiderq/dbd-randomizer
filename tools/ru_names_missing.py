@@ -92,6 +92,21 @@ def write_csv(rows):
     return CSV_PATH
 
 
+def read_simple_csv(path):
+    """CSV из tools/ru_names_sheet.py: только колонки id и name_ru."""
+    out = {}
+    with open(path, encoding="utf-8-sig", newline="") as fh:
+        for row in csv.DictReader(fh, delimiter=";"):
+            try:
+                sid = int((row.get("id") or "").strip())
+            except (TypeError, ValueError):
+                continue
+            name = (row.get("name_ru") or "").strip()
+            if name:
+                out[sid] = name
+    return out
+
+
 def read_csv():
     """Заполненные строки CSV. Пустая ячейка name_ru означает «имя убрано»."""
     if not os.path.exists(CSV_PATH):
@@ -157,6 +172,11 @@ def main(argv):
     filled = read_csv()
     if filled is not None:
         manual = filled
+    for a in argv:
+        if a.startswith("--merge="):
+            extra = read_simple_csv(a.split("=", 1)[1])
+            manual.update(extra)
+            print(f"из внешнего CSV добавлено имён: {len(extra)}")
     path = write_csv(missing(SK, manual, keep_filled=True))
     rows = missing(SK, manual)
     total, auto = write_manual(manual, SK)

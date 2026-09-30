@@ -23,3 +23,6 @@ dbd_data_report.txt
 *.tmp
 tools/wiki_cache/
 tools/addon_unresolved.json
+
+# локальный кэш статей русской вики (снимается tools/fetch_ru_skins.py)
+tools/wiki_cache/ru/

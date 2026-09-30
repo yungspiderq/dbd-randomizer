@@ -3,7 +3,7 @@
 Случайный генератор билдов для Dead by Daylight (выжившие и маньяки) с авто-экипировкой
 через поиск в инвентаре. Русская локализация клиента, Windows.
 
-**Версия 2.11.3** · база данных: патч **10.1.2a** (44 убийцы, 54 выживших) · внешность: **2195 наборов** (патч игры 10.1.2_live) · 98 автотестов
+**Версия 2.11.4** · база данных: патч **10.1.2a** (44 убийцы, 54 выживших) · внешность: **2195 наборов** (патч игры 10.1.2_live) · 99 автотестов
 
 ---
 
@@ -260,7 +260,7 @@ Windows 125/150 % больше не «сдвигает» клики.
 
 ```bash
 python dbd_randomizer.py --selftest   # проверка базы и генератора (без GUI, работает и не в Windows)
-python smoke_test.py                  # 98 тестов: генерация, валидация, автоматизация, сеть
+python smoke_test.py                  # 99 тестов: генерация, валидация, автоматизация, сеть
 ```
 
 `smoke_test.py` подменяет tkinter и бэкенд ввода заглушками, поэтому тестирует логику
@@ -282,6 +282,7 @@ python smoke_test.py                  # 98 тестов: генерация, в�
 | `tools/fetch_ru_skins.py` | русские названия наборов с русской вики (Fandom) |
 | `tools/skin_names_ru.py` | **сгенерировано**: «имя файла набора/элемента → RU-название» |
 | `tools/ru_names_missing.py` | CSV-шаблон и сборка ручных RU-названий (чего нет на вики) |
+| `tools/ru_names_sheet.py` | **простыня** с превью для заполнения названий в браузере |
 | `tools/skin_names_manual.py` | **сгенерировано**: «id набора → RU-название из клиента игры» |
 | `tools/perk_icon_ids.py` | внутренние ID иконок, разобранные из RU-вики |
 | `.github/workflows/fetch-ru-skins.yml` | снятие RU-названий с раннера (Fandom не пускает дата-центры) |
@@ -462,9 +463,21 @@ python tools/resolve_skins.py      # пересобрать dbd_skins.py (пол
 набор не всегда называется именем персонажа. Поэтому остаток заполняется
 вручную — официальными именами из игры:
 
+Удобнее всего — **простыней с картинками** (в браузере, с фильтрами по персонажу
+и типу, поиском по английскому имени, автосохранением в localStorage):
+
+```bash
+python tools/ru_names_sheet.py           # tools/skin_names_missing.html
+# заполнить поля -> «⬇ Скачать CSV» (id;name_ru)
+python tools/ru_names_missing.py --merge=skin_names_filled.csv
+python tools/resolve_skins.py            # пересобрать dbd_skins.py
+```
+
+Либо классическим CSV (Excel, UTF-8 BOM, разделитель «;»):
+
 ```bash
 python tools/ru_names_missing.py --csv   # выгрузить шаблон (576 строк)
-# заполнить колонку name_ru в tools/skin_names_missing.csv (Excel, UTF-8 BOM, «;»)
+# заполнить колонку name_ru в tools/skin_names_missing.csv
 python tools/ru_names_missing.py         # собрать tools/skin_names_manual.py
 python tools/resolve_skins.py            # пересобрать dbd_skins.py
 ```
@@ -477,6 +490,24 @@ python tools/resolve_skins.py            # пересобрать dbd_skins.py
 `Module:Datatable/Cosmetics`, `Module:Datatable` и `…/Cosmetics/Pieces`, сверяет
 id персонажей с `tools/char_map_ru.py` и проверяет существование каждого файла
 превью через API wiki.gg).
+
+## Что нового в v2.11.4 — простыня для ручного заполнения названий
+
+- `python tools/ru_names_sheet.py` строит `tools/skin_names_missing.html`:
+  плитка на каждую из 576 записей без русского названия — **превью 96 px**,
+  персонаж, редкость, дата выхода, английское имя и поле ввода. Есть фильтры
+  (персонаж / «только ★ скины персонажей» / только наборы), поиск по английскому
+  имени, счётчик заполнения, «💾 Сохранить в браузере» (localStorage — можно
+  заполнять частями) и «⬇ Скачать CSV» (`id;name_ru`).
+- `tools/ru_names_missing.py` получил `--merge=ФАЙЛ.csv` — принимает CSV из
+  простыни и подмешивает его в `tools/skin_names_manual.py`; дальше
+  `python tools/resolve_skins.py`, и имена в базе с пометкой
+  `name_ru_from: 'manual'`.
+- Картинки в простыне грузятся напрямую с wiki.gg, поэтому файл можно открыть на
+  любой машине (в просмотрщике внутри приложения превью не загрузятся — там нет
+  сети, скачайте HTML и откройте в браузере).
+- 99 автотестов (было 98): `test_manual_sheet_and_merge`.
+
 
 ## Что нового в v2.11.3 — русские названия: 1568 → 1619, «скины персонажей» закрыты на 46 %
 

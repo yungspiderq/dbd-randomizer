@@ -696,6 +696,37 @@ class TestSkins(unittest.TestCase):
         again = M.missing(SK, filled)
         self.assertNotIn(row["id"], {r["id"] for r in again})
 
+    def test_manual_sheet_and_merge(self):
+        """Простыня для ручного заполнения: поля на каждую запись + слияние CSV."""
+        import csv
+        import tempfile
+        sys.path.insert(0, os.path.join(HERE, "tools"))
+        import dbd_skins as SK
+        try:
+            import ru_names_sheet as SHEET
+            import ru_names_missing as M
+        except ImportError:
+            self.skipTest("нет tools/ru_names_sheet.py")
+        rows = SHEET.rows(SK)
+        self.assertEqual(len(rows), sum(1 for i in SK.SKINS_BY_ID.values() if not i.get("name_ru")))
+        html_text = SHEET.build_html(rows[:20], "test")
+        self.assertEqual(html_text.count("data-id="), 20)
+        self.assertIn("⬇ Скачать CSV", html_text)
+        self.assertIn("id;name_ru", html_text)
+        # --merge= принимает CSV простыни (только id и name_ru)
+        if rows:
+            sid = rows[0][0]
+            path = os.path.join(tempfile.mkdtemp(), "filled.csv")
+            with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+                w = csv.writer(fh, delimiter=";")
+                w.writerow(["id", "name_ru"])
+                w.writerow([sid, "Проверочное имя"])
+                w.writerow(["", "пустой id игнорируется"])
+                w.writerow(["999999", ""])
+            got = M.read_simple_csv(path)
+            self.assertEqual(got, {sid: "Проверочное имя"})
+            self.assertIn(sid, SK.SKINS_BY_ID)
+
     def test_old_skin_ownership_is_reset_on_schema_change(self):
         """Отметки владения v2.10.x (id 1..111) сбрасываются: числа означают другое."""
         import json, os, tempfile
