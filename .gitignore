@@ -31,3 +31,6 @@ tools/addon_unresolved.json
 
 # локальный кэш статей русской вики (снимается tools/fetch_ru_skins.py)
 tools/wiki_cache/ru/
+
+# артефакт сравнения из workflow fetch-2v8-classes
+classes_2v8.diff

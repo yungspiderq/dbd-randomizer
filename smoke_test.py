@@ -1536,10 +1536,11 @@ class TestClasses2v8(unittest.TestCase):
     def test_official_names_and_sides(self):
         """Русские имена классов и их стороны — как на русской вики."""
         data = R.DATA.CLASSES_2V8
-        self.assertEqual([c["ru"] for c in data["SURVIVOR"]],
-                         ["Беглец", "Проводник", "Медик", "Разведчик", "Факельщик"])
-        self.assertEqual([c["ru"] for c in data["KILLER"]],
-                         ["Громила", "Наводящий ужас", "Наемный убийца", "Тень"])
+        # порядок внутри стороны задаёт категория вики, поэтому сравниваем множества
+        self.assertEqual({c["ru"] for c in data["SURVIVOR"]},
+                         {"Беглец", "Проводник", "Медик", "Разведчик", "Факельщик"})
+        self.assertEqual({c["ru"] for c in data["KILLER"]},
+                         {"Громила", "Наводящий ужас", "Наемный убийца", "Тень"})
         by_ru = {c["ru"]: c for side in data for c in data[side]}
         self.assertEqual(by_ru["Беглец"]["en"], "Escapist")
         self.assertEqual(by_ru["Факельщик"]["en"], "Torchbearer")
@@ -1612,6 +1613,36 @@ class TestClasses2v8(unittest.TestCase):
                       for c in R.DATA.CLASSES_2V8[side]
                       for sk in c["skills"] if f"classskill:{sk['icon']}" in icons)
         self.assertGreaterEqual(covered, 20)
+
+    def test_every_class_has_icon_url(self):
+        """У каждого класса и навыка — иконка и её абсолютный URL.
+
+        Регрессия парсера: у Проводника инфобокс хранит иконку внутри <gallery>
+        без префикса `File:` (`image1 = <gallery>\niconClass_Mechanic.png|В игре`),
+        из-за чего регулярка с обязательным `File:` оставляла класс без иконки.
+        """
+        import os
+        import sys
+        sys.path.insert(0, os.path.join(HERE, "tools"))
+        try:
+            import resolve_classes as RC
+        except ImportError:
+            self.skipTest("нет tools/resolve_classes.py")
+        cache = os.path.join(HERE, "tools", "wiki_cache", "ru_classes",
+                             "Проводник (класс).wiki")
+        if os.path.exists(cache):
+            with open(cache, encoding="utf-8") as fh:
+                parsed = RC.parse_article(fh.read())
+            self.assertIsNotNone(parsed)
+            self.assertEqual(parsed[0], "Проводник")
+            self.assertEqual(parsed[3].lower(), "iconclass_mechanic.png")
+        for side, classes in R.DATA.CLASSES_2V8.items():
+            for c in classes:
+                self.assertTrue(c["icon"], f"нет имени иконки у {c['ru']}")
+                self.assertTrue(c["url"].startswith("https://"), f"нет URL у {c['ru']}")
+                for sk in c["skills"]:
+                    self.assertTrue(sk["url"].startswith("https://"),
+                                    f"нет URL навыка у {c['ru']}: {sk['icon']}")
 
     def test_class_option_is_saved(self):
         cfg = R.default_config()

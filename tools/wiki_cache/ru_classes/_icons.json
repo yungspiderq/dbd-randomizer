@@ -24,6 +24,10 @@
  "T_UI_iconSkills_BeaconInnate.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/9/98/T_UI_iconSkills_BeaconInnate.png/revision/latest?cb=20260211183345&path-prefix=ru",
  "T_UI_iconSkills_BeaconTeam.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/a/a8/T_UI_iconSkills_BeaconTeam.png/revision/latest?cb=20260211183354&path-prefix=ru",
  "T_UI_iconSkills_Wiretap.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/7/74/T_UI_iconSkills_Wiretap.png/revision/latest?cb=20250824131050&path-prefix=ru",
+ "iconClass_Assassin.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/c/c4/IconClass_Assassin.png/revision/latest?cb=20241117120813&path-prefix=ru",
+ "iconClass_Brute.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/6/64/IconClass_Brute.png/revision/latest?cb=20241117114735&path-prefix=ru",
+ "iconClass_Fearmonger.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/a/af/IconClass_Fearmonger.png/revision/latest?cb=20241117115849&path-prefix=ru",
+ "iconClass_Stalker.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/2/2f/IconClass_Stalker.png/revision/latest?cb=20241117121826&path-prefix=ru",
  "iconSkills_BloodyRampage.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/6/68/IconSkills_BloodyRampage.png/revision/latest?cb=20241117114748&path-prefix=ru",
  "iconSkills_DeadlyMark.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/4/49/IconSkills_DeadlyMark.png/revision/latest?cb=20241117120829&path-prefix=ru",
  "iconSkills_DetectPrey.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/7/79/IconSkills_DetectPrey.png/revision/latest?cb=20241117121801&path-prefix=ru",
@@ -35,6 +39,7 @@
  "iconSkills_MedicUnlock.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/7/72/IconSkills_MedicUnlock.png/revision/latest?cb=20241117072204&path-prefix=ru",
  "iconSkills_RelentlessPursuit.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/9/9a/IconSkills_RelentlessPursuit.png/revision/latest?cb=20241117114759&path-prefix=ru",
  "iconSkills_RemoteRevelation.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/6/67/IconSkills_RemoteRevelation.png/revision/latest?cb=20241117120843&path-prefix=ru",
+ "iconSkills_SelfSufficient.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/e/e0/IconSkills_SelfSufficient.png/revision/latest?cb=20241117074320&path-prefix=ru",
  "iconSkills_SeparationAnxiety.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/9/9c/IconSkills_SeparationAnxiety.png/revision/latest?cb=20241117115823&path-prefix=ru",
  "iconSkills_SilentStrike.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/c/c8/IconSkills_SilentStrike.png/revision/latest?cb=20241117121812&path-prefix=ru",
  "iconSkills_SurvivorSelfcare_Generic.png": "https://static.wikia.nocookie.net/dead-by-daylight/images/a/a1/IconSkills_SurvivorSelfcare_Generic.png/revision/latest?cb=20240727120439&path-prefix=ru"
