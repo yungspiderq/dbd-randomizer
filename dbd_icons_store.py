@@ -21,6 +21,11 @@ try:
 except ImportError:                                   # pragma: no cover
     ICONS = None
 
+try:
+    import dbd_skins as SKINS_MOD
+except ImportError:                                   # pragma: no cover
+    SKINS_MOD = None
+
 UA = {"User-Agent": "DBDRandomizer/2.1 (icons cache; contact: see repository)"}
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 MIN_SIZE = 400                                        # меньше — точно не иконка
@@ -48,9 +53,12 @@ class IconStore:
         """Все карты «имя -> файл»: навыки, аддоны, портреты, силы, предметы."""
         if not ICONS:
             return ()
-        return (ICONS.PERK_ICONS, getattr(ICONS, "ADDON_ICONS", {}),
+        maps = [ICONS.PERK_ICONS, getattr(ICONS, "ADDON_ICONS", {}),
                 getattr(ICONS, "SURVIVOR_PORTRAITS", {}), getattr(ICONS, "KILLER_PORTRAITS", {}),
-                getattr(ICONS, "POWER_ICONS", {}), getattr(ICONS, "ITEM_ICONS", {}))
+                getattr(ICONS, "POWER_ICONS", {}), getattr(ICONS, "ITEM_ICONS", {})]
+        if SKINS_MOD is not None:
+            maps.append(getattr(SKINS_MOD, "SKIN_FILES", {}))
+        return tuple(maps)
 
     @staticmethod
     def _sprite():

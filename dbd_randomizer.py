@@ -51,12 +51,14 @@ try:
     import dbd_data as DATA
     import dbd_github as GH
     import dbd_icons as ICONS
+    import dbd_skins as SKINS
     from dbd_icons_store import IconStore, pil_available
 except ImportError:                       # запуск из другой директории
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import dbd_data as DATA
     import dbd_github as GH
     import dbd_icons as ICONS
+    import dbd_skins as SKINS
     from dbd_icons_store import IconStore, pil_available
 
 if getattr(sys, "frozen", False):                 # сборка PyInstaller: файлы рядом с .exe
@@ -439,6 +441,7 @@ OPTION_DEFAULTS = {
     "perk_mode":       "mixed",     # mixed | unique | general
     "respect_owned":   False,       # учитывать белые списки OWNED_*
     "addons_enabled":  True,
+    "skin_enabled":    True,        # подбирать набор одежды к билду
 }
 
 
@@ -451,6 +454,7 @@ def default_config():
         cfg["timings"][key] = val
     cfg["options"] = dict(OPTION_DEFAULTS)
     cfg["owned"] = {"killers": [], "survivors": []}
+    cfg["skins"] = {}                      # char -> список id имеющихся наборов
     cfg["publish"] = {"nickname": "", "gh_token": "", "backend": "github", "firebase_url": ""}
     cfg["update"] = {"auto": True, "allow_branch": False, "skip_tag": ""}
     return cfg
@@ -486,6 +490,8 @@ def load_config():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as fh:
                 user = json.load(fh)
+            if isinstance(user.get("skins"), dict):
+                cfg["skins"] = user["skins"]
             for section in ("coords", "timings", "options", "owned", "publish", "update"):
                 if isinstance(user.get(section), dict):
                     if section == "coords":
@@ -710,7 +716,23 @@ def pick_perks(db, side, char, perk_mode="mixed", respect_owned=False, available
     return _fill_perks(perks, [], respect_owned) if respect_owned else perks[:4]
 
 
-def make_killer_build(db, available, perk_mode="mixed", respect_owned=False, addons_enabled=True):
+def pick_skin(char, owned_skins=None):
+    """Случайный набор одежды персонажа из имеющихся (пустой список = все)."""
+    ids = getattr(SKINS, "CHAR_SKINS", {}).get(char) or []
+    if not ids:
+        return None
+    owned = (owned_skins or {}).get(char)
+    if owned is not None:                  # ключ есть: пустой список = ничего нет
+        ids = [i for i in ids if i in set(owned)]
+    if not ids:
+        return None
+    sid = random.choice(ids)
+    info = SKINS.SKINS_BY_ID.get(sid, {})
+    return {"id": sid, "name": info.get("name", "?")}
+
+
+def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
+                      addons_enabled=True, skin_enabled=True, owned_skins=None):
     owned = db.get("owned", {})
     name = random.choice(sorted(available))
     info = db["killers"][name]
@@ -733,10 +755,12 @@ def make_killer_build(db, available, perk_mode="mixed", respect_owned=False, add
         "power_is_item": False,
         "addons": addons,
         "perks": perks[:4],
+        "skin": pick_skin(name, owned_skins) if skin_enabled else None,
     }
 
 
-def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False, addons_enabled=True):
+def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False,
+                        addons_enabled=True, skin_enabled=True, owned_skins=None):
     owned = db.get("owned", {})
     name = random.choice(sorted(available))
 
@@ -767,6 +791,7 @@ def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False, a
         "power_is_item": True,
         "addons": addons,
         "perks": perks[:4],
+        "skin": pick_skin(name, owned_skins) if skin_enabled else None,
     }
 
 
@@ -793,7 +818,8 @@ def build_to_clipboard_text(b):
     item = b["power_or_item"]
     addons = " + ".join(a for a in b["addons"] if a not in (EMPTY, NO_ADDONS)) or "без аддонов"
     perks = ", ".join(b["perks"])
-    return f"{head} | {item} | {addons} | Перки: {perks}"
+    skin = f" | 👗 {b['skin']['name']}" if b.get("skin") else ""
+    return f"{head} | {item} | {addons} | Перки: {perks}{skin}"
 
 
 # ----------------------------------------------------------------------------
@@ -1210,6 +1236,7 @@ class App:
         for key, icon, text in (("main", "🎲", "БИЛД"), ("maker", "🛠", "КОНСТРУКТОР"),
                                 ("builds", "🌍", "БИЛДЫ СООБЩЕСТВА"),
                                 ("chars", "🎭", "ПЕРСОНАЖИ"),
+                                ("skins", "👗", "ВНЕШНОСТЬ"),
                                 ("coords", "🎯", "КЛИКИ И ТАЙМИНГИ")):
             self._nav_items[key] = self._add_nav_item(key, icon, text)
         tk.Frame(self.nav, bg="#2a323d", height=1).pack(fill="x", padx=16, pady=(10, 8))
@@ -1224,15 +1251,17 @@ class App:
         self.tab_maker = ttk.Frame(self.content)
         self.tab_builds = ttk.Frame(self.content)
         self.tab_chars = ttk.Frame(self.content)
+        self.tab_skins = ttk.Frame(self.content)
         self.tab_coords = ttk.Frame(self.content)
         for fr in (self.tab_main, self.tab_maker, self.tab_builds,
-                   self.tab_chars, self.tab_coords):
+                   self.tab_chars, self.tab_skins, self.tab_coords):
             fr.grid(row=0, column=0, sticky="nsew")
 
         self._build_main_tab()
         self._build_maker_tab()
         self._build_builds_tab()
         self._build_chars_tab()
+        self._build_skins_tab()
         self._build_coords_tab()
         self._show_page("main")
         for key, fn in (("<F5>", self.generate_build), ("<F6>", self.reroll_perks),
@@ -1290,7 +1319,8 @@ class App:
             lbl.config(bg=pal["panel"] if active else "#0b0e12",
                        fg=pal["fg"] if active else pal["muted"])
         {"main": self.tab_main, "maker": self.tab_maker, "builds": self.tab_builds,
-         "chars": self.tab_chars, "coords": self.tab_coords}[key].tkraise()
+         "chars": self.tab_chars, "skins": self.tab_skins,
+         "coords": self.tab_coords}[key].tkraise()
 
     # ---- вкладка «Билд» ------------------------------------------------------
     def _build_main_tab(self):
@@ -1325,6 +1355,9 @@ class App:
             ttk.Radiobutton(opt, text=text, value=value, variable=self.perk_mode_var).pack(anchor="w", padx=8, pady=1)
         self.addons_var = tk.BooleanVar(value=self.cfg["options"].get("addons_enabled", True))
         ttk.Checkbutton(opt, text="Подбирать аддоны", variable=self.addons_var).pack(anchor="w", padx=8, pady=1)
+        self.skin_var = tk.BooleanVar(value=self.cfg["options"].get("skin_enabled", True))
+        ttk.Checkbutton(opt, text="Подбирать набор одежды (внешность)",
+                        variable=self.skin_var).pack(anchor="w", padx=8, pady=1)
         self.owned_var = tk.BooleanVar(value=self.cfg["options"].get("respect_owned", False))
         ttk.Checkbutton(opt, text="Только открытое у меня (белые списки в JSON)",
                         variable=self.owned_var).pack(anchor="w", padx=8, pady=(1, 6))
@@ -1422,6 +1455,13 @@ class App:
                                     font=("Segoe UI", 9, "italic"), wraplength=150,
                                     justify="right")
         self.card_author.pack(side="right", padx=(8, 0))
+        row_skin = tk.Frame(self.card, **pad)
+        row_skin.pack(fill="x", padx=16, pady=(6, 0))
+        self.card_skin_img = tk.Label(row_skin, bg="#151a21", width=24, height=24)
+        self.card_skin_img.pack(side="left", padx=(0, 8))
+        self.card_skin = tk.Label(row_skin, anchor="w", fg="#8d99a6", bg="#151a21",
+                                  font=("Segoe UI", 9, "italic"))
+        self.card_skin.pack(side="left", fill="x", expand=True)
 
         self.card_hint = tk.Label(self.card, justify="left", anchor="w", fg="#8d99a6",
                                   font=("Segoe UI", 10), wraplength=430, **pad)
@@ -1549,6 +1589,7 @@ class App:
         self._show_build_details()
         for cb in self._mk_combos():
             cb.refresh_icon()
+        self._refresh_skin_icons()
 
     def download_all_icons(self):
         if not self.icon_store.enabled:
@@ -1847,6 +1888,124 @@ class App:
             hint = ("Через GitHub Contents API: нужен токен с правом Contents: Write "
                     "(вкладка хранит его локально).")
         self.lbl_backend_hint.config(text=hint)
+
+    # ---- вкладка «Внешность» -------------------------------------------------
+    def _build_skins_tab(self):
+        top = ttk.Frame(self.tab_skins)
+        top.pack(fill="x", padx=10, pady=(8, 2))
+        ttk.Label(top, text="Персонаж:").pack(side="left")
+        chars = sorted(getattr(SKINS, "CHAR_SKINS", {}))
+        self.sk_char = ttk.Combobox(top, state="readonly", width=24, values=chars)
+        self.sk_char.pack(side="left", padx=6)
+        self.sk_char.bind("<<ComboboxSelected>>", lambda e: self._sk_on_char())
+        ttk.Button(top, text="🎲 Случайный набор", command=self._sk_random).pack(side="left", padx=4)
+        ttk.Button(top, text="Все", command=lambda: self._sk_set_all(True)).pack(side="left", padx=3)
+        ttk.Button(top, text="Никого", command=lambda: self._sk_set_all(False)).pack(side="left", padx=3)
+        ttk.Button(top, text="💾 Сохранить", command=self._sk_save).pack(side="left", padx=3)
+        self.sk_count = ttk.Label(top, text="", foreground="#8d99a6", font=("Segoe UI", 9))
+        self.sk_count.pack(side="right")
+        ttk.Label(self.tab_skins,
+                  text="Отметьте наборы, которые у вас есть: неотмеченные не выпадают в билдах "
+                       "и в «🎲 Случайный набор». Названия наборов — английские (RU-названий нет "
+                       "в открытых данных), по картинке набор легко найти в русском клиенте.",
+                  foreground="#e5534b", font=("Segoe UI", 9, "italic"),
+                  justify="left", wraplength=940).pack(fill="x", padx=10, pady=(0, 4))
+        body = ttk.Frame(self.tab_skins)
+        body.pack(fill="both", expand=True, padx=10, pady=4)
+        body.columnconfigure(1, weight=1)
+        body.rowconfigure(0, weight=1)
+        prev = ttk.LabelFrame(body, text=" ПРЕВЬЮ ")
+        prev.grid(row=0, column=0, sticky="ns", padx=(0, 6))
+        self.sk_img = tk.Label(prev, bg="#151a21", width=110, height=110,
+                               highlightbackground="#2a323d", highlightthickness=1)
+        self.sk_img.pack(padx=10, pady=(10, 6))
+        self.sk_name = tk.Label(prev, text="—", bg="#151a21", fg="#e6ebf0",
+                                font=("Segoe UI", 11, "bold"), wraplength=190)
+        self.sk_name.pack(padx=8)
+        self.sk_meta = tk.Label(prev, text="", bg="#151a21", fg="#8d99a6",
+                                font=("Segoe UI", 9), wraplength=190)
+        self.sk_meta.pack(padx=8, pady=(2, 10))
+        listf = ttk.LabelFrame(body, text=" НАБОРЫ ПЕРСОНАЖА ")
+        listf.grid(row=0, column=1, sticky="nsew")
+        self.sk_inner, _ = self._make_scrolled(listf)
+        self._sk_widgets = {}
+        if self.sk_char.get() not in chars:
+            self.sk_char.set(chars[0] if chars else "")
+        self._sk_on_char()
+
+    def _sk_on_char(self):
+        char = self.sk_char.get()
+        ids = getattr(SKINS, "CHAR_SKINS", {}).get(char, [])
+        for w in self.sk_inner.winfo_children():
+            w.destroy()
+        self._sk_widgets = {}
+        owned = (self.cfg.get("skins") or {}).get(char)
+        owned_set = set(owned) if owned is not None else None
+        for sid in ids:
+            info = SKINS.SKINS_BY_ID.get(sid, {})
+            var = tk.BooleanVar(value=True if owned_set is None else sid in owned_set)
+            row = tk.Frame(self.sk_inner, bg="#0e1116")
+            row.pack(fill="x", padx=4, pady=1)
+            img = tk.Label(row, bg="#0e1116", width=26, height=26)
+            img.pack(side="left", padx=(2, 6))
+            img.config(image=self._icon_photo(f"skin:{sid}", 26))
+            cb = tk.Checkbutton(row, text=info.get("name", str(sid)), variable=var,
+                                bg="#0e1116", fg="#dfe5ea", selectcolor="#1c232c",
+                                activebackground="#0e1116", anchor="w",
+                                font=("Segoe UI", 10), highlightthickness=0,
+                                command=lambda s=sid: self._sk_preview_id(s))
+            cb.pack(side="left", fill="x", expand=True)
+            self._sk_widgets[sid] = (var, img)
+        self._update_sk_count()
+        self._request_icons([f"skin:{i}" for i in ids])
+        self._sk_preview_id(ids[0] if ids else None)
+
+    def _sk_preview_id(self, sid):
+        char = self.sk_char.get()
+        info = SKINS.SKINS_BY_ID.get(sid) if sid is not None else None
+        if not info:
+            self.sk_img.config(image=self._icon_photo(None, 110), text="")
+            self.sk_name.config(text="—")
+            self.sk_meta.config(text="")
+            return
+        self.sk_img.config(image=self._icon_photo(f"skin:{sid}", 110), text="")
+        self.sk_name.config(text=info.get("name", str(sid)))
+        self.sk_meta.config(text=f"{char} · набор №{sid}")
+        self._request_icons([f"skin:{sid}"])
+
+    def _sk_random(self):
+        ids = [sid for sid, (var, _i) in self._sk_widgets.items() if var.get()]
+        if not ids:
+            messagebox.showwarning("Внешность",
+                                   "У этого персонажа не отмечен ни один набор.")
+            return
+        self._sk_preview_id(random.choice(ids))
+        self.set_status("Случайный набор показан в превью.", "#3fb950")
+
+    def _sk_set_all(self, value):
+        for var, _i in self._sk_widgets.values():
+            var.set(value)
+        self._update_sk_count()
+
+    def _update_sk_count(self):
+        total = len(self._sk_widgets)
+        on = sum(1 for var, _i in self._sk_widgets.values() if var.get())
+        self.sk_count.config(text=f"отмечено {on}/{total}")
+
+    def _sk_save(self):
+        char = self.sk_char.get()
+        ids = sorted(sid for sid, (var, _i) in self._sk_widgets.items() if var.get())
+        self.cfg.setdefault("skins", {})[char] = ids
+        save_config(self.cfg)
+        self.set_status(f"Сохранено: у «{char}» отмечено наборов: {len(ids)}.", "#3fb950")
+        self.log(f"Список наборов сохранён: {char} -> {len(ids)}.")
+
+    def _refresh_skin_icons(self):
+        for sid, (_var, img) in getattr(self, "_sk_widgets", {}).items():
+            img.config(image=self._icon_photo(f"skin:{sid}", 26))
+        if getattr(self, "sk_img", None) is not None and self.build and self.build.get("skin"):
+            self.card_skin_img.config(
+                image=self._icon_photo(f"skin:{self.build['skin'].get('id')}", 24), text="")
 
     # ---- вкладка «Персонажи» -------------------------------------------------
     def _make_scrolled(self, parent):
@@ -2163,6 +2322,8 @@ class App:
         self.card_sub.config(text="")
         self.card_char_img.config(image=self._icon_photo(None, ICON_SIZE + 12), text="")
         self.card_main_img.config(image=self._icon_photo(None, ICON_SIZE), text="")
+        self.card_skin_img.config(image=self._icon_photo(None, 24), text="")
+        self.card_skin.config(text="" if text else "—", fg="#56606c")
         for img, lbl in self.card_addons:
             img.config(image=self._icon_photo(None, ICON_SIZE), text="")
             lbl.config(text=filler, fg="#56606c")
@@ -2187,6 +2348,16 @@ class App:
         self.card_author.config(text=head)
         self.card_stripe.config(bg=self._pal["killer"] if b["side"] == "KILLER"
                                 else self._pal["surv"])
+        skin = b.get("skin")
+        if skin:
+            self.card_skin.config(text=f"👗 Внешность: {skin.get('name', '?')}", fg="#8d99a6")
+            self.card_skin_img.config(
+                image=self._icon_photo(f"skin:{skin.get('id')}", 24), text="")
+            want_skin = [f"skin:{skin.get('id')}"]
+        else:
+            self.card_skin.config(text="", fg="#56606c")
+            self.card_skin_img.config(image=self._icon_photo(None, 24), text="")
+            want_skin = []
         if b["side"] == "KILLER":
             self.card_char.config(text=f"👹 {b['char']}", fg="#ff7b72")
             self.card_main.config(text=f"⚡ {b['power_or_item']}")
@@ -2228,7 +2399,7 @@ class App:
             img.config(image=self._icon_photo(perk, ICON_SIZE), text="")
             lbl.config(text=f"{i + 1}.  {perk}", fg="#3fb950")
             want.append(perk)
-        self._request_icons(want + want_addons + want_extra)
+        self._request_icons(want + want_addons + want_extra + want_skin)
 
     def get_coord(self, key):
         ent = self._coord_widgets.get(key)
@@ -2308,6 +2479,7 @@ class App:
         self.cfg["update"]["auto"] = bool(self.auto_update_var.get())
         self.cfg["update"]["allow_branch"] = bool(self.allow_branch_var.get())
         self.cfg["options"]["addons_enabled"] = bool(self.addons_var.get())
+        self.cfg["options"]["skin_enabled"] = bool(self.skin_var.get())
         self.cfg["options"]["respect_owned"] = bool(self.owned_var.get())
 
     def save_settings(self):
@@ -2394,7 +2566,9 @@ class App:
             return
         kwargs = dict(perk_mode=self.perk_mode_var.get(),
                       respect_owned=bool(self.owned_var.get()),
-                      addons_enabled=bool(self.addons_var.get()))
+                      addons_enabled=bool(self.addons_var.get()),
+                      skin_enabled=bool(self.skin_var.get()),
+                      owned_skins=self.cfg.get("skins", {}))
         try:
             if side == "KILLER":
                 self.build = make_killer_build(self.db, available, **kwargs)
@@ -2844,7 +3018,11 @@ class App:
         addons = [EMPTY if a == NO_ADDONS else a for a in b["addons"]]
         payload = GH.make_build_payload(b["side"], b["char"], b["power_or_item"], addons,
                                         b["perks"], author,
-                                        title=b.get("title", ""), description=b.get("description", ""))
+                                        title=b.get("title", ""),
+                                        description=b.get("description", ""),
+                                        skin=(b.get("skin") or {}).get("name", "")
+                                        if isinstance(b.get("skin"), dict)
+                                        else (b.get("skin") or ""))
         self.btn_publish.config(state="disabled")
         self.set_status("Публикуем билд…", "#e3b341")
         threading.Thread(target=self._publish_worker,

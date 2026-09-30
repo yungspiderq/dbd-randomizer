@@ -334,11 +334,13 @@ class TestIcons(unittest.TestCase):
         if not st.enabled:
             self.skipTest("Pillow недоступен")
         have, total = st.stats()
+        import dbd_skins as SK
         self.assertEqual(total, len(R.ICONS.PERK_ICONS) + len(R.ICONS.ADDON_ICONS)
                          + len(R.ICONS.SURVIVOR_PORTRAITS)
                          + len(getattr(R.ICONS, "KILLER_PORTRAITS", {}))
                          + len(R.ICONS.POWER_ICONS) + len(R.ICONS.ITEM_ICONS)
-                         + len(R.ICONS.KILLER_SPRITE["ports"]))
+                         + len(R.ICONS.KILLER_SPRITE["ports"])
+                         + len(getattr(SK, "SKIN_FILES", {})))
         self.assertEqual(have, 0)
 
     def test_store_resolves_addon_icons(self):
@@ -358,6 +360,52 @@ class TestIcons(unittest.TestCase):
         self.assertFalse(st.is_cached("Надежда"))
         st.request(["Надежда"], on_ready=lambda r: None)      # не должно падать
         self.assertEqual(st.missing([]), [])
+
+
+class TestSkins(unittest.TestCase):
+    """v2.10: рандомизатор наборов одежды."""
+
+    def setUp(self):
+        self.db = R.db_defaults()
+
+    def test_skin_data_sane(self):
+        import dbd_skins as SK
+        self.assertGreaterEqual(len(SK.SKINS_BY_ID), 80)
+        for sid, info in SK.SKINS_BY_ID.items():
+            self.assertIn(info["char"], self.db["killers"] if info["side"] == "KILLER"
+                          else self.db["survivors"])
+            if info["file"]:
+                self.assertTrue(info["file"].lower().endswith(".png"))
+        for ru, ids in SK.CHAR_SKINS.items():
+            self.assertTrue(all(i in SK.SKINS_BY_ID for i in ids))
+
+    def test_pick_skin_respects_owned(self):
+        import dbd_skins as SK
+        char = next(c for c in SK.CHAR_SKINS if len(SK.CHAR_SKINS[c]) >= 2)
+        ids = SK.CHAR_SKINS[char]
+        got = R.pick_skin(char, {char: [ids[0]]})
+        self.assertEqual(got["id"], ids[0])
+        self.assertIsNone(R.pick_skin(char, {char: []}))
+        free = R.pick_skin(char)
+        self.assertIn(free["id"], ids)
+        self.assertIsNone(R.pick_skin("ПерсонажаНет"))
+
+    def test_build_carries_skin(self):
+        import dbd_skins as SK
+        char = next(c for c in SK.CHAR_SKINS if c in self.db["killers"])
+        b = R.make_killer_build(self.db, [char], skin_enabled=True)
+        self.assertIsNotNone(b["skin"])
+        self.assertIn(b["skin"]["id"], SK.CHAR_SKINS[char])
+        b2 = R.make_killer_build(self.db, [char], skin_enabled=False)
+        self.assertIsNone(b2["skin"])
+        self.assertIn("👗", R.build_to_clipboard_text(b))
+
+    def test_payload_and_format_carry_skin(self):
+        p = R.GH.make_build_payload("KILLER", "Охотник", "x", [], [], "nick", skin="Krampus")
+        self.assertEqual(p["skin"], "Krampus")
+        self.assertIn("Внешность: Krampus", R.GH.format_build_text(p))
+        p2 = R.GH.make_build_payload("KILLER", "Охотник", "x", [], [], "nick")
+        self.assertNotIn("skin", p2)
 
 
 class TestPublishBackend(unittest.TestCase):
