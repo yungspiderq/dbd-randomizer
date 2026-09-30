@@ -362,6 +362,21 @@ class TestIcons(unittest.TestCase):
         self.assertEqual(st.missing([]), [])
 
 
+class TestSkinsMissingModule(unittest.TestCase):
+    """v2.10.1: приложение обязано запускаться без dbd_skins.py (битые апдейты)."""
+
+    def test_app_starts_without_skins_module(self):
+        saved = R.SKINS
+        R.SKINS = None
+        try:
+            app = make_app()
+            self.assertEqual(app._sk_widgets, {})
+            self.assertIsNone(R.pick_skin("Охотник"))
+            b = R.make_killer_build(app.db, ["Охотник"])
+            self.assertIsNone(b["skin"])
+        finally:
+            R.SKINS = saved
+
 class TestSkins(unittest.TestCase):
     """v2.10: рандомизатор наборов одежды."""
 
@@ -863,6 +878,7 @@ class TestUpdateSafety(unittest.TestCase):
             "dbd_github.py": b'APP_VERSION = "9.9.9"\n' + b"# pad\n" * 40,
             "dbd_icons.py": b"PERK_ICONS = {}\n" + b"# pad\n" * 40,
             "dbd_icons_store.py": b"class IconStore:\n    pass\n" + b"# pad\n" * 40,
+            "dbd_skins.py": b"SKINS_BY_ID = {}\nCHAR_SKINS = {}\n" + b"# pad\n" * 40,
             "requirements.txt": b"pyautogui\npyperclip\npydirectinput\n"}
 
     def test_good_bundle_passes(self):
@@ -935,8 +951,8 @@ class TestUpdateSafety(unittest.TestCase):
             good = dict(self.GOOD)
             GH._get_remote_file_b64 = lambda path, token=None, ref="main": (good.get(path), "sha")
             bundle, info, missing = GH.download_update("v9.9.9")
-            self.assertEqual(len(bundle), 6)
-            self.assertEqual(len(info), 6)
+            self.assertEqual(len(bundle), 7)
+            self.assertEqual(len(info), 7)
             self.assertEqual(missing, [])
 
             # релиз в формате v1.x (только главный файл) — допустим, но помечается

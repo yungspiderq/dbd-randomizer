@@ -51,15 +51,21 @@ try:
     import dbd_data as DATA
     import dbd_github as GH
     import dbd_icons as ICONS
-    import dbd_skins as SKINS
     from dbd_icons_store import IconStore, pil_available
+    try:
+        import dbd_skins as SKINS
+    except ImportError:                   # старая папка после апдейта: работаем без скинов
+        SKINS = None
 except ImportError:                       # запуск из другой директории
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import dbd_data as DATA
     import dbd_github as GH
     import dbd_icons as ICONS
-    import dbd_skins as SKINS
     from dbd_icons_store import IconStore, pil_available
+    try:
+        import dbd_skins as SKINS
+    except ImportError:
+        SKINS = None
 
 if getattr(sys, "frozen", False):                 # сборка PyInstaller: файлы рядом с .exe
     APP_DIR = os.path.dirname(os.path.abspath(sys.executable))
@@ -718,7 +724,7 @@ def pick_perks(db, side, char, perk_mode="mixed", respect_owned=False, available
 
 def pick_skin(char, owned_skins=None):
     """Случайный набор одежды персонажа из имеющихся (пустой список = все)."""
-    ids = getattr(SKINS, "CHAR_SKINS", {}).get(char) or []
+    ids = (getattr(SKINS, "CHAR_SKINS", {}) or {}).get(char) or []
     if not ids:
         return None
     owned = (owned_skins or {}).get(char)
@@ -727,7 +733,7 @@ def pick_skin(char, owned_skins=None):
     if not ids:
         return None
     sid = random.choice(ids)
-    info = SKINS.SKINS_BY_ID.get(sid, {})
+    info = (getattr(SKINS, "SKINS_BY_ID", {}) or {}).get(sid, {})
     return {"id": sid, "name": info.get("name", "?")}
 
 
@@ -1891,6 +1897,15 @@ class App:
 
     # ---- вкладка «Внешность» -------------------------------------------------
     def _build_skins_tab(self):
+        if SKINS is None:
+            ttk.Label(self.tab_skins,
+                      text="Модуль внешности (dbd_skins.py) не найден в этой папке.\n"
+                           "Скачайте dbd_skins.py из последнего релиза рядом с программой "
+                           "или обновите приложение целиком / возьмите свежий EXE.",
+                      foreground="#e5534b", font=("Segoe UI", 10),
+                      justify="left").pack(padx=16, pady=16)
+            self._sk_widgets = {}
+            return
         top = ttk.Frame(self.tab_skins)
         top.pack(fill="x", padx=10, pady=(8, 2))
         ttk.Label(top, text="Персонаж:").pack(side="left")
@@ -1935,14 +1950,14 @@ class App:
 
     def _sk_on_char(self):
         char = self.sk_char.get()
-        ids = getattr(SKINS, "CHAR_SKINS", {}).get(char, [])
+        ids = (getattr(SKINS, "CHAR_SKINS", {}) or {}).get(char, [])
         for w in self.sk_inner.winfo_children():
             w.destroy()
         self._sk_widgets = {}
         owned = (self.cfg.get("skins") or {}).get(char)
         owned_set = set(owned) if owned is not None else None
         for sid in ids:
-            info = SKINS.SKINS_BY_ID.get(sid, {})
+            info = (getattr(SKINS, "SKINS_BY_ID", {}) or {}).get(sid, {})
             var = tk.BooleanVar(value=True if owned_set is None else sid in owned_set)
             row = tk.Frame(self.sk_inner, bg="#0e1116")
             row.pack(fill="x", padx=4, pady=1)
@@ -1962,7 +1977,7 @@ class App:
 
     def _sk_preview_id(self, sid):
         char = self.sk_char.get()
-        info = SKINS.SKINS_BY_ID.get(sid) if sid is not None else None
+        info = (getattr(SKINS, "SKINS_BY_ID", {}) or {}).get(sid) if sid is not None else None
         if not info:
             self.sk_img.config(image=self._icon_photo(None, 110), text="")
             self.sk_name.config(text="—")
@@ -3471,5 +3486,31 @@ def main():
     root.mainloop()
 
 
+def _emergency_report(exc_text):
+    """pythonw молча умирает без консоли: пишем лог и показываем MessageBox."""
+    try:
+        with open(os.path.join(APP_DIR, "dbd_crash.log"), "w", encoding="utf-8") as fh:
+            fh.write(exc_text)
+    except OSError:
+        pass
+    try:
+        if os.name == "nt":
+            ctypes.windll.user32.MessageBoxW(
+                0, "DBD Randomizer не смог запуститься:\n\n" + exc_text[:1200] +
+                "\n\nПолный лог: dbd_crash.log рядом с программой.\n"
+                "Частая причина после обновления: не хватает файла модуля —\n"
+                "скачайте dbd_skins.py из релиза или возьмите свежий EXE/ZIP.",
+                "Ошибка запуска DBD Randomizer", 0x10)
+        else:
+            sys.stderr.write(exc_text)
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        import traceback
+        _emergency_report(traceback.format_exc())
+        sys.exit(1)
