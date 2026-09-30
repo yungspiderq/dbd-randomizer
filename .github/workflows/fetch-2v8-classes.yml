@@ -37,6 +37,7 @@ jobs:
       - name: Скачать статьи классов и пересобрать CLASSES_2V8
         run: |
           python tools/resolve_classes.py --force
+      python tools/resolve_classes.py            # повтор по кэшу: результат обязан быть тем же
           python - <<'PY'
           import sys
           sys.path.insert(0, ".")
@@ -55,13 +56,13 @@ jobs:
 
       - name: Отчёт о расхождении с репозиторием
         run: |
-          if git diff --quiet dbd_data.py; then
+          if git diff --quiet dbd_data.py dbd_icons.py; then
             echo "CLASSES_2V8 идентичен тому, что в репозитории — обновлять нечего."
           else
             echo "Есть отличия от committed-версии (патч ниже, артефакт diff):"
-            git --no-pager diff --stat dbd_data.py
-            git --no-pager diff dbd_data.py | head -200
-            git diff dbd_data.py > classes_2v8.diff || true
+            git --no-pager diff --stat dbd_data.py dbd_icons.py
+            git --no-pager diff dbd_data.py dbd_icons.py | head -200
+            git diff dbd_data.py dbd_icons.py > classes_2v8.diff || true
           fi
 
       - uses: actions/upload-artifact@v4
@@ -70,5 +71,6 @@ jobs:
           path: |
             tools/wiki_cache/ru_classes/
             dbd_data.py
+            dbd_icons.py
             classes_2v8.diff
           if-no-files-found: error

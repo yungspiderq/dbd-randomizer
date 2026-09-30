@@ -47,6 +47,9 @@ UA = {"User-Agent": "DBDRandomizer/2.12 (2v8 classes; https://github.com/"
 CACHE = os.path.join(ROOT, "tools", "wiki_cache", "ru_classes")
 CATEGORY = "Категория:2 против 8"
 DATA_PY = os.path.join(ROOT, "dbd_data.py")
+ICONS_PY = os.path.join(ROOT, "dbd_icons.py")
+ICONS_BEGIN = "# === CLASS_ICONS BEGIN (tools/resolve_classes.py) ==="
+ICONS_END = "# === CLASS_ICONS END ==="
 MARK_BEGIN = "# === CLASSES_2V8 BEGIN (сгенерировано tools/resolve_classes.py) ==="
 MARK_END = "# === CLASSES_2V8 END ==="
 PAUSE = 0.4
@@ -65,7 +68,7 @@ def api(**kw):
 # разбор статьи
 # ============================================================================
 APPEARANCE_RE = re.compile(r"^==(Первое появление|Второе появление|Третье появление)==\s*$", re.M)
-CLASS_ICON_RE = re.compile(r"image1\s*=\s*(?:\[\[)?\s*(?:File|Файл):\s*([^\]|#\n]+?\.png)", re.I)
+CLASS_ICON_RE = re.compile(r"image1\s*=[\s\S]{0,120}?(?:File|Файл):\s*([^\]|#\n]+?\.png)", re.I)
 HEAD_RE = re.compile(r"'''([^']+)'''\s*\(англ\.\s*[\"']{0,2}''?([^\"']+)''?[\"']{0,2}\)")
 ROW_SPLIT_RE = re.compile(r"^\|-$", re.M)
 IMG_RE = re.compile(r"\[\[(?:File|Файл):\s*([^\]|#]+?\.png)", re.I)
@@ -77,6 +80,8 @@ def strip_markup(text):
     text = re.sub(r"\[\[(?:File|Файл):[^\]]*\]\]", "", text, flags=re.I)
     text = re.sub(r"\[\[(?:[^|\]]*\|)?([^\]]*)\]\]", r"\1", text)
     text = text.replace("'''", "").replace("''", "").replace("\xa0", " ")
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+    text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"[ \t]+\n", "\n", text)
     # маркеры «*» в начале строк убираем: в карточке они превращаются в «• »
     text = re.sub(r"(?m)^\s*\*\s*", "", text)
@@ -246,6 +251,44 @@ def write_block(block):
         fh.write(src)
 
 
+def write_class_icons(classes):
+    """Перезаписывает блок CLASS_ICONS в dbd_icons.py (ключ -> абсолютный URL).
+
+    Карта держится отдельно от PERK_ICONS/ADDON_ICONS, потому что иконки классов
+    есть только на русской вики: IconStore понимает абсолютные URL и кэширует их
+    как обычные картинки. Блок перезаписывается целиком — руками его править не
+    нужно (иначе данные и иконки разъезжаются, как было с SelfSufficient).
+    """
+    rows, seen = [], set()
+    for side in ("SURVIVOR", "KILLER"):
+        for entry in classes[side]:
+            if entry.get("url"):
+                rows.append(f"    'class:{entry['ru']}': {entry['url']!r},")
+            for sk in entry["skills"]:
+                fn = sk.get("icon") or ""
+                if fn and sk.get("url") and fn not in seen:
+                    seen.add(fn)
+                    rows.append(f"    'classskill:{fn}': {sk['url']!r},")
+    block = "\n".join([
+        ICONS_BEGIN,
+        "# Иконки классов режима «2 против 8» и их навыков: ключ -> абсолютный URL",
+        "# русской вики (на wiki.gg этих файлов нет). Ключи:",
+        '#   "class:<RU имя класса>"   — иконка класса',
+        '#   "classskill:<имя файла>"  — иконка навыка класса',
+        "CLASS_ICONS = {"] + rows + ["}", ICONS_END]) + "\n"
+    with open(ICONS_PY, encoding="utf-8") as fh:
+        src = fh.read()
+    if ICONS_BEGIN in src:
+        start = src.index(ICONS_BEGIN)
+        end = src.index(ICONS_END) + len(ICONS_END)
+        src = src[:start] + block.rstrip("\n") + src[end:]
+    else:
+        src = src.rstrip("\n") + "\n\n\n" + block
+    with open(ICONS_PY, "w", encoding="utf-8") as fh:
+        fh.write(src)
+    return len(rows)
+
+
 def main(argv):
     force = "--force" in argv
     try:
@@ -295,20 +338,28 @@ def main(argv):
     except Exception as exc:
         print(f"  ! URL иконок недоступны ({exc}) — останутся пустыми")
         urls = {}
+    lower = {k.lower(): v for k, v in urls.items() if v}
+
+    def url_of(fn):
+        """Имя файла в статье и в кэше может отличаться регистром."""
+        return urls.get(fn) or lower.get((fn or "").lower(), "")
+
     n_icon = 0
     for side in classes:
         for entry in classes[side]:
-            entry["url"] = urls.get(entry["icon"], "")
+            entry["url"] = url_of(entry["icon"])
             n_icon += bool(entry["url"])
             for sk in entry["skills"]:
-                sk["url"] = urls.get(sk["icon"], "")
+                sk["url"] = url_of(sk["icon"])
                 n_icon += bool(sk["url"])
 
     total = sum(len(v) for v in classes.values())
     write_block(build_block(classes, urls))
+    n_icons = write_class_icons(classes)
     print(f"\nклассов: {total} (выживших {len(classes['SURVIVOR'])}, "
           f"убийц {len(classes['KILLER'])}), иконок с URL: {n_icon}")
-    print(f"Записано: {DATA_PY} (блок CLASSES_2V8)")
+    print(f"Записано: {DATA_PY} (блок CLASSES_2V8); "
+          f"{ICONS_PY} (CLASS_ICONS: {n_icons})")
     return 0
 
 
