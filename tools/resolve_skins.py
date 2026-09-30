@@ -67,6 +67,13 @@ except ImportError:                                              # pragma: no co
     _RU = None
 SKIN_RU_NAMES = dict(getattr(_RU, "FILE_TO_RU", {}) or {}) if _RU else {}
 PIECE_RU_NAMES = dict(getattr(_RU, "PIECE_FILE_TO_RU", {}) or {}) if _RU else {}
+# ручное дозаполнение: {id набора: RU-название} — создаёт tools/ru_names_missing.py
+try:
+    import skin_names_manual as _MANUAL
+except ImportError:                                              # pragma: no cover
+    _MANUAL = None
+SKIN_RU_OVERRIDES = {int(k): v for k, v in (getattr(_MANUAL, "SKIN_RU", {}) or {}).items()
+                     if str(v).strip()}
 
 API = "https://deadbydaylight.wiki.gg/api.php"
 UA = {"User-Agent": "DBDskinFetcher/2.11 (skins; see repository)"}
@@ -307,41 +314,72 @@ PIECE_PRIORITY = ("heads", "masks", "torsos", "bodies", "upperBodies", "legs",
                   "weapons", "arms", "hands")
 
 
+# Категории, из которых берётся имя набора: в игре набор называется как его
+# головной элемент (у выживших без головы — как торс). «Кровавый» набор получает
+# имя кровавой версии того же элемента: «Кровавый Эван», «Кровавый Призрак».
+NAME_PIECE_TABLES = ("heads", "masks", "torsos", "upperBodies")
+
+
 def ru_names_by_pieces(recs, pieces, piece_names):
-    """RU-названия наборов через имена их элементов (статьи «(кастомизация)»).
+    """RU-названия наборов через русские имена их элементов.
 
     Зачем: статьи «(наборы одежды)» покрывают не всё. Не хватает
     * дефолтных и «кровавых» наборов — их на русской вики нет в списке одежды,
-      зато есть их элементы («Эван» / «Кровавый Эван»);
+      зато есть их элементы («Эван» / «Кровавый Эван», «Призрак» / «Кровавый
+      Призрак»);
     * наборов новых персонажей: у Авроры и Правосудия вместо картинок стоит
       `Missing.png`, то есть сопоставить по файлу нельзя в принципе;
     * редких наборов, которые лежат в статьях «(кастомизация)».
 
     Цепочка: файл элемента (RU-статья) -> (таблица, id) элемента по
     Module:Datatable/Cosmetics/Pieces -> наборы, в чьём `pieces` есть этот id.
-    Название присваивается, только если ВСЕ известные RU-имена элементов набора
-    совпадают (одно имя на набор) — иначе запись остаётся с английским названием:
-    лучше никак, чем неверно.
+
+    Имя набора = имя его ГОЛОВНОГО элемента (у выживших без головы — торса),
+    и только если это ПРОВЕРЯЕМО по английским данным: EN-имя головного
+    элемента обязано совпадать с EN-именем набора (с точностью до артикля
+    «The» и префикса «Bloody»). Иначе получаются неверные подписи: у Медсестры
+    голова называется «Linen Pillowcase», а набор — «The Nurse»; у Охотницы
+    «Rabbit» против «The Huntress». Прочие категории (оружие, ноги) не
+    рассматриваются вовсе: они часто общие у нескольких наборов («Охотничий
+    нож» у всех наборов Легиона). Несовпало — запись остаётся с английским
+    названием: лучше никак, чем неверно.
     """
     if not PIECE_RU_NAMES:
-        return {}, {}
+        return {}, set()
     file_to_key = {norm_file(f): key for key, f in pieces.items()}
-    ru_by_key = {}                                   # (таблица, id) -> {RU-имя}
+    ru_by_key = {}                                   # (таблица, id) -> RU-имя
     unmatched = set()
     for fn, ru in PIECE_RU_NAMES.items():
         key = file_to_key.get(norm_file(fn))
         if key is None:
             unmatched.add(fn)
             continue
-        ru_by_key.setdefault(key, set()).add(ru)
-    owners = {}                                      # id набора -> {RU-имя}
+        ru_by_key[key] = ru
+    out = {}
     for rec in recs:
+        base = _norm_en(rec["name"])
+        bloody = base.startswith("bloody")
+        stem = base[6:].strip() if bloody else base
         names = set()
         for key in pieces_of(rec):
-            names |= ru_by_key.get(key, set())
+            if key[0] not in NAME_PIECE_TABLES or key not in ru_by_key:
+                continue
+            en = _norm_en(piece_names.get(key, ""))
+            en_stem = en[6:].strip() if en.startswith("bloody") else en
+            # проверка по EN: элемент назван как набор («Evan»/«The Trapper»,
+            # «Bloody Wraith»/«Bloody Wraith») — значит RU-имя элемента и есть
+            # RU-имя набора
+            if en and en_stem and (en_stem == stem or en == base):
+                names.add(ru_by_key[key])
         if len(names) == 1:
-            owners[rec["id"]] = next(iter(names))
-    return owners, unmatched
+            out[rec["id"]] = next(iter(names))
+    return out, unmatched
+
+
+def _norm_en(text):
+    """EN-имя к сравнению: «The Trapper» и «Trapper» — одно и то же."""
+    t = re.sub(r"[^a-z0-9 ]", "", (text or "").lower()).strip()
+    return re.sub(r"^the\s+", "", t)
 
 
 def fallback_file(rec, pieces, exists):
@@ -413,8 +451,8 @@ def write_module(path, skins, char_skins, skin_files, fakes_by_char, game_versio
                      f"'kind': {q(s['kind'])}")
             if s.get("name_ru"):
                 fh.write(f", 'name_ru': {q(s['name_ru'])}")
-                if s.get("ru_from") == "piece":
-                    fh.write(", 'name_ru_from': 'piece'")
+                if s.get("ru_from") in ("piece", "manual"):
+                    fh.write(f", 'name_ru_from': {q(s['ru_from'])}")
             if s.get("date"):
                 fh.write(f", 'date': {q(s['date'])}")
             fh.write("},\n")
@@ -493,15 +531,22 @@ def main(force=False):
     n_by_pieces = 0
     for rec in outfits:
         if not rec["name_ru"] and rec["id"] in by_pieces:
-            rec["name_ru"] = by_pieces[rec["id"]]
-            rec["ru_from"] = "piece"
+            rec["name_ru"], rec["ru_from"] = by_pieces[rec["id"]], "piece"
             n_by_pieces += 1
-    print(f"RU-названий: по файлу набора {sum(1 for r in outfits + coschars if r['name_ru']) - n_by_pieces}, "
-          f"по элементам {n_by_pieces}; имён элементов в таблице {len(PIECE_RU_NAMES)}"
+    # ручное дозаполнение (официальные имена из клиента игры)
+    for rec in outfits + coschars:
+        if not rec["name_ru"] and rec["id"] in SKIN_RU_OVERRIDES:
+            rec["name_ru"], rec["ru_from"] = SKIN_RU_OVERRIDES[rec["id"]], "manual"
+    n_manual = sum(1 for r in outfits + coschars if r.get("ru_from") == "manual")
+    print(f"RU-названий: по файлу набора "
+          f"{sum(1 for r in outfits + coschars if r['name_ru']) - n_by_pieces - n_manual}, "
+          f"по элементам {n_by_pieces}, вручную {n_manual}; "
+          f"имён элементов в таблице {len(PIECE_RU_NAMES)}"
           + (f", из них не сопоставлено {len(unmatched_pieces)}" if unmatched_pieces else ""))
 
     skins, char_skins, skin_files = {}, {}, {}
-    stats = {"no_image": 0, "fallback": 0, "ru": 0, "ru_piece": n_by_pieces}
+    stats = {"no_image": 0, "fallback": 0, "ru": 0, "ru_piece": n_by_pieces,
+             "ru_manual": n_manual}
     for rec in coschars + outfits:
         sid = rec["id"]
         fn = rec["file"] if exists.get(rec["file"]) else None
@@ -553,7 +598,8 @@ def main(force=False):
           f"с превью {n_img} ({stats['fallback']} — превью детали вместо отсутствующего файла набора), "
           f"без превью {stats['no_image']}")
     print(f"с RU-названием: {stats['ru']} из {len(skins)} "
-          f"(по файлу {stats['ru'] - stats['ru_piece']}, по элементам {stats['ru_piece']})")
+          f"(по файлу {stats['ru'] - stats['ru_piece'] - stats['ru_manual']}, "
+          f"по элементам {stats['ru_piece']}, вручную {stats['ru_manual']})")
     left = [s for s in skins.values() if not s.get("name_ru")]
     by_char = {}
     for s in left:

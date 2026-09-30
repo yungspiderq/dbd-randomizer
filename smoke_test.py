@@ -604,6 +604,62 @@ class TestSkins(unittest.TestCase):
             self.assertTrue(v.strip())
             self.assertLessEqual(len(v), 90)
 
+    def test_ru_names_cover_most_of_base(self):
+        """RU-названия (русская вики) покрывают большую часть базы."""
+        import dbd_skins as SK
+        total = len(SK.SKINS_BY_ID)
+        with_ru = sum(1 for i in SK.SKINS_BY_ID.values() if i.get("name_ru"))
+        self.assertGreaterEqual(with_ru, int(total * 0.7),
+                                f"RU-названий {with_ru} из {total} — обновите таблицу: "
+                                f"python tools/fetch_ru_skins.py && python tools/resolve_skins.py")
+
+    def test_ru_names_by_piece_are_verified(self):
+        """Имя, выведенное из элемента, обязано быть подтверждено английскими данными.
+
+        Иначе получаются подписи вроде «The Nurse» -> «Льняная наволочка»: у набора
+        и его маски разные имена. Проверка в resolve_skins: EN-имя головного
+        элемента совпадает с EN-именем набора (с точностью до «The» и «Bloody»).
+        """
+        import re
+        import dbd_skins as SK
+
+        def norm(t):
+            t = re.sub(r"[^a-z0-9 ]", "", (t or "").lower()).strip()
+            return re.sub(r"^the\s+", "", t)
+
+        checked = 0
+        for sid, info in SK.SKINS_BY_ID.items():
+            if info.get("name_ru_from") != "piece" or not info.get("file"):
+                continue
+            checked += 1
+            self.assertTrue(info.get("name_ru"), sid)
+            base = norm(info["name"])
+            self.assertTrue(base.startswith("bloody") or info["kind"] == "outfit", sid)
+        self.assertGreaterEqual(checked, 20)
+
+    def test_manual_ru_pipeline(self):
+        """Ручное дозаполнение: CSV -> skin_names_manual.py -> name_ru в базе."""
+        sys.path.insert(0, os.path.join(HERE, "tools"))
+        import dbd_skins as SK
+        try:
+            import ru_names_missing as M
+        except ImportError:
+            self.skipTest("нет tools/ru_names_missing.py")
+        manual = M.current_manual()
+        miss = M.missing(SK, manual)
+        if not miss:
+            self.skipTest("CSV заполнен целиком — проверять нечего")
+        row = miss[0]
+        for col in ("id", "char", "name_en", "kind", "rarity_ru", "file", "name_ru"):
+            self.assertIn(col, row)
+        self.assertEqual(row["name_ru"], "")
+        self.assertIn(row["id"], {r["id"] for r in miss})
+        # уже заполненные вручную имена не теряются при перегенерации CSV
+        filled = dict(manual)
+        filled[row["id"]] = "Тест"
+        again = M.missing(SK, filled)
+        self.assertNotIn(row["id"], {r["id"] for r in again})
+
     def test_old_skin_ownership_is_reset_on_schema_change(self):
         """Отметки владения v2.10.x (id 1..111) сбрасываются: числа означают другое."""
         import json, os, tempfile

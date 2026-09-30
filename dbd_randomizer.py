@@ -1946,11 +1946,18 @@ class App:
         all_skins = getattr(SKINS, "SKINS_BY_ID", {}) or {}
         total, chars_n = len(all_skins), len(getattr(SKINS, "CHAR_SKINS", {}) or {})
         n_ru = sum(1 for i in all_skins.values() if i.get("name_ru"))
-        names_note = (f"Русские названия есть у {n_ru} из {total} (русская вики, "
-                      "покрытие пополняется: tools/fetch_ru_skins.py), у остальных — "
-                      "английские." if n_ru else
-                      "Названия английские: RU-имена берутся с русской вики "
-                      "(tools/fetch_ru_skins.py), пока таблица пуста.")
+        if n_ru >= total:
+            names_note = "Все названия — русские."
+        elif n_ru:
+            names_note = (f"Русские названия: {n_ru} из {total} — сняты с русской вики "
+                          "(статьи «(наборы одежды)» и «(кастомизация)»). У остальных "
+                          "показаны английские: на русской вики их нет. Чтобы закрыть "
+                          "остаток официальными именами из русского клиента, заполните "
+                          "tools/skin_names_missing.csv и запустите tools/ru_names_missing.py "
+                          "+ tools/resolve_skins.py.")
+        else:
+            names_note = ("Названия английские: русские имена снимаются с русской вики "
+                          "(tools/fetch_ru_skins.py), таблица пока пуста.")
         ttk.Label(self.tab_skins,
                   text=f"База внешности: {total} записей у {chars_n} персонажей "
                        f"(данные wiki.gg, патч {getattr(SKINS, 'GAME_VERSION', '?')}). "
@@ -3518,9 +3525,11 @@ def selftest():
     print(f"  убийц: {len(db['killers'])}, выживших: {len(db['survivors'])}, "
           f"категорий предметов: {len(db['survivor_items'])}")
     if SKINS is not None:
-        with_img = sum(1 for i in (getattr(SKINS, "SKINS_BY_ID", {}) or {}).values() if i.get("file"))
-        print(f"  внешность: {len(getattr(SKINS, 'SKINS_BY_ID', {}))} наборов "
-              f"у {len(getattr(SKINS, 'CHAR_SKINS', {}))} персонажей, превью у {with_img} "
+        _all = getattr(SKINS, "SKINS_BY_ID", {}) or {}
+        with_img = sum(1 for i in _all.values() if i.get("file"))
+        with_ru = sum(1 for i in _all.values() if i.get("name_ru"))
+        print(f"  внешность: {len(_all)} наборов у {len(getattr(SKINS, 'CHAR_SKINS', {}))} "
+              f"персонажей, превью у {with_img}, RU-названий {with_ru} "
               f"(патч {getattr(SKINS, 'GAME_VERSION', '?')})")
     else:
         print("  внешность: модуль dbd_skins.py не найден")
