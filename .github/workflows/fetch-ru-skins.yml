@@ -1,0 +1,84 @@
+name: fetch-ru-skins
+
+# Русские названия наборов одежды живут только на русской вики
+# (dead-by-daylight.fandom.com/ru, статьи «<Персонаж> (наборы одежды)»).
+# Fandom закрывает Cloudflare доступ для дата-центров и «ботовых» User-Agent,
+# поэтому из песочницы/локального скрипта статьи часто не отдаются (403).
+# Этот workflow снимает их с раннера GitHub Actions и прикладывает результат
+# АРТЕФАКТОМ — ничего в репозиторий не коммитится, рекурсии запусков нет.
+#
+# Дальше на своей машине:
+#   1. скачать артефакт ru-skin-names, распаковать в корень репозитория
+#      (появятся tools/skin_names_ru.py и tools/wiki_cache/ru/*.wiki);
+#   2. python tools/resolve_skins.py    — пересобрать dbd_skins.py с полем name_ru;
+#   3. python smoke_test.py             — 92+ теста, OK;
+#   4. коммит и релиз.
+#
+# Кэш статей (tools/wiki_cache/ru/) скачивается отдельным артефактом ru-wiki-cache:
+# если положить его обратно в tools/wiki_cache/ru/, следующий запуск workflow
+# докачает только недостающие страницы.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: "Сколько статей скачать (пусто = все ~98)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fetch-ru-skins
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Скачать статьи русской вики
+        run: |
+          args=""
+          if [ -n "${{ github.event.inputs.pages }}" ]; then
+            args="--pages=${{ github.event.inputs.pages }}"
+          fi
+          python tools/fetch_ru_skins.py $args
+
+      - name: Отчёт о покрытии
+        run: |
+          python - <<'PY'
+          import os, re
+          path = "tools/skin_names_ru.py"
+          if not os.path.exists(path):
+              raise SystemExit("tools/skin_names_ru.py не создан — статьи не скачались (403?)")
+          ns = {}
+          with open(path, encoding="utf-8") as fh:
+              exec(compile(fh.read(), path, "exec"), ns)
+          names, stats = ns.get("FILE_TO_RU") or {}, ns.get("PAGE_STATS") or {}
+          print(f"RU-названий: {len(names)}; статей разобрано: {len(stats)}")
+          empty = [t for t, n in stats.items() if n == 0]
+          if empty:
+              print("статьи без найденных наборов:", ", ".join(empty[:10]))
+          cached = len(os.listdir("tools/wiki_cache/ru")) if os.path.isdir("tools/wiki_cache/ru") else 0
+          print(f"статей в кэше: {cached}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ru-skin-names
+          path: tools/skin_names_ru.py
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ru-wiki-cache
+          path: tools/wiki_cache/ru/
+          if-no-files-found: warn

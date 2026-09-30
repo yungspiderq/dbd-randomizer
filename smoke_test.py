@@ -120,6 +120,19 @@ class FakeInput:
         return True
 
 
+class ST_VAR:
+    """Мини-замена tk.BooleanVar/StringVar для headless-проверок."""
+
+    def __init__(self, _app, value):
+        self._v = value
+
+    def get(self):
+        return self._v
+
+    def set(self, v):
+        self._v = v
+
+
 def make_app():
     root = mock.MagicMock()
     root.after = lambda *a, **kw: None          # без рекурсии polling'а
@@ -534,6 +547,46 @@ class TestSkins(unittest.TestCase):
         self.assertIn(info["name_ru"], R.build_to_clipboard_text(
             {"side": "KILLER", "char": char, "power_or_item": "x", "addons": [],
              "perks": [], "skin": got}))
+
+    def test_skin_visible_in_all_build_texts(self):
+        """Выпавший набор виден везде: карточка, полный текст, компактный, лог."""
+        import dbd_skins as SK
+        char = next(c for c in SK.CHAR_SKINS if c in self.db["killers"])
+        b = R.make_killer_build(self.db, [char], skin_enabled=True)
+        self.assertIsNotNone(b["skin"])
+        shown = b["skin"]["display"]
+        self.assertIn("👗 Внешность (случайный набор): " + shown, R.build_to_text(b))
+        self.assertIn("👗 " + shown, R.build_to_clipboard_text(b))
+        # билд сообщества несёт внешность строкой — её тоже показываем
+        self.assertIn("👗 Внешность: Krampus",
+                      R.build_to_text({"side": "KILLER", "char": char, "power_or_item": "x",
+                                       "addons": [], "perks": [], "skin": "Krampus"}))
+        # без набора строки нет
+        b2 = R.make_killer_build(self.db, [char], skin_enabled=False)
+        self.assertNotIn("👗", R.build_to_text(b2))
+
+    def test_generation_logs_picked_skin(self):
+        """Генерация пишет в журнал, какой набор и из скольких выпал."""
+        import dbd_skins as SK
+        char = next(c for c in SK.CHAR_SKINS if c in self.db["killers"])
+        app = make_app()
+        app.mode_var = ST_VAR(app, "KILLER")
+        app.perk_mode_var = ST_VAR(app, "mixed")
+        app.owned_var = ST_VAR(app, False)
+        app.addons_var = ST_VAR(app, True)
+        app.skin_var = ST_VAR(app, True)
+        app.db = self.db
+        app._char_widgets = {("K", char): (ST_VAR(app, True), None)}
+        logged = []
+        app.log = lambda msg: logged.append(msg)
+        app.set_status = lambda *a, **kw: None
+        app._render_build = lambda: None
+        app.btn_equip = _fake_entry()
+        app.generate_build()
+        text = "\n".join(logged)
+        self.assertIn("👗 Внешность: случайный набор", text)
+        self.assertIn(app.build["skin"]["display"], text)
+        self.assertIn(f"из {len(SK.CHAR_SKINS[app.build['char']])}", text)
 
     def test_ru_name_table_is_consistent(self):
         """Таблица RU-имён ссылается только на реально существующие файлы наборов."""

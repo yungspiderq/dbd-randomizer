@@ -830,6 +830,12 @@ def build_to_text(b):
     lines.append("🔮 Навыки:")
     for i, p in enumerate(b["perks"], 1):
         lines.append(f"   {i}. {p}")
+    skin = b.get("skin")
+    if isinstance(skin, dict) and skin:
+        lines.append(f"👗 Внешность (случайный набор): "
+                     f"{skin.get('display') or skin.get('name', '?')}")
+    elif isinstance(skin, str) and skin.strip():
+        lines.append(f"👗 Внешность: {skin.strip()}")
     return "\n".join(lines)
 
 
@@ -1380,7 +1386,7 @@ class App:
         self.addons_var = tk.BooleanVar(value=self.cfg["options"].get("addons_enabled", True))
         ttk.Checkbutton(opt, text="Подбирать аддоны", variable=self.addons_var).pack(anchor="w", padx=8, pady=1)
         self.skin_var = tk.BooleanVar(value=self.cfg["options"].get("skin_enabled", True))
-        ttk.Checkbutton(opt, text="Подбирать набор одежды (внешность)",
+        ttk.Checkbutton(opt, text="👗 Внешность: случайный набор у выпавшего персонажа",
                         variable=self.skin_var).pack(anchor="w", padx=8, pady=1)
         self.owned_var = tk.BooleanVar(value=self.cfg["options"].get("respect_owned", False))
         ttk.Checkbutton(opt, text="Только открытое у меня (белые списки в JSON)",
@@ -2420,9 +2426,9 @@ class App:
                                 else self._pal["surv"])
         skin = b.get("skin")
         if skin:
-            self.card_skin.config(
-                text=f"👗 Внешность: {skin.get('display') or skin.get('name', '?')}",
-                fg="#8d99a6")
+            shown = skin.get("display") or skin.get("name") or str(skin)
+            label = "👗 Внешность (случайный набор)" if isinstance(skin, dict) else "👗 Внешность"
+            self.card_skin.config(text=f"{label}: {shown}", fg="#8d99a6")
             self.card_skin_img.config(
                 image=self._icon_photo(f"skin:{skin.get('id')}", 24), text="")
             want_skin = [f"skin:{skin.get('id')}"]
@@ -2654,6 +2660,13 @@ class App:
         self.set_status("Билд готов. Откройте в игре меню снаряжения этого персонажа и жмите «ЭКИПИРОВАТЬ».",
                         "#3fb950")
         self.log("Сгенерирован билд: " + build_to_clipboard_text(self.build))
+        _sk = self.build.get("skin")
+        if isinstance(_sk, dict) and _sk:
+            _info = (getattr(SKINS, "SKINS_BY_ID", {}) or {}).get(_sk.get("id"), {})
+            _n = len((getattr(SKINS, "CHAR_SKINS", {}) or {}).get(self.build["char"], []))
+            self.log(f"👗 Внешность: случайный набор «{_sk.get('display') or _sk.get('name')}» "
+                     f"из {_n or '?'} у «{self.build['char']}»"
+                     + (f" (редкость: {_info['rarity_ru']})" if _info.get("rarity_ru") else ""))
 
     def reroll_perks(self):
         if not self.build:
