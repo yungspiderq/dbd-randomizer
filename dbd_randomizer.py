@@ -750,7 +750,8 @@ def pick_skin(char, owned_skins=None):
         return None
     sid = random.choice(ids)
     info = (getattr(SKINS, "SKINS_BY_ID", {}) or {}).get(sid, {})
-    return {"id": sid, "name": info.get("name", "?")}
+    return {"id": sid, "name": info.get("name", "?"),
+            "display": info.get("name_ru") or info.get("name", "?")}
 
 
 def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
@@ -840,7 +841,8 @@ def build_to_clipboard_text(b):
     item = b["power_or_item"]
     addons = " + ".join(a for a in b["addons"] if a not in (EMPTY, NO_ADDONS)) or "без аддонов"
     perks = ", ".join(b["perks"])
-    skin = f" | 👗 {b['skin']['name']}" if b.get("skin") else ""
+    skin = (f" | 👗 {b['skin'].get('display') or b['skin']['name']}"
+            if b.get("skin") else "")
     return f"{head} | {item} | {addons} | Перки: {perks}{skin}"
 
 
@@ -1935,15 +1937,20 @@ class App:
         ttk.Button(top, text="💾 Сохранить", command=self._sk_save).pack(side="left", padx=3)
         self.sk_count = ttk.Label(top, text="", foreground="#8d99a6", font=("Segoe UI", 9))
         self.sk_count.pack(side="right")
-        total = len(getattr(SKINS, "SKINS_BY_ID", {}) or {})
-        chars_n = len(getattr(SKINS, "CHAR_SKINS", {}) or {})
+        all_skins = getattr(SKINS, "SKINS_BY_ID", {}) or {}
+        total, chars_n = len(all_skins), len(getattr(SKINS, "CHAR_SKINS", {}) or {})
+        n_ru = sum(1 for i in all_skins.values() if i.get("name_ru"))
+        names_note = (f"Русские названия есть у {n_ru} из {total} (русская вики, "
+                      "покрытие пополняется: tools/fetch_ru_skins.py), у остальных — "
+                      "английские." if n_ru else
+                      "Названия английские: RU-имена берутся с русской вики "
+                      "(tools/fetch_ru_skins.py), пока таблица пуста.")
         ttk.Label(self.tab_skins,
                   text=f"База внешности: {total} записей у {chars_n} персонажей "
                        f"(данные wiki.gg, патч {getattr(SKINS, 'GAME_VERSION', '?')}). "
                        "Отметьте наборы, которые у вас есть: неотмеченные не выпадают в билдах "
                        "и в «🎲 Случайный набор». ★ — скин персонажа (отдельная модель/голос), "
-                       "остальные — наборы одежды. Названия английские (RU-названий нет "
-                       "в открытых данных), по картинке и редкости набор легко найти в русском клиенте.",
+                       f"остальные — наборы одежды. {names_note}",
                   foreground="#e5534b", font=("Segoe UI", 9, "italic"),
                   justify="left", wraplength=940).pack(fill="x", padx=10, pady=(0, 4))
         body = ttk.Frame(self.tab_skins)
@@ -1997,9 +2004,14 @@ class App:
         self._sk_preview_id(ids[0] if ids else None)
 
     @staticmethod
-    def _sk_label(sid, info):
+    def _sk_name(info, sid=None):
+        """Имя набора для показа: русское (из tools/skin_names_ru.py), иначе английское."""
+        return info.get("name_ru") or info.get("name") or (f"набор №{sid}" if sid else "?")
+
+    @classmethod
+    def _sk_label(cls, sid, info):
         """Подпись набора в списке: «★ имя» для скинов персонажей (отдельная модель)."""
-        name = info.get("name") or f"набор №{sid}"
+        name = cls._sk_name(info, sid)
         return ("★ " + name) if info.get("kind") == "coschar" else name
 
     @staticmethod
@@ -2024,7 +2036,10 @@ class App:
             self.sk_meta.config(text="")
             return
         self.sk_img.config(image=self._icon_photo(f"skin:{sid}", 110), text="")
-        self.sk_name.config(text=self._sk_label(sid, info).removeprefix("★ "))
+        shown = self._sk_name(info, sid)
+        if info.get("name_ru") and info.get("name"):
+            shown = f"{info['name_ru']}\n({info['name']})"
+        self.sk_name.config(text=shown)
         self.sk_meta.config(text=self._sk_meta_text(char, info))
         self._request_icons([f"skin:{sid}"])
 
@@ -2405,7 +2420,9 @@ class App:
                                 else self._pal["surv"])
         skin = b.get("skin")
         if skin:
-            self.card_skin.config(text=f"👗 Внешность: {skin.get('name', '?')}", fg="#8d99a6")
+            self.card_skin.config(
+                text=f"👗 Внешность: {skin.get('display') or skin.get('name', '?')}",
+                fg="#8d99a6")
             self.card_skin_img.config(
                 image=self._icon_photo(f"skin:{skin.get('id')}", 24), text="")
             want_skin = [f"skin:{skin.get('id')}"]
@@ -3075,7 +3092,8 @@ class App:
                                         b["perks"], author,
                                         title=b.get("title", ""),
                                         description=b.get("description", ""),
-                                        skin=(b.get("skin") or {}).get("name", "")
+                                        skin=((b.get("skin") or {}).get("display")
+                                              or (b.get("skin") or {}).get("name", ""))
                                         if isinstance(b.get("skin"), dict)
                                         else (b.get("skin") or ""))
         self.btn_publish.config(state="disabled")

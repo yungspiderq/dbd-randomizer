@@ -3,7 +3,7 @@
 
 Наборы одежды (скины): id -> данные + файл превью на wiki.gg.
 Источник: Module:Datatable/Cosmetics (патч 10.1.2_live, снято 2026-09-08 21:53:02).
-Наборов: 2084, «скинов персонажей» (cosChars): 111, с превью: 2162.
+Наборов: 2084, «скинов персонажей» (cosChars): 111, с превью: 2162, с RU-названием: 21.
 
 Имена английские: RU-названий нет в открытых данных, картинка позволяет
 найти набор в русском клиенте. Ключи стабильны (id набора).
@@ -16,6 +16,10 @@ FAKE_SKINS — одиночные предметы (торс/голова без
 Превью — миниатюра 256 px: SKIN_FILES хранит путь `thumb/<файл>/256px-<файл>`
 (IconStore прибавляет ICON_BASE из dbd_icons.py); полноразмерный файл лежит
 по пути SKIN_BASE + поле `file`.
+
+Поле `name_ru` есть только у записей, найденных в tools/skin_names_ru.py
+(русская вики, статьи «<Персонаж> (наборы одежды)»): заполняется
+инструментом tools/fetch_ru_skins.py, пока покрытие частичное.
 """
 
 SKIN_BASE = "https://deadbydaylight.wiki.gg/images/"
@@ -57,9 +61,9 @@ RARITY_EN = {
 SKINS_BY_ID = {
     1: {'name': 'William Hudson', 'char': 'Эллен Рипли', 'side': 'SURVIVOR', 'rarity': 7, 'rarity_ru': 'легендарный', 'file': 'S39_outfit_013.png', 'kind': 'outfit', 'date': '28.04.2026'},
     2: {'name': "Colonial Marine's Gear", 'char': 'Габриэль Сома', 'side': 'SURVIVOR', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'S37_outfit_026.png', 'kind': 'outfit', 'date': '28.04.2026'},
-    3: {'name': 'Attack Titan', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 7, 'rarity_ru': 'легендарный', 'file': 'TR_outfit_031.png', 'kind': 'outfit', 'date': '28.04.2026'},
-    4: {'name': 'Ember Attack Titan', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 7, 'rarity_ru': 'легендарный', 'file': 'TR_outfit_031_01.png', 'kind': 'outfit', 'date': '28.04.2026'},
-    5: {'name': 'Crystallize Attack Titan', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 7, 'rarity_ru': 'легендарный', 'file': 'TR_outfit_031_02.png', 'kind': 'outfit', 'date': '28.04.2026'},
+    3: {'name': 'Attack Titan', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 7, 'rarity_ru': 'легендарный', 'file': 'TR_outfit_031.png', 'kind': 'outfit', 'name_ru': 'Атака титана', 'date': '28.04.2026'},
+    4: {'name': 'Ember Attack Titan', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 7, 'rarity_ru': 'легендарный', 'file': 'TR_outfit_031_01.png', 'kind': 'outfit', 'name_ru': 'Атака тлеющего титана', 'date': '28.04.2026'},
+    5: {'name': 'Crystallize Attack Titan', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 7, 'rarity_ru': 'легендарный', 'file': 'TR_outfit_031_02.png', 'kind': 'outfit', 'name_ru': 'Атака кристального титана', 'date': '28.04.2026'},
     6: {'name': 'Cleaning Levi', 'char': 'Джейк Парк', 'side': 'SURVIVOR', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'JP_outfit_034.png', 'kind': 'outfit', 'date': '28.04.2026'},
     7: {'name': "Mikasa's Dark Uniform", 'char': 'Юи Кимура', 'side': 'SURVIVOR', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'SS_outfit_031.png', 'kind': 'outfit', 'date': '28.04.2026'},
     8: {'name': "Sasha's Uniform", 'char': 'Талита Лира', 'side': 'SURVIVOR', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'S35_outfit_025.png', 'kind': 'outfit', 'date': '28.04.2026'},
@@ -103,14 +107,14 @@ SKINS_BY_ID = {
     46: {'name': 'Thicker Than Water', 'char': 'Близнецы', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'K22_outfit_015_01.png', 'kind': 'outfit', 'date': '28.04.2026'},
     47: {'name': "Dwight's Glow", 'char': 'Дуайт Фэйрфилд', 'side': 'SURVIVOR', 'rarity': 3, 'rarity_ru': 'редкий', 'file': 'DF_outfit_01_07.png', 'kind': 'outfit', 'date': '12.06.2018'},
     48: {'name': "Trapper's Glow", 'char': 'Охотник', 'side': 'KILLER', 'rarity': 3, 'rarity_ru': 'редкий', 'file': 'TR_outfit_01_05.png', 'kind': 'outfit', 'date': '12.06.2018'},
-    49: {'name': 'Hidden Wishes', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_022.png', 'kind': 'outfit', 'date': '16.04.2024'},
-    50: {'name': 'Cash-Trapped', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_023.png', 'kind': 'outfit', 'date': '25.01.2025'},
-    51: {'name': 'Doom Walker', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 3, 'rarity_ru': 'редкий', 'file': 'TR_outfit_024.png', 'kind': 'outfit', 'date': '25.07.2024'},
-    52: {'name': 'Big Baddie', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_026.png', 'kind': 'outfit', 'date': '23.10.2024'},
-    53: {'name': 'Rotting Leaves', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_013_01.png', 'kind': 'outfit', 'date': '12.06.2018'},
-    54: {'name': 'Conqueror Doom', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_022_01.png', 'kind': 'outfit', 'date': '12.06.2018'},
+    49: {'name': 'Hidden Wishes', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_022.png', 'kind': 'outfit', 'name_ru': 'Скрытная погоня', 'date': '16.04.2024'},
+    50: {'name': 'Cash-Trapped', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_023.png', 'kind': 'outfit', 'name_ru': 'Во власти денег', 'date': '25.01.2025'},
+    51: {'name': 'Doom Walker', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 3, 'rarity_ru': 'редкий', 'file': 'TR_outfit_024.png', 'kind': 'outfit', 'name_ru': 'Роковой ходок', 'date': '25.07.2024'},
+    52: {'name': 'Big Baddie', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_026.png', 'kind': 'outfit', 'name_ru': 'Большой задира', 'date': '23.10.2024'},
+    53: {'name': 'Rotting Leaves', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_013_01.png', 'kind': 'outfit', 'name_ru': 'Гниющие листья', 'date': '12.06.2018'},
+    54: {'name': 'Conqueror Doom', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_022_01.png', 'kind': 'outfit', 'name_ru': 'Судьба завоевателя', 'date': '12.06.2018'},
     55: {'name': 'Grim Punishment', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_027.png', 'kind': 'outfit', 'date': '07.04.2025'},
-    56: {'name': 'Timeless Sport', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit016_01.png', 'kind': 'outfit', 'date': '12.06.2018'},
+    56: {'name': 'Timeless Sport', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit016_01.png', 'kind': 'outfit', 'name_ru': 'Безвременный спорт', 'date': '12.06.2018'},
     57: {'name': 'Dearest Evan', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'TR_outfit_030.png', 'kind': 'outfit', 'date': '25.06.2026'},
     58: {'name': 'Blast Furnace', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 3, 'rarity_ru': 'редкий', 'file': 'Chuckles_outfit_001.png', 'kind': 'outfit', 'date': '12.06.2018'},
     59: {'name': 'Circus Strongman', 'char': 'Охотник', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'Chuckles_outfit_002.png', 'kind': 'outfit', 'date': '09.08.2019'},
@@ -253,13 +257,13 @@ SKINS_BY_ID = {
     196: {'name': 'Prayer for Respite', 'char': 'Правосудие', 'side': 'KILLER', 'rarity': 2, 'rarity_ru': 'необычный', 'file': '', 'kind': 'outfit', 'date': '25.08.2026'},
     197: {'name': 'Prayer for Reprieve', 'char': 'Правосудие', 'side': 'KILLER', 'rarity': 2, 'rarity_ru': 'необычный', 'file': '', 'kind': 'outfit', 'date': '25.08.2026'},
     198: {'name': 'Delicate Garments', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_006_01.png', 'kind': 'outfit', 'date': '12.06.2018'},
-    199: {'name': 'Fetid Bloom', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_015.png', 'kind': 'outfit', 'date': '21.05.2024'},
-    200: {'name': 'Black Widow', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_017.png', 'kind': 'outfit', 'date': '01.10.2024'},
-    201: {'name': 'Rouge Creature', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_015_01.png', 'kind': 'outfit', 'date': '12.06.2018'},
-    202: {'name': 'Unwitting Witness', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_019.png', 'kind': 'outfit', 'date': '21.04.2026'},
-    203: {'name': 'Unwitting Witness (Deep Rift 1)', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_019_01.png', 'kind': 'outfit', 'date': '29.07.2025'},
-    204: {'name': 'Unwitting Witness (Deep Rift 2)', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_019_02.png', 'kind': 'outfit', 'date': '29.07.2025'},
-    205: {'name': 'Unwitting Witness (Deep Rift 3)', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 12, 'rarity_ru': 'вознесённый', 'file': 'WI_outfit_019_03.png', 'kind': 'outfit', 'date': '29.07.2025'},
+    199: {'name': 'Fetid Bloom', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_015.png', 'kind': 'outfit', 'name_ru': 'Зловонное цветение', 'date': '21.05.2024'},
+    200: {'name': 'Black Widow', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_017.png', 'kind': 'outfit', 'name_ru': 'Черная вдова', 'date': '01.10.2024'},
+    201: {'name': 'Rouge Creature', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_015_01.png', 'kind': 'outfit', 'name_ru': 'Красное существо', 'date': '12.06.2018'},
+    202: {'name': 'Unwitting Witness', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_019.png', 'kind': 'outfit', 'name_ru': 'Нечаянный свидетель', 'date': '21.04.2026'},
+    203: {'name': 'Unwitting Witness (Deep Rift 1)', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_019_01.png', 'kind': 'outfit', 'name_ru': 'Нечаянный свидетель (глубокий разрыв)', 'date': '29.07.2025'},
+    204: {'name': 'Unwitting Witness (Deep Rift 2)', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_019_02.png', 'kind': 'outfit', 'name_ru': 'Нечаянный свидетель (глубокий разрыв 1)', 'date': '29.07.2025'},
+    205: {'name': 'Unwitting Witness (Deep Rift 3)', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 12, 'rarity_ru': 'вознесённый', 'file': 'WI_outfit_019_03.png', 'kind': 'outfit', 'name_ru': 'Нечаянный свидетель (глубокий разрыв 2)', 'date': '29.07.2025'},
     206: {'name': 'Sapling Siren', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'Witch_outfit_001.png', 'kind': 'outfit', 'date': '12.06.2018'},
     207: {'name': 'Wood Witch', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 3, 'rarity_ru': 'редкий', 'file': 'Witch_outfit_002.png', 'kind': 'outfit', 'date': '12.06.2018'},
     208: {'name': 'Mud Medusa', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'Witch_outfit_003.png', 'kind': 'outfit', 'date': '08.08.2018'},
@@ -271,16 +275,16 @@ SKINS_BY_ID = {
     214: {'name': 'Weathered Crone', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 1, 'rarity_ru': 'обычный', 'file': 'Witch_outfit_009.png', 'kind': 'outfit', 'date': '12.06.2018'},
     215: {'name': 'Red Sap', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 2, 'rarity_ru': 'необычный', 'file': 'Witch_outfit_010.png', 'kind': 'outfit', 'date': '18.09.2018'},
     216: {'name': 'Birch Twigs', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 2, 'rarity_ru': 'необычный', 'file': 'Witch_outfit_011.png', 'kind': 'outfit', 'date': '18.09.2018'},
-    217: {'name': 'Queen of the Mire', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'Witch_outfit_006_01.png', 'kind': 'outfit', 'date': '09.08.2019'},
+    217: {'name': 'Queen of the Mire', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'Witch_outfit_006_01.png', 'kind': 'outfit', 'name_ru': 'Королева трясины', 'date': '09.08.2019'},
     218: {'name': 'The Hag', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 1, 'rarity_ru': 'обычный', 'file': 'HA_outfit_01.png', 'kind': 'outfit', 'date': '12.06.2018'},
     219: {'name': 'Bloody Hag', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 3, 'rarity_ru': 'редкий', 'file': 'HA_outfit_01_P01.png', 'kind': 'outfit', 'date': '12.06.2018'},
     220: {'name': 'Snake Charmer', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_007.png', 'kind': 'outfit', 'date': '28.08.2019'},
     221: {'name': 'Scorched Harvester', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_008.png', 'kind': 'outfit', 'date': '09.10.2019'},
     222: {'name': 'The Abomination', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 3, 'rarity_ru': 'редкий', 'file': 'WI_outfit_009.png', 'kind': 'outfit', 'date': '07.10.2021'},
-    223: {'name': 'The Birch Witch', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_010.png', 'kind': 'outfit', 'date': '04.05.2021'},
+    223: {'name': 'The Birch Witch', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_010.png', 'kind': 'outfit', 'name_ru': 'Березовая Ведьма', 'date': '04.05.2021'},
     224: {'name': 'Swamp Creature', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_011.png', 'kind': 'outfit', 'date': '18.10.2023'},
-    225: {'name': 'Toxic Roots', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_012.png', 'kind': 'outfit', 'date': '05.09.2023'},
-    226: {'name': 'Family Knowledge', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_014.png', 'kind': 'outfit', 'date': '14.12.2023'},
+    225: {'name': 'Toxic Roots', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_012.png', 'kind': 'outfit', 'name_ru': 'Ядовитые корни', 'date': '05.09.2023'},
+    226: {'name': 'Family Knowledge', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_014.png', 'kind': 'outfit', 'name_ru': 'Семейные знания', 'date': '14.12.2023'},
     227: {'name': 'Verdant Outbreak', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 2, 'rarity_ru': 'необычный', 'file': 'WI_outfit_01_03.png', 'kind': 'outfit', 'date': '11.11.2021'},
     228: {'name': 'Bile Beldam', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_03_01.png', 'kind': 'outfit', 'date': '12.06.2018'},
     229: {'name': 'Sapling Siren', 'char': 'Ведьма', 'side': 'KILLER', 'rarity': 4, 'rarity_ru': 'очень редкий', 'file': 'WI_outfit_04_01.png', 'kind': 'outfit', 'date': '06.01.2021'},

@@ -20,6 +20,10 @@
   детали -> файл. Используется как запасное превью, если файла набора на вики
   нет (например K44_outfit_01.png у Правосудия ещё не залит).
 * tools/char_map_ru.py — англ. имя персонажа -> русское имя из dbd_data.py.
+* tools/skin_names_ru.py — РУССКИЕ названия наборов (имя файла -> название),
+  снятые tools/fetch_ru_skins.py со статей «<Персонаж> (наборы одежды)» русской
+  вики (dead-by-daylight.fandom.com/ru). Таблица может быть частичной: тогда у
+  записей просто не будет поля name_ru и UI покажет английское имя.
 
 Картинки
 --------
@@ -54,6 +58,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from char_map_ru import KILLER_EN_RU, SURVIVOR_EN_RU, RARITIES   # noqa: E402
 import dbd_data as DATA                                          # noqa: E402
+try:                                                             # заполняется tools/fetch_ru_skins.py
+    from skin_names_ru import FILE_TO_RU as SKIN_RU_NAMES
+except ImportError:                                              # pragma: no cover
+    SKIN_RU_NAMES = {}
 
 API = "https://deadbydaylight.wiki.gg/api.php"
 UA = {"User-Agent": "DBDskinFetcher/2.11 (skins; see repository)"}
@@ -298,13 +306,14 @@ def write_module(path, skins, char_skins, skin_files, fakes_by_char, game_versio
     n_outfit = sum(1 for s in skins.values() if s["kind"] == "outfit")
     n_char = len(skins) - n_outfit
     n_img = sum(1 for s in skins.values() if s["file"])
+    n_ru = sum(1 for s in skins.values() if s.get("name_ru"))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write('# -*- coding: utf-8 -*-\n')
         fh.write('"""Сгенерировано tools/resolve_skins.py — НЕ править вручную.\n\n')
         fh.write('Наборы одежды (скины): id -> данные + файл превью на wiki.gg.\n')
         fh.write(f'Источник: Module:Datatable/Cosmetics (патч {game_version}, снято {stamp}).\n')
         fh.write(f'Наборов: {n_outfit}, «скинов персонажей» (cosChars): {n_char}, '
-                 f'с превью: {n_img}.\n\n')
+                 f'с превью: {n_img}, с RU-названием: {n_ru}.\n\n')
         fh.write('Имена английские: RU-названий нет в открытых данных, картинка позволяет\n')
         fh.write('найти набор в русском клиенте. Ключи стабильны (id набора).\n\n')
         fh.write('id «скина персонажа» = COSCHAR_ID_OFFSET + id из p.cosChars: у обеих\n')
@@ -313,7 +322,10 @@ def write_module(path, skins, char_skins, skin_files, fakes_by_char, game_versio
         fh.write('у них нет ни имени, ни картинки, поэтому в розыгрыш они не попадают.\n')
         fh.write('Превью — миниатюра 256 px: SKIN_FILES хранит путь `thumb/<файл>/256px-<файл>`\n')
         fh.write('(IconStore прибавляет ICON_BASE из dbd_icons.py); полноразмерный файл лежит\n')
-        fh.write('по пути SKIN_BASE + поле `file`.\n"""\n\n')
+        fh.write('по пути SKIN_BASE + поле `file`.\n\n')
+        fh.write('Поле `name_ru` есть только у записей, найденных в tools/skin_names_ru.py\n')
+        fh.write('(русская вики, статьи «<Персонаж> (наборы одежды)»): заполняется\n')
+        fh.write('инструментом tools/fetch_ru_skins.py, пока покрытие частичное.\n"""\n\n')
         fh.write('SKIN_BASE = "https://deadbydaylight.wiki.gg/images/"\n')
         fh.write(f'THUMB_WIDTH = {THUMB_WIDTH}\n')
         fh.write(f'COSCHAR_ID_OFFSET = {COSCHAR_ID_OFFSET}\n')
@@ -335,6 +347,8 @@ def write_module(path, skins, char_skins, skin_files, fakes_by_char, game_versio
                      f"'side': {q(s['side'])}, 'rarity': {s['rarity']}, "
                      f"'rarity_ru': {q(s['rarity_ru'])}, 'file': {q(s['file'] or '')}, "
                      f"'kind': {q(s['kind'])}")
+            if s.get("name_ru"):
+                fh.write(f", 'name_ru': {q(s['name_ru'])}")
             if s.get("date"):
                 fh.write(f", 'date': {q(s['date'])}")
             fh.write("},\n")
@@ -405,7 +419,7 @@ def main(force=False):
         exists.update(file_exists_map(cand))
 
     skins, char_skins, skin_files = {}, {}, {}
-    stats = {"no_image": 0, "fallback": 0}
+    stats = {"no_image": 0, "fallback": 0, "ru": 0}
     for rec in coschars + outfits:
         sid = rec["id"]
         fn = rec["file"] if exists.get(rec["file"]) else None
@@ -417,8 +431,12 @@ def main(force=False):
             else:
                 stats["no_image"] += 1
         rar = rec["rarity"]
+        name_ru = SKIN_RU_NAMES.get(rec["file"].strip().lower(), "") if rec["file"] else ""
+        if name_ru:
+            stats["ru"] += 1
         skins[sid] = {
-            "name": rec["name"], "char": rec["char"], "side": rec["side"],
+            "name": rec["name"], "name_ru": name_ru,
+            "char": rec["char"], "side": rec["side"],
             "rarity": rar, "rarity_ru": RARITIES.get(rar, ("?", "?"))[1],
             "file": fn or "", "date": rec["date"], "kind": rec["kind"],
         }
@@ -451,6 +469,7 @@ def main(force=False):
     print(f"записей: {n_outfit} наборов + {n_char} скинов персонажей, "
           f"с превью {n_img} ({stats['fallback']} — превью детали вместо отсутствующего файла набора), "
           f"без превью {stats['no_image']}")
+    print(f"с RU-названием (tools/skin_names_ru.py): {stats['ru']} из {len(skins)}")
     print(f"одиночных предметов (FAKE_SKINS): {len(fakes)}")
     print(f"Записано: {out} ({os.path.getsize(out) // 1024} КБ)")
     return 0

@@ -472,6 +472,8 @@ class TestSkins(unittest.TestCase):
             self.assertIn(info["char"], self.db["killers"] if info["side"] == "KILLER"
                           else self.db["survivors"])
             self.assertTrue(info["name"], sid)
+            if info.get("name_ru"):
+                self.assertTrue(info["name_ru"].strip(), sid)
             self.assertIn(info["kind"], ("outfit", "coschar"))
             self.assertIn(info["rarity"], SK.RARITY_RU)
             self.assertTrue(info["rarity_ru"], sid)
@@ -515,6 +517,39 @@ class TestSkins(unittest.TestCase):
         self.assertEqual(by_name["Minotaur"]["char"], "Они")
         shape = SK.SKINS_BY_ID[[i for i in SK.CHAR_SKINS["Тень"]][0]]
         self.assertTrue(shape["file"].startswith("MM_"))      # MM = Michael Myers
+
+    def test_ru_names_are_used_when_present(self):
+        """RU-название (русская вики) показывается вместо английского, EN остаётся в данных."""
+        import dbd_skins as SK
+        ru = [sid for sid, i in SK.SKINS_BY_ID.items() if i.get("name_ru")]
+        if not ru:
+            self.skipTest("tools/skin_names_ru.py ещё не заполнен (python tools/fetch_ru_skins.py)")
+        sid = ru[0]
+        info = SK.SKINS_BY_ID[sid]
+        char = info["char"]
+        got = R.pick_skin(char, {char: [sid]})
+        self.assertEqual(got["id"], sid)
+        self.assertEqual(got["display"], info["name_ru"])
+        self.assertEqual(got["name"], info["name"])
+        self.assertIn(info["name_ru"], R.build_to_clipboard_text(
+            {"side": "KILLER", "char": char, "power_or_item": "x", "addons": [],
+             "perks": [], "skin": got}))
+
+    def test_ru_name_table_is_consistent(self):
+        """Таблица RU-имён ссылается только на реально существующие файлы наборов."""
+        import dbd_skins as SK
+        sys.path.insert(0, os.path.join(HERE, "tools"))
+        try:
+            import skin_names_ru as RU
+        except ImportError:
+            self.skipTest("нет tools/skin_names_ru.py")
+        known = {str(i.get("file", "")).strip().lower() for i in SK.SKINS_BY_ID.values() if i.get("file")}
+        matched = [k for k in RU.FILE_TO_RU if k in known]
+        self.assertTrue(matched)                       # таблица не «мимо» базы
+        for k, v in RU.FILE_TO_RU.items():
+            self.assertEqual(k, k.strip().lower())
+            self.assertTrue(v.strip())
+            self.assertLessEqual(len(v), 90)
 
     def test_old_skin_ownership_is_reset_on_schema_change(self):
         """Отметки владения v2.10.x (id 1..111) сбрасываются: числа означают другое."""
