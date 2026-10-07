@@ -316,30 +316,157 @@ class _Input:
             raise InputUnavailable(self.reason)
         return self.pyautogui.position()
 
-    def move(self, x, y, steps=6):
+    # -- наведение ------------------------------------------------------------
+    # Одиночный «телепорт» курсора (MOUSEEVENTF_ABSOLUTE) UI Unreal-игры нередко
+    # не считает наведением: виджет не получает события движения, слот не
+    # подсвечивается, и клик уходит «в никуда» (в игре выглядит так, будто
+    # курсор туда вообще не наводили). Поэтому наведение делается в три приёма:
+    #   1) плавный подвод несколькими шагами — игра видит реальное движение;
+    #   2) доводка по фактической позиции курсора (GetCursorPos) — pydirectinput
+    #      округляет абсолютные координаты и может не долететь 1–3 px до цели;
+    #   3) микро-сдвиг («покачивание») на месте — гарантированно свежее событие
+    #      движения ровно над слотом, после чего пауза на отрисовку hover.
+    def _force_pos(self, x, y):
+        """Жёстко ставит курсор в точку (минутя абсолютный ввод DirectInput)."""
+        try:
+            if os.name == "nt":
+                ctypes.windll.user32.SetCursorPos(int(x), int(y))
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _settle_on(self, x, y, tries=3, tol=2, delay=0.01):
+        """Доводит курсор до (x, y), сверяясь с его фактическим положением."""
+        pdi = self.pydirectinput
+        for _ in range(max(1, tries)):
+            try:
+                cx, cy = self.position()
+            except Exception:
+                return False
+            if abs(cx - x) <= tol and abs(cy - y) <= tol:
+                return True
+            if hasattr(pdi, "moveTo"):
+                pdi.moveTo(int(x), int(y))
+            if not self._force_pos(x, y):
+                continue
+            time.sleep(delay)
+        try:
+            cx, cy = self.position()
+            return abs(cx - x) <= tol and abs(cy - y) <= tol
+        except Exception:
+            return False
+
+    def move(self, x, y, steps=6, step_delay=0.006, wiggle=2, settle=0.12,
+             verify=True):
+        """Наводит курсор на (x, y) так, чтобы игра это наведение увидела.
+
+        Возвращает True, если курсор встал в точку (или проверка недоступна).
+        """
         if not self.available:
             raise InputUnavailable(self.reason)
+        x, y = int(x), int(y)
         pdi = self.pydirectinput
-        if steps <= 1 or not hasattr(pdi, "moveTo"):
-            pdi.moveTo(int(x), int(y))
-            return
+        steps = max(1, int(steps))
+        step_delay = max(0.0, float(step_delay))
         try:
             cx, cy = self.position()
         except Exception:
             cx, cy = x, y
-        for i in range(1, steps + 1):
-            t = i / steps
-            pdi.moveTo(int(cx + (x - cx) * t), int(cy + (y - cy) * t))
-            time.sleep(0.004)
+        if steps <= 1 or not hasattr(pdi, "moveTo"):
+            if hasattr(pdi, "moveTo"):
+                pdi.moveTo(x, y)
+            time.sleep(step_delay)
+        else:
+            for i in range(1, steps + 1):
+                t = i / steps
+                pdi.moveTo(int(cx + (x - cx) * t), int(cy + (y - cy) * t))
+                time.sleep(step_delay)
+        landed = True
+        if verify:
+            landed = self._settle_on(x, y)
+        # микро-сдвиг: два коротких движения рядом с целью -> игра точно получит
+        # событие «курсор здесь» и подсветит слот до клика
+        wiggle = int(wiggle or 0)
+        if wiggle > 0 and hasattr(pdi, "moveTo"):
+            for dx, dy in ((wiggle, 0), (-wiggle, 0), (0, 0)):
+                pdi.moveTo(x + dx, y + dy)
+                time.sleep(max(step_delay, 0.008))
+            if verify:
+                landed = self._settle_on(x, y) and landed
+        if settle:
+            time.sleep(max(0.0, float(settle)))
+        return landed
 
-    def click(self, x, y, hold=0.06, steps=6):
+    def click(self, x, y, hold=0.06, steps=6, step_delay=0.006, wiggle=2,
+              settle=0.12, verify=True):
+        """Клик с честным наведением. Возвращает True, если курсор был в точке."""
         if not self.available:
             raise InputUnavailable(self.reason)
         pdi = self.pydirectinput
-        self.move(x, y, steps=steps)
+        landed = self.move(x, y, steps=steps, step_delay=step_delay, wiggle=wiggle,
+                           settle=settle, verify=verify)
         pdi.mouseDown()
         time.sleep(max(0.02, hold))
         pdi.mouseUp()
+        return landed
+
+    # -- фокус на окне игры ----------------------------------------------------
+    def find_game_window(self, title_part="Dead by Daylight"):
+        """HWND окна игры (ищем по вхождению в заголовок). None, если не найдено."""
+        if os.name != "nt":
+            return None
+        user32 = ctypes.windll.user32
+        user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
+        user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+        found = []
+        EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+        def _cb(hwnd, _lparam):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if not length:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            title = buf.value or ""
+            if title_part.lower() in title.lower():
+                found.append((hwnd, title))
+            return True
+
+        try:
+            user32.EnumWindows(EnumProc(_cb), 0)
+        except Exception:
+            return None
+        if not found:
+            return None
+        # если окон несколько — берём то, что ближе к переднему плану
+        return found[0]
+
+    def focus_game(self, title_part="Dead by Daylight"):
+        """Поднимает окно игры на передний план. Возвращает (ok, заголовок/причину)."""
+        if os.name != "nt":
+            return False, "не Windows"
+        hit = self.find_game_window(title_part)
+        if not hit:
+            return False, f"окно «{title_part}» не найдено"
+        hwnd, title = hit
+        user32 = ctypes.windll.user32
+        try:
+            if user32.IsIconic(hwnd):                     # свёрнуто — разворачиваем
+                user32.ShowWindow(hwnd, 9)                # SW_RESTORE
+                time.sleep(0.25)
+            user32.BringWindowToTop(hwnd)
+            # SetForegroundWindow капризничает, если фокус у нашего окна:
+            # «отпускаем» его через ALT-трюк.
+            user32.keybd_event(0x12, 0, 0, 0)            # ALT down
+            user32.SetForegroundWindow(hwnd)
+            user32.keybd_event(0x12, 0, 2, 0)            # ALT up
+            time.sleep(0.15)
+            return True, title
+        except Exception as exc:
+            return False, f"{title}: {exc}"
 
     def key(self, name, hold=0.02):
         if not self.available:
@@ -432,7 +559,10 @@ TIMING_DEFAULTS = {
     "between_steps":   (0.25, "Пауза между шагами, сек"),
     "retries":         (2,    "Повторов поиска при неудаче"),
     "countdown":       (5,    "Обратный отсчёт, сек"),
-    "move_steps":      (6,    "Шагов перемещения курсора (1 = мгновенно)"),
+    "move_steps":      (10,   "Шагов перемещения курсора (1 = мгновенно)"),
+    "move_step_delay": (0.008, "Пауза между шагами курсора, сек"),
+    "hover_settle":    (0.14, "Пауза на наведение: игра «видит» курсор над слотом, сек"),
+    "wiggle":          (2,    "Микро-сдвиг курсора над слотом, px (0 = выключить)"),
     "result_step":     (84,   "Шаг сетки выдачи, px (для result_index > 1)"),
 }
 
@@ -452,6 +582,9 @@ OPTION_DEFAULTS = {
     "class_enabled":   False,       # добавлять к билду случайный класс «2 против 8»
     "challenge_enabled": False,     # добавлять к билду случайный челендж
     "challenge_diff":  "any",       # any | easy | medium | hard — пул сложности
+    "focus_game":      True,        # поднимать окно игры на передний план перед стартом
+    "hover_verify":    True,        # сверять фактическую позицию курсора с целевой
+    "hover_retry":     True,        # повторно наводить, если курсор не долетел до слота
 }
 
 
@@ -2586,6 +2719,9 @@ class App:
         self._add_option(of, "use_clear_button", "Кликать «×» очистки перед поиском")
         self._add_option(of, "verify_clipboard", "Проверять буфер обмена перед вставкой")
         self._add_option(of, "restore_clipboard", "Восстанавливать буфер обмена после")
+        self._add_option(of, "focus_game", "Поднимать окно игры на передний план перед стартом")
+        self._add_option(of, "hover_verify", "Сверять, что курсор реально встал на слот")
+        self._add_option(of, "hover_retry", "Наводить заново, если курсор не долетел до слота")
         row = ttk.Frame(of)
         row.pack(fill="x", padx=6, pady=3)
         ttk.Label(row, text="Номер иконки в выдаче (1–9):").pack(side="left")
@@ -2603,6 +2739,7 @@ class App:
                           ("🩺 Проверить базу данных", self.run_data_check),
                           ("📝 Открыть dbd_database.json", self.open_db_file),
                           ("🔄 Пересоздать dbd_database.json", self.reset_db_file),
+                          ("🖱 Тест наведения на слот (без клика)", self.test_hover_slot),
                           ("🧪 Тестовый клик по «first_result»", self.test_click_result)):
             ttk.Button(sf, text=text, command=cmd).pack(fill="x", padx=6, pady=2)
 
@@ -2951,6 +3088,46 @@ class App:
         self.log(f"OCR-область: x={ent['x'].get()} y={ent['y'].get()} "
                  f"w={ent['w'].get()} h={ent['h'].get()}")
 
+    def test_hover_slot(self):
+        """Только наведение (без клика): курсор остаётся на слоте — видно,
+        подсветила ли игра его. Главный диагностический инструмент проблемы
+        «в игре будто не навёл курсор»."""
+        coord = None
+        for key in ("slot1", "item_slot", "addon1_slot", "first_result"):
+            coord = self.get_coord(key)
+            if coord:
+                break
+        if not coord:
+            messagebox.showwarning("Координаты", "Не задана ни одна координата слота.")
+            return
+        if self.dry_var.get():
+            self.log(f"[DRY] наведение на {coord} (без клика)")
+            return
+        if not INPUT.available:
+            messagebox.showerror("Автоматизация", INPUT.reason)
+            return
+        try:
+            landed = INPUT.move(coord[0], coord[1],
+                                steps=int(self.timing("move_steps")),
+                                step_delay=self.timing("move_step_delay"),
+                                wiggle=int(self.timing("wiggle")),
+                                settle=max(self.timing("hover_settle"), 0.3),
+                                verify=bool(self.option("hover_verify")))
+            try:
+                real = tuple(INPUT.position())
+            except Exception:
+                real = None
+            if landed:
+                self.log(f"🖱 Наведение на {coord}: курсор встал точно в цель"
+                         + (f" (фактически {real})" if real else "")
+                         + ". Слот в игре должен быть подсвечен.")
+            else:
+                self.log(f"⚠ Наведение на {coord}: курсор НЕ встал точно в цель"
+                         + (f" (фактически {real})" if real else "")
+                         + ". Проверьте масштаб Windows и разрешение игры.")
+        except Exception as exc:
+            messagebox.showerror("Ошибка", str(exc))
+
     def test_click_result(self):
         coord = self.get_coord("first_result")
         if not coord:
@@ -2963,8 +3140,22 @@ class App:
             messagebox.showerror("Автоматизация", INPUT.reason)
             return
         try:
-            INPUT.click(coord[0], coord[1], hold=self.timing("hold"))
-            self.log(f"Тестовый клик по {coord} выполнен.")
+            landed = INPUT.click(coord[0], coord[1], hold=self.timing("hold"),
+                                 steps=int(self.timing("move_steps")),
+                                 step_delay=self.timing("move_step_delay"),
+                                 wiggle=int(self.timing("wiggle")),
+                                 settle=self.timing("hover_settle"),
+                                 verify=bool(self.option("hover_verify")))
+            if landed:
+                self.log(f"Тестовый клик по {coord} выполнен: курсор встал точно в цель.")
+            else:
+                try:
+                    real = tuple(INPUT.position())
+                except Exception:
+                    real = None
+                self.log(f"⚠ Тестовый клик по {coord}: курсор НЕ встал точно в цель"
+                         + (f" (фактически {real})" if real else "")
+                         + ". Проверьте масштаб Windows/разрешение игры.")
         except Exception as exc:
             messagebox.showerror("Ошибка", str(exc))
 
@@ -3655,9 +3846,36 @@ class App:
             raise RuntimeError(f"не задана координата {label}")
         if self.dry_var.get():
             self.log(f"[DRY] клик {label or ''} -> {coord}")
-            return
-        INPUT.click(coord[0], coord[1], hold=self.timing("hold"),
-                    steps=int(self.timing("move_steps")))
+            return True
+        hold = self.timing("hold")
+        steps = int(self.timing("move_steps"))
+        step_delay = self.timing("move_step_delay")
+        settle = self.timing("hover_settle")
+        wiggle = int(self.timing("wiggle"))
+        verify = bool(self.option("hover_verify"))
+        landed = INPUT.click(coord[0], coord[1], hold=hold, steps=steps,
+                             step_delay=step_delay, wiggle=wiggle, settle=settle,
+                             verify=verify)
+        if landed:
+            return True
+        # курсор не долетел до слота — игра клик «не увидит». Пробуем ещё раз,
+        # на этот раз с жёсткой установкой позиции и более длинной паузой.
+        if not self.option("hover_retry"):
+            self.log(f"⚠ {label or 'клик'}: курсор не встал точно в {coord} — клик вслепую.")
+            return False
+        try:
+            real = INPUT.position()
+        except Exception:
+            real = None
+        self.log(f"⚠ {label or 'клик'}: курсор не долетел до {coord}"
+                 + (f" (фактически {tuple(real)})" if real else "") + " — навожу заново…")
+        landed = INPUT.click(coord[0], coord[1], hold=hold, steps=max(steps, 12),
+                             step_delay=max(step_delay, 0.012), wiggle=max(wiggle, 3),
+                             settle=max(settle, 0.25), verify=verify)
+        if not landed:
+            self.log(f"⚠ {label or 'клик'}: позиция курсора так и не совпала с {coord}. "
+                     f"Проверьте масштаб Windows и разрешение игры.")
+        return landed
 
     def _paste(self, text):
         if self.dry_var.get():
@@ -3792,6 +4010,14 @@ class App:
                 self.ui_q.put(("progress", (countdown - i) / max(1, total) * 100))
                 time.sleep(1)
 
+            if not self.dry_var.get() and self.option("focus_game"):
+                ok, info = INPUT.focus_game()
+                if ok:
+                    self.log(f"Окно игры на переднем плане: «{info}».")
+                else:
+                    self.log(f"⚠ Не смог поднять окно игры ({info}). Если фокус не на игре, "
+                             f"наведение и клики до неё не дойдут.")
+
             mode = "СУХОЙ ПРОГОН" if self.dry_var.get() else "АВТО"
             self.log(f"=== {mode}: {total - 1} шаг(ов) ===")
             for done, (key, name, label) in enumerate(steps, start=1):
@@ -3802,6 +4028,12 @@ class App:
                 self._click(self.get_coord(key), key)
                 self._sleep(self.timing("after_slot_click"))
                 ok = self.search_and_select(name)
+                if not ok:
+                    # слот мог не открыться (игра не увидела наведение) — пробуем ещё раз
+                    self.log(f"↻ «{name}»: не подтверждено. Навожу и кликаю слот «{key}» заново…")
+                    self._click(self.get_coord(key), key)
+                    self._sleep(self.timing("after_slot_click"))
+                    ok = self.search_and_select(name)
                 if not ok:
                     self.log(f"⚠ «{name}» — не подтверждено, продолжаю дальше.")
                 self.ui_q.put(("progress", done / max(1, total) * 100))

@@ -98,15 +98,30 @@ class FakeInput:
     def __init__(self):
         self.calls = []
         self.clip = ""
+        self.cursor = (0, 0)
+        self.focus_calls = 0
+        self.click_results = None          # очередь результатов landed для кликов
 
     def position(self):
-        return (0, 0)
+        return self.cursor
 
-    def move(self, x, y, steps=6):
-        self.calls.append(("move", x, y))
+    def move(self, x, y, steps=6, step_delay=0.006, wiggle=2, settle=0.12, verify=True):
+        self.calls.append(("move", x, y, steps, wiggle, settle))
+        self.cursor = (int(x), int(y))
+        return True
 
-    def click(self, x, y, hold=0.06, steps=6):
-        self.calls.append(("click", x, y))
+    def click(self, x, y, hold=0.06, steps=6, step_delay=0.006, wiggle=2, settle=0.12,
+              verify=True):
+        self.calls.append(("click", x, y, steps, wiggle, settle))
+        self.cursor = (int(x), int(y))
+        if self.click_results:
+            return self.click_results.pop(0)
+        return True
+
+    def focus_game(self, title_part="Dead by Daylight"):
+        self.focus_calls += 1
+        self.calls.append(("focus_game", title_part))
+        return True, title_part
 
     def key(self, name, hold=0.02):
         self.calls.append(("key", name))
@@ -1161,6 +1176,180 @@ class TestAutomation(unittest.TestCase):
         self.assertTrue(FAKE_MB.showerror.called)
         args = FAKE_MB.showerror.call_args[0]
         self.assertIn("search", args[1])
+
+
+class FakePDI:
+    """Замена pydirectinput: пишет все вызовы, позицию курсора задаём сами."""
+
+    def __init__(self, pos=(0, 0), drift=(0, 0)):
+        self.calls = []
+        self.pos = tuple(pos)
+        self.drift = tuple(drift)        # куда «промахивается» абсолютный ход
+        self.down = False
+
+    def moveTo(self, x, y):
+        self.calls.append(("moveTo", int(x), int(y)))
+        self.pos = (int(x) + self.drift[0], int(y) + self.drift[1])
+
+    def mouseDown(self):
+        self.calls.append(("down",))
+        self.down = True
+
+    def mouseUp(self):
+        self.calls.append(("up",))
+        self.down = False
+
+
+class FakeAG:
+    def __init__(self, pdi):
+        self.pdi = pdi
+
+    def position(self):
+        return self.pdi.pos
+
+
+def make_input(pdi):
+    inp = R._Input.__new__(R._Input)          # пропускаем __init__ (нужна Windows)
+    inp.pyautogui = FakeAG(pdi)
+    inp.pydirectinput = pdi
+    inp.available = True
+    inp.reason = ""
+    return inp
+
+
+class TestHover(unittest.TestCase):
+    """Игра должна «увидеть» наведение: доводка позиции, микро-сдвиг, пауза."""
+
+    def setUp(self):
+        self._sleep = R.time.sleep
+        self.slept = []
+        R.time.sleep = lambda s: self.slept.append(round(float(s), 4))
+
+    def tearDown(self):
+        R.time.sleep = self._sleep
+
+    def test_move_walks_in_steps_and_ends_on_target(self):
+        pdi = FakePDI(pos=(100, 100))
+        inp = make_input(pdi)
+        self.assertTrue(inp.move(400, 300, steps=5, step_delay=0.001, wiggle=0, settle=0))
+        self.assertEqual(pdi.pos, (400, 300))
+        moves = [c for c in pdi.calls if c[0] == "moveTo"]
+        self.assertEqual(len(moves), 5)              # плавный подвод, не телепорт
+        self.assertEqual(moves[-1][1:], (400, 300))
+
+    def test_wiggle_refreshes_hover_and_returns_to_target(self):
+        pdi = FakePDI(pos=(0, 0))
+        inp = make_input(pdi)
+        inp.move(500, 300, steps=2, step_delay=0.001, wiggle=3, settle=0)
+        pts = [c[1:] for c in pdi.calls if c[0] == "moveTo"]
+        self.assertIn((503, 300), pts)
+        self.assertIn((497, 300), pts)
+        self.assertEqual(pts[-1], (500, 300))        # клик всегда ровно по цели
+
+    def test_settle_pause_happens_before_click(self):
+        pdi = FakePDI(pos=(0, 0))
+        inp = make_input(pdi)
+        inp.click(200, 200, hold=0.05, steps=2, step_delay=0.001, wiggle=0, settle=0.3)
+        self.assertIn(0.3, self.slept)
+        kinds = [c[0] for c in pdi.calls]
+        self.assertLess(kinds.index("down"), len(kinds))
+        self.assertEqual(kinds[-2:], ["down", "up"])
+        # пауза на наведение — ДО нажатия кнопки
+        self.assertTrue(any(s == 0.3 for s in self.slept))
+
+    def test_position_drift_is_corrected(self):
+        pdi = FakePDI(pos=(0, 0), drift=(0, 4))      # абсолютный ход недолетает
+        inp = make_input(pdi)
+        inp._force_pos = lambda x, y: setattr(pdi, "pos", (int(x), int(y))) or True
+        self.assertTrue(inp.move(640, 480, steps=2, step_delay=0.001, wiggle=0, settle=0))
+        self.assertEqual(pdi.pos, (640, 480))
+
+    def test_uncorrectable_drift_returns_false(self):
+        pdi = FakePDI(pos=(0, 0), drift=(0, 9))
+        inp = make_input(pdi)
+        inp._force_pos = lambda x, y: False          # жёсткая установка недоступна
+        self.assertFalse(inp.move(640, 480, steps=2, step_delay=0.001, wiggle=0, settle=0))
+
+    def test_click_reports_drift_to_caller(self):
+        pdi = FakePDI(pos=(0, 0), drift=(0, 9))
+        inp = make_input(pdi)
+        inp._force_pos = lambda x, y: False
+        self.assertFalse(inp.click(10, 10, hold=0.02, steps=1, step_delay=0, wiggle=0,
+                                   settle=0))
+        self.assertIn("down", [c[0] for c in pdi.calls])   # клик всё равно выполнен
+
+
+class TestHoverInApp(unittest.TestCase):
+    def setUp(self):
+        self.app = make_app()
+        self.fake = FakeInput()
+        self._orig_input = R.INPUT
+        R.INPUT = self.fake
+        self.app.dry_var.set(False)
+        self.app._sleep = lambda s, abortable=True: None
+        self.app.timing = lambda key: {"retries": 1, "move_steps": 4, "wiggle": 2}.get(
+            key, 0.01 if key in ("hold", "move_step_delay", "hover_settle") else 0.0)
+        self.app.option = lambda key: {"hover_verify": True, "hover_retry": True,
+                                       "focus_game": True}.get(key, False)
+        self.app.get_coord = lambda key: (120, 400) if key == "slot1" else (10, 20)
+        self.logged = []
+        self.app.log = lambda msg: self.logged.append(str(msg))
+
+    def tearDown(self):
+        R.INPUT = self._orig_input
+
+    def test_click_passes_hover_settings(self):
+        self.assertTrue(self.app._click((120, 400), "slot1"))
+        click = [c for c in self.fake.calls if c[0] == "click"][0]
+        self.assertEqual(click[1:3], (120, 400))
+        self.assertEqual(click[3], 4)          # steps
+        self.assertEqual(click[4], 2)          # wiggle
+        self.assertAlmostEqual(click[5], 0.01)  # settle
+
+    def test_missed_hover_is_retried_once(self):
+        self.fake.click_results = [False, True]
+        self.assertTrue(self.app._click((120, 400), "slot1"))
+        clicks = [c for c in self.fake.calls if c[0] == "click"]
+        self.assertEqual(len(clicks), 2)
+        self.assertTrue(any("навожу заново" in m for m in self.logged))
+
+    def test_retry_makes_hover_stronger(self):
+        self.fake.click_results = [False, True]
+        self.app._click((120, 400), "slot1")
+        first, second = [c for c in self.fake.calls if c[0] == "click"]
+        self.assertGreater(second[3], first[3])       # больше шагов
+        self.assertGreater(second[4], first[4])       # заметнее микро-сдвиг
+        self.assertGreater(second[5], first[5])       # длиннее пауза на hover
+
+    def test_no_retry_when_option_off(self):
+        self.fake.click_results = [False]
+        self.app.option = lambda key: {"hover_verify": True, "hover_retry": False}.get(key, False)
+        self.assertFalse(self.app._click((120, 400), "slot1"))
+        self.assertEqual(len([c for c in self.fake.calls if c[0] == "click"]), 1)
+
+    def test_automation_focuses_game_window(self):
+        self.app.timing = lambda key: 0.0 if key != "retries" else 1
+        self.app.build = {"side": "KILLER", "char": "Охотник", "power_or_item": "Капкан",
+                          "power_is_item": False, "addons": [R.EMPTY, R.EMPTY],
+                          "perks": ["А", R.EMPTY, R.EMPTY, R.EMPTY]}
+        self.app.search_and_select = lambda name: True
+        self.app._run_automation(self.app._equip_steps())
+        self.assertEqual(self.fake.focus_calls, 1)
+
+    def test_no_focus_in_dry_run(self):
+        self.app.dry_var.set(True)
+        self.app.timing = lambda key: 0.0 if key != "retries" else 1
+        self.app.build = {"side": "KILLER", "char": "Охотник", "power_or_item": "Капкан",
+                          "power_is_item": False, "addons": [R.EMPTY, R.EMPTY],
+                          "perks": ["А", R.EMPTY, R.EMPTY, R.EMPTY]}
+        self.app._run_automation(self.app._equip_steps())
+        self.assertEqual(self.fake.focus_calls, 0)
+
+    def test_hover_settings_are_configurable(self):
+        for key in ("move_step_delay", "hover_settle", "wiggle"):
+            self.assertIn(key, R.TIMING_DEFAULTS)
+        for key in ("focus_game", "hover_verify", "hover_retry"):
+            self.assertIn(key, R.OPTION_DEFAULTS)
 
 
 # ===========================================================================
