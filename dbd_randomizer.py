@@ -806,6 +806,16 @@ NO_ADDONS = "🚫 аддон не подобран"
 EMPTY = "—"
 
 
+def _playable_addons(pool):
+    """Убирает аддоны, которых нет в текущем клиенте (DATA.REMOVED_FROM_GAME).
+
+    База держит их как историю, но выдавать их в билд/конструктор/автоэкипировку
+    нельзя: игра не найдёт ни предмет, ни иконку (кейс «Смолистое яблоко»).
+    """
+    removed = getattr(DATA, "REMOVED_FROM_GAME", frozenset())
+    return [a for a in pool if a not in removed]
+
+
 def _filter_owned(pool, owned, respect):
     """respect=False или пустой белый список -> считаем, что открыто всё.
 
@@ -997,7 +1007,8 @@ def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
     info = db["killers"][name]
 
     if addons_enabled:
-        addon_pool = _filter_owned(info.get("addons", []), owned.get("killer_addons"), respect_owned)
+        addon_pool = _filter_owned(_playable_addons(info.get("addons", [])),
+                                   owned.get("killer_addons"), respect_owned)
         addons = _pick(addon_pool, 2)
     else:
         addons = []
@@ -1031,7 +1042,8 @@ def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False,
     item = random.choice(item_pool) if item_pool else EMPTY
 
     if addons_enabled:
-        addon_pool = _filter_owned(entry.get("addons", []), owned.get("survivor_addons"), respect_owned)
+        addon_pool = _filter_owned(_playable_addons(entry.get("addons", [])),
+                                   owned.get("survivor_addons"), respect_owned)
         addons = _pick(addon_pool, 2)
         if not addons:
             addons = [NO_ADDONS if not entry.get("addons") else EMPTY]
@@ -2071,8 +2083,8 @@ class App:
     def _mk_addon_pool(self):
         side, char = self.mk_side_var.get(), self.mk_char.get()
         if side == "KILLER":
-            return list(self.db["killers"].get(char, {}).get("addons", []))
-        return list(self.db["survivor_items"].get(self.mk_cat.get(), {}).get("addons", []))
+            return _playable_addons(self.db["killers"].get(char, {}).get("addons", []))
+        return _playable_addons(self.db["survivor_items"].get(self.mk_cat.get(), {}).get("addons", []))
 
     def _mk_on_side(self):
         chars = self._mk_chars()

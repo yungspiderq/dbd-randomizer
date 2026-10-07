@@ -12,7 +12,8 @@
    tools/addon_names_ru_en.py (сверена с RU-вики и Steam-локализацией).
 3. Имя файла проверяется по списку реально загруженных на wiki.gg файлов (allimages):
    «IconAddon x.png» и «IconAddon_x.png» — разные файлы, берём существующий.
-4. Перезаписывает dbd_icons.py, сохраняя PERK_ICONS нетронутыми.
+4. Обновляет ТОЛЬКО блок ADDON_ICONS в dbd_icons.py (секции перков, портретов,
+   сил, предметов и классов остаются нетронутыми).
 
 Аддоны, полностью удалённые из игры, в таблицу wiki.gg не входят — у них иконки нет,
 они попадают в tools/addon_unresolved.json (в git не коммитится).
@@ -174,27 +175,23 @@ def main():
                   encoding="utf-8") as fh:
             json.dump(unresolved, fh, ensure_ascii=False, indent=1)
 
-    # ---- перезаписываем dbd_icons.py, сохраняя PERK_ICONS -------------------
-    import dbd_icons
-    perks = dict(dbd_icons.PERK_ICONS)
+    # ---- обновляем ТОЛЬКО блок ADDON_ICONS в dbd_icons.py ------------------
+    # Файл состоит из секций (PERK_ICONS, ADDON_ICONS, портреты, силы, предметы,
+    # классы), каждая живёт между маркерами/соседними блоками. Перезписывать файл
+    # целиком нельзя: сотрутся секции других генераторов (кейс v2.15.0).
     out = os.path.join(ROOT, "dbd_icons.py")
+    with open(out, encoding="utf-8") as fh:
+        src = fh.read()
+    start = src.index("ADDON_ICONS = {")
+    end = src.index("\n}\n", start) + len("\n}\n")
+    block = ["ADDON_ICONS = {\n"]
+    for ru in sorted(resolved):
+        block.append(f"    {ru!r}: {resolved[ru]!r},\n")
+    block.append("}\n")
+    src = src[:start] + "".join(block) + src[end:]
     with open(out, "w", encoding="utf-8") as fh:
-        fh.write('# -*- coding: utf-8 -*-\n')
-        fh.write('"""Сгенерировано tools/resolve_icons.py и tools/resolve_addon_icons.py —\n')
-        fh.write('НЕ править вручную.\n\n')
-        fh.write('Русское имя навыка/аддона -> имя файла иконки на deadbydaylight.wiki.gg.\n')
-        fh.write('Иконки НЕ лежат в репозитории: приложение качает их по мере надобности\n')
-        fh.write('и кэширует локально (см. IconStore в dbd_icons_store.py).\n"""\n\n')
-        fh.write('ICON_BASE = "https://deadbydaylight.wiki.gg/images/"\n\n')
-        fh.write("PERK_ICONS = {\n")
-        for ru in sorted(perks):
-            fh.write(f"    {ru!r}: {perks[ru]!r},\n")
-        fh.write("}\n\n")
-        fh.write("ADDON_ICONS = {\n")
-        for ru in sorted(resolved):
-            fh.write(f"    {ru!r}: {resolved[ru]!r},\n")
-        fh.write("}\n")
-    print(f"Записано: {out}  (PERK_ICONS {len(perks)}, ADDON_ICONS {len(resolved)})")
+        fh.write(src)
+    print(f"Записано: {out}  (ADDON_ICONS {len(resolved)}, остальные секции нетронуты)")
     return 0
 
 

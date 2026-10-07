@@ -283,14 +283,10 @@ class TestIcons(unittest.TestCase):
             self.assertNotIn(" ", fname, (name, fname))
 
     def test_every_addon_has_icon(self):
-        """Аддоны из базы обязаны иметь иконки; исключение — полностью удалённые
-        из игры (их нет даже в таблице wiki.gg)."""
-        removed = {
-            "Переливчатый кирпич", "Свеча зажигания", "Ржавая цепь", "Универсальная смазка",
-            "Маленькая отвертка", "Глубокая гравировка", "Белый шумовой генератор",
-            "Крепкая швейная игла", "Тяжелый ремень", "Ржавый щипцы", "Смолистое яблоко",
-            "Палитра", "Растворитель", "Кисть", "Живописная прихоть",
-        }
+        """Аддоны из базы обязаны иметь иконки; исключение — строки, которых нет
+        в текущем клиенте (DATA.REMOVED_FROM_GAME: удалённые/переименованные
+        аддоны, их нет даже в таблице wiki.gg)."""
+        removed = set(R.DATA.REMOVED_FROM_GAME)
         icons = getattr(R.ICONS, "ADDON_ICONS", {})
         names = []
         for info in self.db["killers"].values():
@@ -301,6 +297,61 @@ class TestIcons(unittest.TestCase):
         self.assertEqual(missing, [], f"нет иконок для аддонов: {missing}")
         coverage = len([n for n in set(names) if n in icons]) / max(1, len(set(names)))
         self.assertGreaterEqual(coverage, 0.95, f"покрытие иконками аддонов {coverage:.0%}")
+
+    def test_removed_addons_never_offered(self):
+        """Билды и пулы конструктора не содержат аддонов, которых нет в клиенте
+        (кейс «Смолистое яблоко»: имя есть в базе, но игра его не знает)."""
+        import random
+        removed = set(R.DATA.REMOVED_FROM_GAME)
+        # множество имён, которые реально могут попасть в билд
+        offered = set()
+        for info in self.db["killers"].values():
+            offered.update(R._playable_addons(info.get("addons", [])))
+        for entry in self.db["survivor_items"].values():
+            offered.update(R._playable_addons(entry.get("addons", [])))
+        self.assertFalse(removed & offered, f"удалённые из игры аддоны в пулах: {sorted(removed & offered)}")
+        # генерация билдов тоже не должна их возвращать
+        random.seed(20261007)
+        for _ in range(60):
+            b = R.make_killer_build(self.db, sorted(self.db["killers"]))
+            offered.update(b["addons"])
+            s = R.make_survivor_build(self.db, sorted(self.db["survivors"]))
+            offered.update(s["addons"])
+        self.assertFalse(removed & offered, f"удалённые аддоны в билдах: {sorted(removed & offered)}")
+
+    def test_removed_set_lives_in_db(self):
+        """REMOVED_FROM_GAME — только имена из базы (опечатка в сете = мёртвый фильтр)."""
+        names = set()
+        for info in self.db["killers"].values():
+            names.update(info.get("addons", []))
+        for entry in self.db["survivor_items"].values():
+            names.update(entry.get("addons", []))
+        stray = sorted(set(R.DATA.REMOVED_FROM_GAME) - names)
+        self.assertEqual(stray, [], f"REMOVED_FROM_GAME содержит имена вне базы: {stray}")
+
+    def test_no_phantom_addon_names(self):
+        """Каждое имя аддона в базе либо сверено таблицей RU->EN (значит, есть в игре),
+        либо явно объявлено удалённым из игры. Страховка от фантазий вроде
+        «Смолистое яблоко», которых не существует ни в клиенте, ни на вики."""
+        tools = os.path.join(os.path.dirname(os.path.abspath(R.__file__)), "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        from addon_names_ru_en import ADDON_RU_EN, ITEM_ADDON_RU_EN
+        known = set()
+        for table in (ADDON_RU_EN, ITEM_ADDON_RU_EN):
+            for key, val in table.items():
+                if isinstance(val, dict):
+                    known.update(val.keys())
+                else:
+                    known.add(key)
+        removed = set(R.DATA.REMOVED_FROM_GAME)
+        phantoms = []
+        for where, seq in (("killers", self.db["killers"]), ("items", self.db["survivor_items"])):
+            for name, entry in seq.items():
+                for a in entry.get("addons", []):
+                    if a not in known and a not in removed:
+                        phantoms.append(f"{where}:{name}:{a}")
+        self.assertEqual(phantoms, [], f"имена аддонов без RU->EN и не помечены удалёнными: {phantoms}")
 
     def test_addon_icons_are_wiki_png(self):
         icons = getattr(R.ICONS, "ADDON_ICONS", {})

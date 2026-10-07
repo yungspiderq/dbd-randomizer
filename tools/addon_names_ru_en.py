@@ -37,10 +37,19 @@ ADDON_RU_EN = {
         "Змей - сажа": '"The Serpent" - Soot', "Ищейка - сажа": '"The Hound" - Soot',
     },
     "Деревенщина": {
-        "Шипастые сапоги": "Spiked Boots", "Радужные гравюры": "Iridescent Engravings",
-        "Кукурузный самогон": "The Thompsons' Mix", "Низкой отдачей": "Low Kickback Chains",
-        "Самонастраивающийся карбюратор": "Tuned Carburettor", "Грязные цепи": "Begrimed Chains (Chainsaw)",
-        "Ботинки с железными мысками": "Steel Toe Boots",
+        # набор после переработки силы (патч 7.5.0); RU-имена — локализация Steam
+        "Калиброванный карбюратор": "Tuned Carburettor", "Радужные метки": "Iridescent Engravings",
+        "Грязные тапочки": "Filthy Slippers", "Облегченные цепи": "LoPro Chains",
+        "Превосходный глушитель": "Apex Muffler", "Сапоги с шипами": "Spiked Boots",
+        "Грязные цепи": "Begrimed Chains (Chainsaw)", "Движок с перебоями": "Ragged Engine",
+        "Папины ботинки": "Dad's Boots", "Смесь Томпсонов": "The Thompsons' Mix",
+        "Цепи с низкой отдачей": "Low Kickback Chains", "Винт натяжного колеса": "High-Speed Idler Screw",
+        "Забитый воздухозаборник": "Clogged Intake",
+        "Моторное масло неизвестной марки": "Off-Brand Motor Oil",
+        "Смазанный дроссель": "Greased Throttle", "Теплоизолирующий корпус": "Thermal Casing",
+        "Ботинки с железными мысками": "Steel Toe Boots", "Противовес": "Counterweight",
+        "Списанный фильтр": "Discarded Air Filter", "Треснувший сжимной насос": "Cracked Primer Bulb",
+        "Кукурузный самогон": "Thompson's Moonshine",
     },
     "Медсестра": {
         "Порванная закладка": "Torn Bookmark", "Спичечный коробок": "Matchbox",
@@ -100,6 +109,8 @@ ADDON_RU_EN = {
         "Ужасная цепь": "Grisly Chains", "Длинное реле для бензопилы": "Long Guide Bar",
         "Метки ножом": "Knife Scratches", "Самодельный глушитель": "Homemade Muffler",
         "Сжимной насос": "Primer Bulb", "Чили": "Chilli", "Напильник для бензопилы": "Chainsaw File",
+        "Свеча зажигания": "Spark Plug", "Ограничитель скорости": "Speed Limiter",
+        "Растительное масло": "Vegetable Oil",
     },
     "Кошмар": {
         "Красная кисть": "Red Paint Brush", "Черная коробка": "Black Box",
@@ -167,7 +178,9 @@ ADDON_RU_EN = {
         "Яблоко праха": "Ashen Apple", "Амулет предотвращения": "Prophylactic Amulet",
         "Гематитовая пломба": "Haematite Seal", "Освященное яблоко": "Blessed Apple",
         "Рвотное": "Emetic Potion", "Сильная микстура": "Potent Tincture",
-        "Пломба из песчаника": "Limestone Seal",
+        "Пломба из песчаника": "Limestone Seal", "Смолистое благовоние": "Olibanum Incense",
+        "Целебный бальзам": "Healing Salve",
+        "Фрагмент молитвенной скрижали": "Prayer Tablet Fragment",
     },
     "Гоуст Фейс": {
         "«Гоуст Фейс пойман на камеру»": '"Ghost Face Caught on Tape"',
