@@ -753,6 +753,7 @@ def db_defaults():
     """Глубокая копия встроенной базы: правки в рантайме не должны менять dbd_data.py."""
     return {
         "version": DATA.VERSION,
+        "db_revision": DATA.DB_REVISION,
         "killers": copy.deepcopy(DATA.KILLERS),
         "survivors": copy.deepcopy(DATA.SURVIVORS),
         "survivor_items": copy.deepcopy(DATA.SURVIVOR_ITEMS),
@@ -774,13 +775,28 @@ def load_db():
         try:
             with open(DB_FILE, "r", encoding="utf-8") as fh:
                 user = json.load(fh)
-            for section in ("killers", "survivors", "survivor_items",
-                            "surv_common_perks", "killer_common_perks"):
-                if user.get(section):
-                    db[section] = user[section]
-            if isinstance(user.get("owned"), dict):
-                db["owned"].update(user["owned"])
-            db["_loaded_from_file"] = True
+            if user.get("db_revision") != DATA.DB_REVISION:
+                # Локальная копия старше встроенной базы: имена в ней могут
+                # принадлежать игре позапрошлого патча («Самонастраивающийся
+                # карбюратор» после v2.15.0). Пересоздаём, пользовательские
+                # белые списки «только открытое у меня» сохраняем, прежняя
+                # редакция уходит в .bak — вдруг там были ручные правки.
+                try:
+                    shutil.copy2(DB_FILE, DB_FILE + ".bak")
+                except Exception:
+                    pass
+                if isinstance(user.get("owned"), dict):
+                    db["owned"].update(user["owned"])
+                db["_db_migrated"] = True
+                dump_db(db)
+            else:
+                for section in ("killers", "survivors", "survivor_items",
+                                "surv_common_perks", "killer_common_perks"):
+                    if user.get(section):
+                        db[section] = user[section]
+                if isinstance(user.get("owned"), dict):
+                    db["owned"].update(user["owned"])
+                db["_loaded_from_file"] = True
         except Exception:
             db["_load_error"] = True
     else:
@@ -788,6 +804,20 @@ def load_db():
             dump_db(db)
         except Exception:
             pass
+    # Второй контур: строки, удалённые из игры, не проникают в пулы даже из
+    # отредактированного вручную файла (автоэкипировка всё равно бы их не нашла).
+    removed = getattr(DATA, "REMOVED_FROM_GAME", frozenset())
+    dropped = 0
+    for info in db["killers"].values():
+        if isinstance(info, dict) and removed & set(info.get("addons", [])):
+            info["addons"] = [a for a in info["addons"] if a not in removed]
+            dropped += 1
+    for entry in db["survivor_items"].values():
+        if isinstance(entry, dict) and removed & set(entry.get("addons", [])):
+            entry["addons"] = [a for a in entry["addons"] if a not in removed]
+            dropped += 1
+    if dropped:
+        db["_db_dropped_removed"] = dropped
     return db
 
 
@@ -1384,6 +1414,13 @@ class App:
             self.log("Конфигурация перенесена из старого dbd_randomizer_config.txt в JSON.")
         if self.db.get("_load_error"):
             self.log("⚠ dbd_database.json повреждён — используются встроенные данные.")
+        if self.db.get("_db_migrated"):
+            self.log("⚠ Локальный dbd_database.json устарел (имена из старого патча) — "
+                     "пересоздан из встроенной базы; прежняя копия сохранена в "
+                     "dbd_database.json.bak.")
+        if self.db.get("_db_dropped_removed"):
+            self.log(f"⚠ Из локальной базы убрано аддонов, удалённых из игры: "
+                     f"{self.db['_db_dropped_removed']} списков.")
         if not INPUT.available:
             self.log(f"⚠ Автоматизация недоступна ({INPUT.reason}). Доступен «сухой прогон».")
         self.log(f"База: {len(self.db['killers'])} убийц, {len(self.db['survivors'])} выживших "

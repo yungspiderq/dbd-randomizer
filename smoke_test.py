@@ -246,6 +246,52 @@ class TestGeneration(unittest.TestCase):
         self.assertIn("Выживший", R.build_to_text(b))
         self.assertIn("Перки:", R.build_to_clipboard_text(b))
 
+    def test_stale_local_db_is_recreated(self):
+        """Локальный dbd_database.json старее ревизии встроенной базы не должен
+        держать приложение на устаревших именах (кейс «Самонастраивающийся
+        карбюратор» после обновления на v2.15.0): файл пересоздаётся, прежняя
+        редакция уходит в .bak, белые списки «только открытое у меня» живут."""
+        import dbd_data as D
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "dbd_database.json")
+            stale = {
+                "version": "old",
+                "killers": {"Деревенщина": {"power": "Бензопила",
+                                            "addons": ["Самонастраивающийся карбюратор"],
+                                            "perks": ["Стойкий", "Умелец", "Детище света"]}},
+                "owned": {"killer_addons": ["Свеча зажигания"]},
+            }
+            with open(target, "w", encoding="utf-8") as fh:
+                json.dump(stale, fh, ensure_ascii=False)
+            with mock.patch.object(R, "DB_FILE", target):
+                db = R.load_db()
+            self.assertTrue(db.get("_db_migrated"))
+            hills = db["killers"]["Деревенщина"]["addons"]
+            self.assertIn("Калиброванный карбюратор", hills)
+            self.assertNotIn("Самонастраивающийся карбюратор", hills)
+            self.assertEqual(hills, list(D.KILLERS["Деревенщина"]["addons"]))
+            self.assertTrue(os.path.exists(target + ".bak"), "старая редакция не сохранена в .bak")
+            self.assertEqual(db["owned"]["killer_addons"], ["Свеча зажигания"])
+            with open(target, encoding="utf-8") as fh:
+                self.assertEqual(json.load(fh)["db_revision"], D.DB_REVISION)
+
+    def test_removed_addons_stripped_from_local_db(self):
+        """Строки, удалённые из игры, вычищаются из загруженной базы даже при
+        совпадающей ревизии (ручная правка файла не вернёт фантомов в пулы)."""
+        import dbd_data as D
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "dbd_database.json")
+            fresh = R.db_defaults()
+            with mock.patch.object(R, "DB_FILE", target):
+                R.dump_db(fresh)
+                db = R.load_db()
+            self.assertNotIn("Палитра", db["killers"]["Художница"]["addons"])
+            self.assertNotIn("«Порядок» — заметки Картера", db["killers"]["Доктор"]["addons"])
+            self.assertTrue(db.get("_db_dropped_removed"))
+            for info in db["killers"].values():
+                offered = set(R._playable_addons(info.get("addons", [])))
+                self.assertFalse(set(D.REMOVED_FROM_GAME) & offered)
+
 
 class TestIcons(unittest.TestCase):
     """Карта иконок обязана покрывать все навыки из базы — иначе в UI будут дырки."""
