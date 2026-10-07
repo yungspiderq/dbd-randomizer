@@ -796,7 +796,9 @@ def pick_skin(char, owned_skins=None):
 CLASS_SIDES = (("SURVIVOR", "Выживший"), ("KILLER", "Убийца"))
 
 # Сложность челенджа: значение галки в настройках -> номер сложности в dbd_data.
-CHALLENGE_DIFFS = (("any", "любая"), ("easy", 1), ("medium", 2), ("hard", 3))
+# «any» обязан возвращаться как "any" — pick_challenge/reroll_challenge сравнивают
+# именно с этой строкой (иначе пул пустой: «нет вариантов для стороны и сложности»).
+CHALLENGE_DIFFS = (("any", "any"), ("easy", 1), ("medium", 2), ("hard", 3))
 
 
 def pick_challenge(side, diff="any"):
@@ -2762,7 +2764,6 @@ class App:
                 fg="#8d99a6")
         else:
             self.card_class.config(text="", fg="#56606c")
-        self.card_challenge.config(text="", fg="#56606c")
         skin = b.get("skin")
         if skin:
             shown = skin.get("display") or skin.get("name") or str(skin)

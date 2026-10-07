@@ -1740,6 +1740,55 @@ class TestChallenges(unittest.TestCase):
         self.assertIn(f"Условие: {ch['text']}", full)
         self.assertIn(f"🔥 {ch['ru']} (тяжёлый)", R.build_to_clipboard_text(app.build))
 
+    def test_any_difficulty_picks_from_full_pool(self):
+        """Регрессия: «любая» обязана маппиться в "any", а не в русскую подпись.
+
+        Раньше challenge_diff_value() возвращал «любая» — pick_challenge не
+        находил ни одного челенджа (diff сравнивался со строкой «любая»),
+        галочка не давала челендж, а «Другой челендж» писал «нет вариантов».
+        """
+        app = make_app()
+        app.mode_var = ST_VAR(app, "KILLER")
+        app.challenge_var.set(True)
+        app.challenge_diff_var.set("any")
+        app.db = self.db
+        app._char_widgets = {}
+        app.log = lambda msg: None
+        app.set_status = lambda *a, **kw: None
+        app._render_build = lambda: None
+        self.assertEqual(app.challenge_diff_value(), "any")
+        app.generate_build()
+        ch = app.build["challenge"]
+        self.assertIsNotNone(ch, "при галочке и «любая» челендж обязан выпасть")
+        self.assertIn(ch["side"], ("KILLER", "ANY"))
+        # «Другой челендж» на сложности «любая» тоже работает
+        seen = {ch["ru"]}
+        for _ in range(15):
+            app.reroll_challenge()
+            self.assertIsNotNone(app.build.get("challenge"))
+            seen.add(app.build["challenge"]["ru"])
+        self.assertGreater(len(seen), 1, "челендж не рандомизируется на «любая»")
+
+    def test_challenge_shown_on_build_card(self):
+        """Регрессия: челендж виден в карточке билда и не затирается при рендере."""
+        app = make_app()
+        app.mode_var = ST_VAR(app, "SURVIVOR")
+        app.challenge_var.set(True)
+        app.challenge_diff_var.set("any")
+        app.db = self.db
+        app._char_widgets = {}
+        app.log = lambda msg: None
+        app.set_status = lambda *a, **kw: None
+        app.generate_build()                 # настоящий _render_build на моках
+        ch = app.build["challenge"]
+        self.assertIsNotNone(ch)
+        texts = [c.kwargs.get("text", "") for c in app.card_challenge.config.call_args_list]
+        shown = texts[-1]                    # последнее состояние лейбла карточки
+        self.assertIn("🔥 Челендж", shown, "челендж пропал из карточки билда")
+        self.assertIn(ch["ru"], shown)
+        self.assertIn(ch["why"], shown)      # описание
+        self.assertIn(ch["text"], shown)     # условие
+
     def test_reroll_challenge_keeps_build(self):
         app = make_app()
         app.mode_var = ST_VAR(app, "KILLER")
