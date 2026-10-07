@@ -1650,5 +1650,163 @@ class TestClasses2v8(unittest.TestCase):
         self.assertFalse(cfg["options"]["class_enabled"])
 
 
+
+
+class TestChallenges(unittest.TestCase):
+    """Челенджи: данные, пулы по стороне/сложности, интеграция с билдом."""
+
+    def setUp(self):
+        self.db = R.db_defaults()
+
+    def test_challenge_data_sane(self):
+        data = R.DATA.CHALLENGES
+        self.assertGreaterEqual(len(data), 30)
+        names = [c["ru"] for c in data]
+        self.assertEqual(len(names), len(set(names)), "названия челенджей должны быть уникальны")
+        for c in data:
+            self.assertIn(c["diff"], (1, 2, 3), c)
+            self.assertIn(c["side"], ("SURVIVOR", "KILLER", "ANY"), c)
+            self.assertTrue(len(c["text"]) >= 20, c["ru"])
+            self.assertTrue(len(c.get("why", "")) >= 10, f"нет описания у {c['ru']}")
+            self.assertIn(c["diff"], R.DATA.CHALLENGE_DIFFS)
+        # баланс: каждый уровень сложности представлен у обеих сторон
+        for side in ("SURVIVOR", "KILLER"):
+            for diff in (1, 2, 3):
+                pool = [c for c in data if c["side"] in (side, "ANY") and c["diff"] == diff]
+                self.assertGreaterEqual(len(pool), 4, f"{side}/{diff}: слишком маленький пул")
+
+    def test_challenge_difficulties_are_balanced(self):
+        """Сложности расставлены по отзыву: «Без бега» тяжелее «Без палет».
+
+        Логика: лёгкий отнимает удобство, средний — одну привычку, тяжёлый —
+        основной способ выжить/убивать. Поэтому «Без бега» и «Тихий матч»
+        (выживший не может ни убежать, ни перелезть) — тяжёлые, «Без палет»,
+        «Без окон» и «Без шкафов» — средние, а «Без силы» у убийцы — тяжёлый
+        (сила и есть его игра), тогда как «Без добиваний» — лёгкий.
+        """
+        by_name = {c["ru"]: c for c in R.DATA.CHALLENGES}
+        expected = {
+            "Без бега": 3, "Тихий матч": 3, "Полный отказ от кросса": 3,
+            "Без перков": 3, "Все генераторы соло": 3,
+            "Без палет": 2, "Без окон": 2, "Без шкафов": 2,
+            "Без сундуков": 1, "Без тотемов": 1, "Без фонарика": 1,
+            "Без силы": 3, "Голая атака": 3, "Без добиваний": 1,
+            "Без крюков подвала": 1, "Только походка": 2,
+        }
+        for name, diff in expected.items():
+            self.assertIn(name, by_name, f"челендж «{name}» пропал из базы")
+            self.assertEqual(by_name[name]["diff"], diff,
+                             f"«{name}» должен быть сложности {diff}")
+        # «Без бега» строго тяжелее «Без палет» — тот самый кейс из отзыва
+        self.assertGreater(by_name["Без бега"]["diff"], by_name["Без палет"]["diff"])
+
+    def test_pick_challenge_respects_side_and_diff(self):
+        data = R.DATA.CHALLENGES
+        for side in ("SURVIVOR", "KILLER"):
+            for diff in ("any", 1, 2, 3):
+                allowed = {c["ru"] for c in data
+                           if c["side"] in (side, "ANY") and (diff == "any" or c["diff"] == diff)}
+                for _ in range(120):
+                    c = R.pick_challenge(side, diff)
+                    self.assertIn(c["ru"], allowed)
+                    if diff != "any":
+                        self.assertEqual(c["diff"], diff)
+        self.assertIsNone(R.pick_challenge("НЕТУ"))
+
+    def test_challenge_in_build_only_when_enabled(self):
+        app = make_app()
+        app.mode_var = ST_VAR(app, "SURVIVOR")
+        app.db = self.db
+        app._char_widgets = {}
+        app.log = lambda msg: None
+        app.set_status = lambda *a, **kw: None
+        app._render_build = lambda: None
+        self.assertFalse(app.challenge_var.get())          # по умолчанию выключено
+        app.generate_build()
+        self.assertIsNone(app.build.get("challenge"))
+        self.assertNotIn("Челендж", R.build_to_text(app.build))
+
+        app.challenge_var.set(True)
+        app.challenge_diff_var.set("hard")
+        app.generate_build()
+        ch = app.build["challenge"]
+        self.assertIsNotNone(ch)
+        self.assertEqual(ch["diff"], 3)
+        self.assertIn(ch["side"], ("SURVIVOR", "ANY"))
+        self.assertEqual(app.challenge_diff_value(), 3)
+        full = R.build_to_text(app.build)
+        self.assertIn(f"🔥 Челендж [тяжёлый]: {ch['ru']}", full)
+        self.assertIn(ch["why"], full)                     # описание челенджа
+        self.assertIn(f"Условие: {ch['text']}", full)
+        self.assertIn(f"🔥 {ch['ru']} (тяжёлый)", R.build_to_clipboard_text(app.build))
+
+    def test_reroll_challenge_keeps_build(self):
+        app = make_app()
+        app.mode_var = ST_VAR(app, "KILLER")
+        app.challenge_var.set(True)
+        app.challenge_diff_var.set("medium")
+        app.db = self.db
+        app._char_widgets = {}
+        app.log = lambda msg: None
+        app.set_status = lambda *a, **kw: None
+        app._render_build = lambda: None
+        app.generate_build()
+        before = dict(app.build)
+        seen = {app.build["challenge"]["ru"]}
+        for _ in range(25):
+            app.reroll_challenge()
+            ch = app.build["challenge"]
+            self.assertEqual(ch["diff"], 2)
+            self.assertIn(ch["side"], ("KILLER", "ANY"))
+            seen.add(ch["ru"])
+        self.assertGreater(len(seen), 1, "челендж не меняется при перегенерации")
+        self.assertEqual(app.build["perks"], before["perks"])
+        self.assertEqual(app.build["char"], before["char"])
+        self.assertEqual(app.build["addons"], before["addons"])
+
+    def test_reroll_challenge_without_build_is_safe(self):
+        app = make_app()
+        app.build = None
+        app.reroll_challenge()                              # предупреждение, не краш
+
+    def test_challenge_log_shows_description(self):
+        """В журнале — название, сложность, описание и условие целиком."""
+        app = make_app()
+        app.mode_var = ST_VAR(app, "KILLER")
+        app.challenge_var.set(True)
+        app.challenge_diff_var.set("easy")
+        app.db = self.db
+        app._char_widgets = {}
+        logged = []
+        app.log = lambda msg: logged.append(msg)
+        app.set_status = lambda *a, **kw: None
+        app._render_build = lambda: None
+        app.generate_build()
+        ch = app.build["challenge"]
+        text = "\n".join(logged)
+        self.assertIn(f"[{R.DATA.CHALLENGE_DIFFS[ch['diff']]}]: {ch['ru']}", text)
+        self.assertIn(ch["why"], text)
+        self.assertIn(f"Условие: {ch['text']}", text)
+        # карточка собирает название + описание + условие
+        parts = [f"🔥 Челендж [{R.DATA.CHALLENGE_DIFFS[ch['diff']]}]: {ch['ru']}",
+                 ch["why"], ch["text"]]
+        self.assertEqual(len(parts), 3)
+
+    def test_challenge_text_and_defaults(self):
+        self.assertEqual(R.challenge_text(None), "")
+        self.assertEqual(R.challenge_text({"ru": "Без палет", "diff": 2}), "Без палет (средний)")
+        self.assertEqual(R.challenge_text({"ru": "X", "diff": 99}), "X")
+        cfg = R.default_config()
+        self.assertIn("challenge_enabled", cfg["options"])
+        self.assertFalse(cfg["options"]["challenge_enabled"])
+        self.assertEqual(cfg["options"]["challenge_diff"], "any")
+        # «Без аддонов» — общий челендж: доступен обеим сторонам
+        any_c = [c for c in R.DATA.CHALLENGES if c["side"] == "ANY"]
+        self.assertTrue(any_c)
+        for side in ("SURVIVOR", "KILLER"):
+            pool = {c["ru"] for c in R.DATA.CHALLENGES if c["side"] in (side, "ANY")}
+            self.assertTrue({c["ru"] for c in any_c} <= pool)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

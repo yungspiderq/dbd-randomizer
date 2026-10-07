@@ -450,6 +450,8 @@ OPTION_DEFAULTS = {
     "addons_enabled":  True,
     "skin_enabled":    True,        # подбирать набор одежды к билду
     "class_enabled":   False,       # добавлять к билду случайный класс «2 против 8»
+    "challenge_enabled": False,     # добавлять к билду случайный челендж
+    "challenge_diff":  "any",       # any | easy | medium | hard — пул сложности
 }
 
 
@@ -793,6 +795,45 @@ def pick_skin(char, owned_skins=None):
 
 CLASS_SIDES = (("SURVIVOR", "Выживший"), ("KILLER", "Убийца"))
 
+# Сложность челенджа: значение галки в настройках -> номер сложности в dbd_data.
+CHALLENGE_DIFFS = (("any", "любая"), ("easy", 1), ("medium", 2), ("hard", 3))
+
+
+def pick_challenge(side, diff="any"):
+    """Случайный челендж для стороны и сложности (None, если пул пуст).
+
+    `side` — SURVIVOR/KILLER: берутся челенджи этой стороны и общие (ANY).
+    `diff` — "any" или 1/2/3 (лёгкий/средний/тяжёлый).
+    """
+    if side not in ("SURVIVOR", "KILLER"):
+        return None
+    pool = [c for c in (getattr(DATA, "CHALLENGES", []) or [])
+            if c.get("side") in (side, "ANY")
+            and (diff == "any" or c.get("diff") == diff)]
+    return random.choice(pool) if pool else None
+
+
+def challenge_text(c):
+    """Строка челенджа для карточки, текста билда и буфера обмена."""
+    if not c:
+        return ""
+    diff = (getattr(DATA, "CHALLENGE_DIFFS", {}) or {}).get(c.get("diff"), "")
+    name = c.get("ru", "?")
+    return f"{name} ({diff})" if diff else name
+
+
+def reroll_challenge(side, diff="any", avoid=None):
+    """Челендж, отличный от предыдущего (если в пуле больше одного)."""
+    if side not in ("SURVIVOR", "KILLER"):
+        return None
+    pool = [c for c in (getattr(DATA, "CHALLENGES", []) or [])
+            if c.get("side") in (side, "ANY")
+            and (diff == "any" or c.get("diff") == diff)
+            and (avoid is None or c.get("ru") != avoid)]
+    if not pool:
+        return pick_challenge(side, diff)
+    return random.choice(pool)
+
 
 def pick_class(side):
     """Случайный класс режима «2 против 8» для стороны (None, если данных нет)."""
@@ -897,6 +938,14 @@ def build_to_text(b):
     cls = b.get("class")
     if isinstance(cls, dict) and cls:
         lines.append(f"🎭 Класс (2 против 8): {cls.get('ru', '?')} ({cls.get('en', '')})")
+    ch = b.get("challenge")
+    if isinstance(ch, dict) and ch:
+        diff = (getattr(DATA, "CHALLENGE_DIFFS", {}) or {}).get(ch.get("diff"), "?")
+        lines.append(f"🔥 Челендж [{diff}]: {ch.get('ru', '?')}")
+        if ch.get("why"):
+            lines.append(f"   {ch['why']}")
+        if ch.get("text"):
+            lines.append(f"   Условие: {ch['text']}")
     elif isinstance(skin, str) and skin.strip():
         lines.append(f"👗 Внешность: {skin.strip()}")
     return "\n".join(lines)
@@ -912,7 +961,9 @@ def build_to_clipboard_text(b):
     perks = ", ".join(b["perks"])
     skin = (f" | 👗 {b['skin'].get('display') or b['skin']['name']}"
             if b.get("skin") else "")
-    return f"{head} | {item} | {addons} | Перки: {perks}{skin}"
+    ch = b.get("challenge")
+    challenge = f" | 🔥 {challenge_text(ch)}" if isinstance(ch, dict) and ch else ""
+    return f"{head} | {item} | {addons} | Перки: {perks}{skin}{challenge}"
 
 
 # ----------------------------------------------------------------------------
@@ -1462,6 +1513,27 @@ class App:
         self.skin_var = tk.BooleanVar(value=self.cfg["options"].get("skin_enabled", True))
         ttk.Checkbutton(opt, text="👗 Внешность: случайный набор у выпавшего персонажа",
                         variable=self.skin_var).pack(anchor="w", padx=8, pady=1)
+        # --- челенджи: самоограничение на матч (пул зависит от стороны и сложности) ---
+        self.challenge_var = tk.BooleanVar(
+            value=self.cfg["options"].get("challenge_enabled", False))
+        ttk.Checkbutton(opt, text="🔥 Челендж: случайное ограничение на матч",
+                        variable=self.challenge_var).pack(anchor="w", padx=8, pady=(4, 0))
+        diff_row = ttk.Frame(opt)
+        diff_row.pack(fill="x", padx=26, pady=(0, 2))
+        self.challenge_diff_var = tk.StringVar(
+            value=self.cfg["options"].get("challenge_diff", "any"))
+        for value, label in (("any", "любая"), ("easy", "🟢 лёгкий"),
+                             ("medium", "🟡 средний"), ("hard", "🔴 тяжёлый")):
+            ttk.Radiobutton(diff_row, text=label, value=value,
+                            variable=self.challenge_diff_var).pack(side="left", padx=(0, 8))
+        _ch = getattr(DATA, "CHALLENGES", []) or []
+        _by = {}
+        for _c in _ch:
+            _by[_c["diff"]] = _by.get(_c["diff"], 0) + 1
+        ttk.Label(opt, text="Челенджей: " + " · ".join(
+            f"{DATA.CHALLENGE_DIFF_SHORT.get(d, '')} {DATA.CHALLENGE_DIFFS.get(d, d)} {_by[d]}"
+            for d in sorted(_by)) + " (у выживших и убийц свои)",
+            foreground="#8d99a6", font=("Segoe UI", 8)).pack(anchor="w", padx=26, pady=(0, 2))
         self.owned_var = tk.BooleanVar(value=self.cfg["options"].get("respect_owned", False))
         ttk.Checkbutton(opt, text="Только открытое у меня (белые списки в JSON)",
                         variable=self.owned_var).pack(anchor="w", padx=8, pady=(1, 6))
@@ -1481,6 +1553,8 @@ class App:
         row2.columnconfigure(1, weight=1)
         ttk.Button(row2, text="📋 Копировать билд", command=self.copy_build).grid(row=0, column=0, sticky="ew", padx=(0, 3))
         ttk.Button(row2, text="🔁 Перегенерировать перки", command=self.reroll_perks).grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        ttk.Button(row2, text="🔥 Другой челендж", command=self.reroll_challenge).grid(
+            row=1, column=0, columnspan=2, sticky="ew", pady=(3, 0))
         self.btn_publish = ttk.Button(btns, text="🌍 ОПУБЛИКОВАТЬ БИЛД", command=self.publish_current_build)
         self.btn_publish.grid(row=3, column=0, sticky="ew", pady=2)
 
@@ -1563,6 +1637,11 @@ class App:
         row_skin.pack(fill="x", padx=16, pady=(6, 0))
         self.card_skin_img = tk.Label(row_skin, bg="#151a21", width=24, height=24)
         self.card_skin_img.pack(side="left", padx=(0, 8))
+        row_challenge = tk.Frame(self.card, **pad)
+        row_challenge.pack(fill="x", padx=16, pady=(6, 0))
+        self.card_challenge = tk.Label(row_challenge, anchor="w", fg="#e0a33e", bg="#151a21",
+                                       font=("Segoe UI", 9), justify="left", wraplength=430)
+        self.card_challenge.pack(side="left", fill="x", expand=True)
         row_class = tk.Frame(self.card, **pad)
         row_class.pack(fill="x", padx=16, pady=(6, 0))
         self.card_class = tk.Label(row_class, anchor="w", fg="#8d99a6", bg="#151a21",
@@ -2640,6 +2719,7 @@ class App:
         self.card_skin_img.config(image=self._icon_photo(None, 24), text="")
         self.card_skin.config(text="" if text else "—", fg="#56606c")
         self.card_class.config(text="", fg="#56606c")
+        self.card_challenge.config(text="", fg="#56606c")
         for img, lbl in self.card_addons:
             img.config(image=self._icon_photo(None, ICON_SIZE), text="")
             lbl.config(text=filler, fg="#56606c")
@@ -2664,6 +2744,17 @@ class App:
         self.card_author.config(text=head)
         self.card_stripe.config(bg=self._pal["killer"] if b["side"] == "KILLER"
                                 else self._pal["surv"])
+        ch = b.get("challenge")
+        if ch:
+            diff = (getattr(DATA, "CHALLENGE_DIFFS", {}) or {}).get(ch.get("diff"), "")
+            parts = [f"🔥 Челендж [{diff}]: {ch.get('ru', '?')}"]
+            if ch.get("why"):
+                parts.append(ch["why"])
+            if ch.get("text"):
+                parts.append(ch["text"])
+            self.card_challenge.config(text="\n".join(parts), fg="#e0a33e")
+        else:
+            self.card_challenge.config(text="", fg="#56606c")
         cls = b.get("class")
         if cls:
             self.card_class.config(
@@ -2671,6 +2762,7 @@ class App:
                 fg="#8d99a6")
         else:
             self.card_class.config(text="", fg="#56606c")
+        self.card_challenge.config(text="", fg="#56606c")
         skin = b.get("skin")
         if skin:
             shown = skin.get("display") or skin.get("name") or str(skin)
@@ -2806,6 +2898,8 @@ class App:
         self.cfg["options"]["addons_enabled"] = bool(self.addons_var.get())
         self.cfg["options"]["skin_enabled"] = bool(self.skin_var.get())
         self.cfg["options"]["class_enabled"] = bool(self.class_var.get())
+        self.cfg["options"]["challenge_enabled"] = bool(self.challenge_var.get())
+        self.cfg["options"]["challenge_diff"] = self.challenge_diff_var.get()
         self.cfg["options"]["respect_owned"] = bool(self.owned_var.get())
 
     def save_settings(self):
@@ -2903,6 +2997,14 @@ class App:
         except Exception as exc:
             messagebox.showerror("Генерация", f"Не удалось собрать билд:\n{exc}")
             return
+        # челендж: самоограничение на матч (свой пул у стороны и у сложности)
+        if self.challenge_var.get():
+            ch = pick_challenge(side, self.challenge_diff_value())
+            self.build["challenge"] = ch
+            if ch:
+                self.log(f"🔥 Челендж [{DATA.CHALLENGE_DIFFS[ch['diff']]}]: {ch['ru']}"
+                         + (f" — {ch['why']}" if ch.get("why") else "")
+                         + f"\n   Условие: {ch['text']}")
         # класс режима «2 против 8»: отдельная рулетка, но по желанию добавляется
         # к билду (в карточку, в текст и в журнал)
         if self.class_var.get():
@@ -2934,6 +3036,33 @@ class App:
             self.log(f"👗 Внешность: случайный набор «{_sk.get('display') or _sk.get('name')}» "
                      f"из {_n or '?'} у «{self.build['char']}»"
                      + (f" (редкость: {_info['rarity_ru']})" if _info.get("rarity_ru") else ""))
+
+    def challenge_diff_value(self):
+        """Выбранная сложность челенджа: 'any' или 1/2/3."""
+        raw = self.challenge_diff_var.get() if getattr(self, "challenge_diff_var", None) else "any"
+        for value, num in CHALLENGE_DIFFS:
+            if value == raw:
+                return num
+        return "any"
+
+    def reroll_challenge(self):
+        """Другой челендж той же стороны и сложности — билд и перки не трогаем."""
+        if not self.build:
+            messagebox.showwarning("Внимание", "Сначала сгенерируйте билд.")
+            return
+        side = self.build["side"]
+        diff = self.challenge_diff_value()
+        old = (self.build.get("challenge") or {}).get("ru")
+        ch = reroll_challenge(side, diff, avoid=old)
+        if not ch:
+            messagebox.showwarning("Челендж", "Для этой стороны и сложности больше нет вариантов.")
+            return
+        self.build["challenge"] = ch
+        self._render_build()
+        self.log(f"🔥 Челендж заменён [{DATA.CHALLENGE_DIFFS[ch['diff']]}]: {ch['ru']}"
+                 + (f" — {ch['why']}" if ch.get("why") else "")
+                 + f"\n   Условие: {ch['text']}")
+        self.set_status(f"Челендж: {ch['ru']} ({DATA.CHALLENGE_DIFFS[ch['diff']]}).", "#3fb950")
 
     def reroll_perks(self):
         if not self.build:
@@ -3793,6 +3922,14 @@ def selftest():
               f"(патч {getattr(SKINS, 'GAME_VERSION', '?')})")
     else:
         print("  внешность: модуль dbd_skins.py не найден")
+    ch = getattr(DATA, "CHALLENGES", []) or []
+    if ch:
+        by_diff = {}
+        for c in ch:
+            by_diff[c["diff"]] = by_diff.get(c["diff"], 0) + 1
+        print("  челенджи: " + ", ".join(
+            f"{DATA.CHALLENGE_DIFFS[d]} {n}" for d, n in sorted(by_diff.items()))
+            + f" (всего {len(ch)})")
     cls = getattr(DATA, "CLASSES_2V8", {}) or {}
     print(f"  классы «2 против 8»: выживших {len(cls.get('SURVIVOR', []))}, "
           f"убийц {len(cls.get('KILLER', []))}, навыков "
