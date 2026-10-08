@@ -564,6 +564,9 @@ TIMING_DEFAULTS = {
     "hover_settle":    (0.14, "Пауза на наведение: игра «видит» курсор над слотом, сек"),
     "wiggle":          (2,    "Микро-сдвиг курсора над слотом, px (0 = выключить)"),
     "result_step":     (84,   "Шаг сетки выдачи, px (для result_index > 1)"),
+    "slot_icon_settle":(0.4,  "Пауза перед снятием слота (дать игре отрисовать), сек"),
+    "slot_icon_crop":  (72,   "Сверка слотов: кадр захвата иконки, px"),
+    "slot_icon_dist":  (12,   "Сверка слотов: порог dhash-расстояния (0–64, меньше строже)"),
 }
 
 OPTION_DEFAULTS = {
@@ -585,6 +588,7 @@ OPTION_DEFAULTS = {
     "focus_game":      True,        # поднимать окно игры на передний план перед стартом
     "hover_verify":    True,        # сверять фактическую позицию курсора с целевой
     "hover_retry":     True,        # повторно наводить, если курсор не долетел до слота
+    "verify_slot_icons": True,      # после экипировки сверять слоты с иконками перков
 }
 
 
@@ -1361,6 +1365,22 @@ def ocr_read(x, y, w, h, lang="rus"):
         img = img.convert("L").point(lambda p: 0 if p < 140 else 255)
         txt = pytesseract.image_to_string(img, lang=lang)
         return " ".join(txt.split())
+    except Exception:
+        return None
+
+
+def grab_image(x, y, w, h):
+    """Снимок области экрана -> PIL Image или None (без PIL / без экрана).
+
+    Отдельная функция, чтобы тесты могли подменить её заглушкой, не трогая
+    настоящий захват рабочего стола.
+    """
+    try:
+        from PIL import ImageGrab
+    except Exception:
+        return None
+    try:
+        return ImageGrab.grab(bbox=(int(x), int(y), int(x) + int(w), int(y) + int(h)))
     except Exception:
         return None
 
@@ -2772,6 +2792,7 @@ class App:
         self._add_option(of, "focus_game", "Поднимать окно игры на передний план перед стартом")
         self._add_option(of, "hover_verify", "Сверять, что курсор реально встал на слот")
         self._add_option(of, "hover_retry", "Наводить заново, если курсор не долетел до слота")
+        self._add_option(of, "verify_slot_icons", "После экипировки сверять слоты с иконками навыков")
         row = ttk.Frame(of)
         row.pack(fill="x", padx=6, pady=3)
         ttk.Label(row, text="Номер иконки в выдаче (1–9):").pack(side="left")
@@ -4013,6 +4034,125 @@ class App:
         addons = (st.get("addons") or [])[:2] + [None] * 2
         return perks[:4], addons[:2]
 
+    # ----------------------------------------------- сверка слотов по иконкам --
+    @staticmethod
+    def _dhash(img, size=8):
+        """Перцептивный хеш (dHash, 64 бита): устойчив к масштабу и яркости,
+        зато резко отличается у разной картинки."""
+        g = img.convert("L").resize((size + 1, size))
+        px = list(g.getdata())
+        h = 0
+        for r in range(size):
+            row = r * (size + 1)
+            for c in range(size):
+                if px[row + c] < px[row + c + 1]:
+                    h |= 1 << (r * size + c)
+        return h
+
+    @staticmethod
+    def _hamming(a, b):
+        return bin(a ^ b).count("1")
+
+    def _perk_icon_hash(self, name, hashes):
+        """dHash кэшированной иконки навыка (None — иконки в кэше нет)."""
+        if name in hashes:
+            return hashes[name]
+        val = None
+        path = self.icon_store.local_path(name) if self.icon_store.enabled else None
+        if path and os.path.exists(path):
+            try:
+                from PIL import Image
+                with Image.open(path) as im:
+                    val = self._dhash(im)
+            except Exception:
+                val = None
+        hashes[name] = val
+        return val
+
+    def _slot_shows_perk(self, coord, perk, hashes, crop, thr):
+        """Снимает слот и сравнивает с иконкой навыка. Возвращает (ok, имя
+        лучшего кандидата): ok=None — снимок не удался, сверка пропущена."""
+        img = grab_image(coord[0] - crop / 2, coord[1] - crop / 2, crop, crop)
+        if img is None:
+            return None, None
+        got = self._dhash(img)
+        expected = hashes.get(perk)
+        best, best_d = None, 1 << 30
+        for name, h in hashes.items():
+            if h is None:
+                continue
+            d = self._hamming(got, h)
+            if d < best_d:
+                best, best_d = name, d
+        if expected is None:
+            return None, best
+        d_exp = self._hamming(got, expected)
+        if d_exp <= thr and d_exp <= best_d:
+            return True, perk
+        return False, (best if best_d <= thr else None)
+
+    def _verify_perk_slots(self):
+        """После экипировки: скриншот каждого слота навыка против иконки перка
+        из кэша. Не совпало (клик-переключатель сорвал перк, поиск промахнулся)
+        — надеваем заново и сверяем ещё раз."""
+        b = self.build or {}
+        results = []
+        crop = int(self.timing("slot_icon_crop"))
+        thr = int(self.timing("slot_icon_dist"))
+        hashes = {}
+        # пул кандидатов для опознания «что вообще надето» — все кэшированные
+        # перки: карта иконок + всё, что знает база, + перки текущего билда
+        names = set(ICONS.PERK_ICONS)
+        for info in self.db.get("killers", {}).values():
+            names.update(info.get("perks", []))
+        for seq in self.db.get("survivors", {}).values():
+            names.update(seq)
+        names.update(self.db.get("killer_common_perks", []))
+        names.update(self.db.get("surv_common_perks", []))
+        names.update(b.get("perks") or [])
+        for name in names:
+            if self.icon_store.is_cached(name):
+                self._perk_icon_hash(name, hashes)
+        for i, perk in enumerate(b.get("perks") or [], start=1):
+            if not perk or perk == EMPTY:
+                continue
+            coord = self.get_coord(f"slot{i}")
+            if coord is None:
+                continue
+            if self._perk_icon_hash(perk, hashes) is None:
+                self.log("· слот %d: иконка «%s» не в кэше — сверка пропущена." % (i, perk))
+                results.append((i, perk, None, None))
+                continue
+            self._sleep(self.timing("slot_icon_settle"))
+            ok, actual = self._slot_shows_perk(coord, perk, hashes, crop, thr)
+            if ok is None:
+                self.log("· слот %d: не удалось снять скриншот — сверка пропущена." % i)
+                results.append((i, perk, None, actual))
+                continue
+            if ok:
+                self.log("✓ слот %d: иконка совпадает с «%s»." % (i, perk))
+                results.append((i, perk, True, perk))
+                continue
+            who = ", там «%s»" % actual if actual else ""
+            self.log("⚠ слот %d: иконка не совпадает с «%s»%s — надеваю заново…" % (i, perk, who))
+            fixed = False
+            for _ in range(2):
+                self._click(coord, f"slot{i}")
+                self._sleep(self.timing("after_slot_click"))
+                self.search_and_select(perk)
+                self._sleep(self.timing("slot_icon_settle"))
+                ok, _a = self._slot_shows_perk(coord, perk, hashes, crop, thr)
+                if ok:
+                    fixed = True
+                    break
+            if fixed:
+                self.log("✓ слот %d: после повтора иконка на месте." % i)
+            else:
+                self.log("⚠ слот %d: и после повтора иконка не совпадает — проверьте вручную." % i)
+            results.append((i, perk, fixed, actual))
+        self.last_slot_check = results
+        return results
+
     def _persist_last_equipped(self, value):
         """Раскладка по слотам после экипировки (None = неизвестна). В тестах
         метод подменяется заглушкой, чтобы не трогать настоящий конфиг."""
@@ -4130,6 +4270,10 @@ class App:
                     self.log(f"⚠ «{name}» — не подтверждено, продолжаю дальше.")
                 self.ui_q.put(("progress", done / max(1, total) * 100))
                 self._sleep(self.timing("between_steps"))
+
+            if (not self.dry_var.get() and self.option("verify_slot_icons")
+                    and self.icon_store.enabled and INPUT.available):
+                self._verify_perk_slots()
 
             self.set_status("🎉 Готово: билд экипирован.", "#3fb950")
             self.log("=== Автоэкипировка завершена ===")

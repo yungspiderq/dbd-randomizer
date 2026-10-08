@@ -1284,6 +1284,107 @@ class TestAutomation(unittest.TestCase):
         self.assertEqual(self.app.cfg["last_equipped"]["KILLER"]["perks"],
                          ["П1", "П2", "П3", "П4"])
 
+    # --- сверка слотов по иконкам -------------------------------------------
+    @staticmethod
+    def _pattern(idx, size=64):
+        """Монотонный градиент: dHash от него устойчив к масштабу (все биты 1),
+        а инверсия даёт максимальное расстояние (все биты 0)."""
+        from PIL import Image
+        img = Image.new("L", (size, size))
+        for x in range(size):
+            v = int(255 * x / max(1, size - 1))
+            if idx % 2:
+                v = 255 - v
+            for y in range(size):
+                img.putpixel((x, y), v)
+        return img
+
+    def _stub_store(self, td, names):
+        paths = {}
+        for idx, name in enumerate(names):
+            path = os.path.join(td, f"icon{idx}.png")
+            self._pattern(idx).save(path)
+            paths[name] = path
+
+        class StubStore:
+            enabled = True
+
+            def is_cached(self, n):
+                return n in paths
+
+            def local_path(self, n):
+                return paths.get(n)
+        return StubStore()
+
+    def _verify_setup(self, store_names):
+        import tempfile
+        self._set_coords()
+        self.app.dry_var.set(False)
+        self.app.option = lambda key: {"result_index": 1, "use_clear_button": False,
+                                       "verify_clipboard": True, "ocr_verify": False,
+                                       "abort_key": "f9", "verify_slot_icons": True}.get(key, False)
+        self.app._sleep = lambda s, abortable=True: None
+        self.app.timing = lambda key: {"retries": 1, "slot_icon_crop": 72,
+                                       "slot_icon_dist": 12}.get(key, 0.0)
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        self.app.icon_store = self._stub_store(td.name, store_names)
+        # фейковые перки обязаны быть в базе: пул опознания «что надето»
+        # строится из имён базы (в игре других не бывает)
+        self.app.db["killers"]["Охотник"] = {"power": "Медвежий капкан", "addons": [],
+                                             "perks": ["П1", "П2", "П3", "П4"]}
+        self.app.build = {"side": "KILLER", "char": "Охотник", "power_or_item": "Медвежий капкан",
+                          "power_is_item": False, "addons": [],
+                          "perks": ["П1", R.EMPTY, R.EMPTY, R.EMPTY]}
+        return td
+
+    def test_dhash_scale_stable_and_distinct(self):
+        a, b = self._pattern(0), self._pattern(1)
+        self.assertLessEqual(R.App._hamming(R.App._dhash(a), R.App._dhash(a.resize((72, 72)))), 4)
+        self.assertGreater(R.App._hamming(R.App._dhash(a), R.App._dhash(b)), 24)
+
+    def test_slot_verify_reequips_on_mismatch(self):
+        self._verify_setup(["П1", "П2"])
+        good = self._pattern(0).resize((72, 72))
+        wrong = self._pattern(1).resize((72, 72))
+        shots = [wrong, good]           # сначала в слоте чужой перк, после повтора — наш
+        grabs = []
+
+        def fake_grab(x, y, w, h):
+            grabs.append((int(x), int(y), int(w), int(h)))
+            return shots.pop(0) if shots else good
+        with mock.patch.object(R, "grab_image", fake_grab):
+            self.app._run_automation(self.app._equip_steps())
+        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
+        self.assertEqual(pastes, ["П1", "П1"])        # экипировка + повтор после сверки
+        self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П2")])
+        self.assertEqual(len(grabs), 2)
+
+    def test_slot_verify_ok_no_reequip(self):
+        self._verify_setup(["П1", "П2"])
+        good = self._pattern(0).resize((72, 72))
+        with mock.patch.object(R, "grab_image", lambda x, y, w, h: good):
+            self.app._run_automation(self.app._equip_steps())
+        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
+        self.assertEqual(pastes, ["П1"])
+        self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П1")])
+
+    def test_slot_verify_disabled_skips_grab(self):
+        self._verify_setup(["П1", "П2"])
+        self.app.option = lambda key: {"result_index": 1, "use_clear_button": False,
+                                       "verify_clipboard": True, "ocr_verify": False,
+                                       "abort_key": "f9", "verify_slot_icons": False}.get(key, False)
+        grabs = []
+
+        def fake_grab(x, y, w, h):
+            grabs.append(1)
+            return self._pattern(1)
+        with mock.patch.object(R, "grab_image", fake_grab):
+            self.app._run_automation(self.app._equip_steps())
+        self.assertEqual(grabs, [])
+        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
+        self.assertEqual(pastes, ["П1"])
+
     def test_abort_forgets_last_equipped(self):
         self._set_coords()
         self.app.dry_var.set(False)
