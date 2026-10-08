@@ -155,6 +155,10 @@ def make_app():
     app.icon_store.enabled = False              # тесты не ходят в интернет за иконками
     # подменяем виджеты координат/таймингов на управляемые заглушки
     app.timing = lambda key: float(R.TIMING_DEFAULTS[key][0]) if key != "retries" else 2
+
+    def _stub_persist(value):                   # без записи настоящего конфига
+        app.cfg.setdefault("last_equipped", {})[app.build["side"]] = value
+    app._persist_last_equipped = _stub_persist
     return app
 
 
@@ -1207,6 +1211,89 @@ class TestAutomation(unittest.TestCase):
         steps = self.app._equip_steps()
         self.assertEqual(steps[0][0], "item_slot")
         self.assertNotIn("addon2_slot", [s[0] for s in steps])
+
+    # --- проверка повторов: клик по надетому перку в игре = снять ------------
+    def _killer_build(self, perks, addons=("Точильный камень", "Кофейная гуща")):
+        return {"side": "KILLER", "char": "Охотник", "power_or_item": "Медвежий капкан",
+                "power_is_item": False, "addons": list(addons), "perks": list(perks)}
+
+    def _track(self, perks, addons):
+        self.app.cfg["last_equipped"] = {"KILLER": {"perks": list(perks), "addons": list(addons)}}
+
+    def test_repeat_perk_is_removed_before_new_slot(self):
+        """Перк из прошлого билда выпал в ДРУГОЙ слот: сначала шаг «снять» со
+        старого слота, затем «надеть» в новый. Без этого клик по результату
+        поиска сработал бы как переключатель и сорвал перк."""
+        self._track(["П1", "П2", "П3", "П4"], ["Точильный камень", "Кофейная гуща"])
+        self.app.build = self._killer_build(["П2", "П1", "П3", "П4"])
+        steps = self.app._equip_steps()
+        self.assertEqual([s[0] for s in steps], ["slot2", "slot1", "slot2"])
+        self.assertEqual([s[2] for s in steps][:1], ["снять навык из слота 2"])
+        self.assertEqual([s[1] for s in steps], ["П2", "П2", "П1"])
+
+    def test_repeat_addon_swapped_slots(self):
+        self._track(["П1", "П2", "П3", "П4"], ["А2", "А1"])
+        self.app.build = self._killer_build(["П1", "П2", "П3", "П4"], addons=["А1", "А2"])
+        steps = self.app._equip_steps()
+        self.assertEqual([s[0] for s in steps][:3],
+                         ["addon2_slot", "addon1_slot", "addon2_slot"])
+        self.assertEqual(steps[0][2], "снять аддон из слота 2")
+
+    def test_perks_already_in_place_are_skipped(self):
+        """Что уже надето на своём месте — не перекликиваем вовсе."""
+        self._track(["П1", "П2", "П3", "П4"], [])
+        self.app.build = self._killer_build(["П1", "П2", "П3", "П4"])
+        steps = self.app._equip_steps()
+        self.assertEqual([s[0] for s in steps], ["addon1_slot", "addon2_slot"])
+
+    def test_unknown_state_builds_plain_plan(self):
+        """Состояние неизвестно (прерывание/ручные правки) — план как раньше."""
+        self.app.cfg["last_equipped"] = {"KILLER": None}
+        self.app.build = self._killer_build(["П1", "П2", "П3", "П4"])
+        steps = self.app._equip_steps()
+        self.assertEqual([s[0] for s in steps],
+                         ["addon1_slot", "addon2_slot", "slot1", "slot2", "slot3", "slot4"])
+
+    def test_last_equipped_persisted_after_run(self):
+        self._set_coords()
+        self.app.dry_var.set(False)
+        self.app.option = lambda key: {"result_index": 1, "use_clear_button": False,
+                                       "verify_clipboard": True, "ocr_verify": False,
+                                       "abort_key": "f9"}.get(key, False)
+        self.app._sleep = lambda s, abortable=True: None
+        self.app.timing = lambda key: 0.0 if key != "retries" else 1
+        self._track(["П1", "П2", "П3", "П4"], [])
+        self.app.build = self._killer_build(["П2", "П1", "П3", "П4"])
+        self.app._run_automation(self.app._equip_steps())
+        self.assertEqual(self.app.cfg["last_equipped"]["KILLER"]["perks"],
+                         ["П2", "П1", "П3", "П4"])
+        self.assertEqual(self.app.cfg["last_equipped"]["KILLER"]["addons"],
+                         ["Точильный камень", "Кофейная гуща"])
+
+    def test_dry_run_does_not_touch_last_equipped(self):
+        self._set_coords()
+        self.app.dry_var.set(True)
+        self.app.option = lambda key: {"result_index": 1, "use_clear_button": False,
+                                       "verify_clipboard": True, "ocr_verify": False,
+                                       "abort_key": "f9"}.get(key, False)
+        self.app._sleep = lambda s, abortable=True: None
+        self.app.timing = lambda key: 0.0 if key != "retries" else 1
+        self._track(["П1", "П2", "П3", "П4"], [])
+        self.app.build = self._killer_build(["П2", "П1", "П3", "П4"])
+        self.app._run_automation(self.app._equip_steps())
+        self.assertEqual(self.app.cfg["last_equipped"]["KILLER"]["perks"],
+                         ["П1", "П2", "П3", "П4"])
+
+    def test_abort_forgets_last_equipped(self):
+        self._set_coords()
+        self.app.dry_var.set(False)
+        self.app.option = lambda key: {"result_index": 1, "abort_key": "f9"}.get(key, False)
+        self.app.timing = lambda key: 0.0 if key != "retries" else 1
+        self._track(["П1", "П2", "П3", "П4"], [])
+        self.app.build = self._killer_build(["П2", "П1", "П3", "П4"])
+        self.app.abort.set()
+        self.app._run_automation(self.app._equip_steps())
+        self.assertIsNone(self.app.cfg["last_equipped"]["KILLER"])
 
     def test_run_automation_clicks_everything(self):
         self._set_coords()

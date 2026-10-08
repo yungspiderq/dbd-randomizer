@@ -644,6 +644,7 @@ def default_config():
     cfg["skins_schema"] = SKINS_SCHEMA     # ревизия id наборов (dbd_skins.py)
     cfg["publish"] = {"nickname": "", "gh_token": "", "backend": "github", "firebase_url": ""}
     cfg["update"] = {"auto": True, "allow_branch": False, "skip_tag": ""}
+    cfg["last_equipped"] = {}   # side -> {"perks": [...4 слота...], "addons": [...2 слота...]}
     return cfg
 
 
@@ -3997,6 +3998,27 @@ class App:
             return True
         return False
 
+    def _tracked_equipped(self, side):
+        """Что приложение само экипировало прошлым разом (перки и аддоны по слотам).
+
+        Игра не даёт прочитать свои слоты наружу, поэтому проверка «этот перк уже
+        надет» опирается на последнюю экипировку, выполненную приложением. None —
+        состояние неизвестно (прерывание, ручные переключения в игре): план
+        строится по-старому, без снятия и пропусков.
+        """
+        st = (self.cfg.get("last_equipped") or {}).get(side)
+        if not isinstance(st, dict):
+            return None, None
+        perks = (st.get("perks") or [])[:4] + [None] * 4
+        addons = (st.get("addons") or [])[:2] + [None] * 2
+        return perks[:4], addons[:2]
+
+    def _persist_last_equipped(self, value):
+        """Раскладка по слотам после экипировки (None = неизвестна). В тестах
+        метод подменяется заглушкой, чтобы не трогать настоящий конфиг."""
+        self.cfg.setdefault("last_equipped", {})[self.build["side"]] = value
+        save_config(self.cfg)
+
     def _equip_steps(self):
         b = self.build
         steps = []
@@ -4005,14 +4027,35 @@ class App:
         if b["side"] == "SURVIVOR" and b.get("power_is_item"):
             if b["power_or_item"] not in (EMPTY,):
                 steps.append(("item_slot", b["power_or_item"], "предмет"))
-        for i, addon in enumerate(b["addons"], start=1):
-            if addon in (EMPTY, NO_ADDONS):
-                continue
-            steps.append((f"addon{i}_slot", addon, f"аддон №{i}"))
-        for i, perk in enumerate(b["perks"], start=1):
-            if perk == EMPTY:
-                continue
-            steps.append((f"slot{i}", perk, f"навык {i}/4"))
+        prev_perks, prev_addons = self._tracked_equipped(b["side"])
+
+        def slot_of(state, name):
+            return state.index(name) + 1 if name in state else 0
+
+        def plan(names, slots, state, key_fmt, noun):
+            """Клик по результату поиска в игре — это ПЕРЕКЛЮЧЕНИЕ: если перк/аддон
+            уже надет в другом слоте, клик его снимет, а не перенесёт. Поэтому
+            сначала снимаем со старого слота, затем надеваем в новый; а если он
+            уже стоит в своём слоте — не трогаем вовсе."""
+            for i, name in enumerate(names, start=1):
+                if not name or name in (EMPTY, NO_ADDONS):
+                    continue
+                j = slot_of(state, name)
+                if j == i:
+                    self.log(f"= «{name}» уже надет в слоте {i} ({noun}) — не трогаю.")
+                    continue
+                if j:
+                    steps.append((key_fmt(j), name, f"снять {noun} из слота {j}"))
+                    state[j - 1] = None
+                steps.append((key_fmt(i), name, f"{noun} {i}/{slots}"))
+                state[i - 1] = name
+
+        state_addons = list(prev_addons) if prev_addons else [None, None]
+        plan(b["addons"], 2, state_addons, lambda i: f"addon{i}_slot", "аддон")
+        state_perks = list(prev_perks) if prev_perks else [None] * 4
+        plan(b["perks"], 4, state_perks, lambda i: f"slot{i}", "навык")
+        # чем закончится план — тем и считаем экипированным (если не прервут)
+        self._planned_equipped = {"perks": state_perks, "addons": state_addons}
         return steps
 
     def start_equip(self):
@@ -4090,9 +4133,17 @@ class App:
 
             self.set_status("🎉 Готово: билд экипирован.", "#3fb950")
             self.log("=== Автоэкипировка завершена ===")
+            # запоминаем раскладку по слотам: следующая экипировка сможет снимать
+            # повторы вместо того, чтобы случайно сорвать уже надетое кликом-переключением
+            if not self.dry_var.get():
+                self._persist_last_equipped(getattr(self, "_planned_equipped", None))
         except AbortError:
             self.set_status("⏹ Остановлено пользователем.", "#e3b341")
             self.log("Остановлено пользователем.")
+            # раскладка по слотам неизвестна (прервали на полпути) — проверку
+            # повторов до следующей успешной экипировки отключаем
+            if not self.dry_var.get():
+                self._persist_last_equipped(None)
         except InputUnavailable as exc:
             self.set_status(f"🔴 Ввод недоступен: {exc}", "#f85149")
             self.ui_q.put(("error", f"Автоматизация недоступна:\n{exc}"))
@@ -4100,6 +4151,8 @@ class App:
             self.set_status(f"🔴 Ошибка: {exc}", "#f85149")
             self.log(f"Ошибка: {exc!r}")
             self.ui_q.put(("error", str(exc)))
+            if not self.dry_var.get():
+                self._persist_last_equipped(None)
         finally:
             self.ui_q.put(("progress", 100))
             self.root.after(0, lambda: (self.btn_generate.config(state="normal"),
