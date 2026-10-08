@@ -4053,8 +4053,28 @@ class App:
     def _hamming(a, b):
         return bin(a ^ b).count("1")
 
+    @staticmethod
+    def _content_bbox(img, thr=45):
+        """Рамка светлого содержимого (иконки) на тёмном фоне слота."""
+        try:
+            mask = img.convert("L").point(lambda p: 255 if p > thr else 0)
+            return mask.getbbox()
+        except Exception:
+            return None
+
+    def _dhash_of(self, img):
+        """dHash по самой иконке: сначала вырезаем содержимое по рамке, чтобы
+        тёмный фон слота и масштаб иконки в кадре не влияли на хеш."""
+        bb = self._content_bbox(img)
+        if bb and (bb[2] - bb[0]) >= 8 and (bb[3] - bb[1]) >= 8:
+            img = img.crop(bb)
+        return self._dhash(img)
+
     def _perk_icon_hash(self, name, hashes):
-        """dHash кэшированной иконки навыка (None — иконки в кэше нет)."""
+        """dHash кэшированной иконки навыка (None — иконки в кэше нет).
+
+        Файлы с вики имеют прозрачные углы ромба, а в слоте игры там тёмный фон:
+        перед хешированием композитим иконку на такой же тёмный фон."""
         if name in hashes:
             return hashes[name]
         val = None
@@ -4063,7 +4083,12 @@ class App:
             try:
                 from PIL import Image
                 with Image.open(path) as im:
-                    val = self._dhash(im)
+                    if im.mode in ("RGBA", "LA", "P"):
+                        im = im.convert("RGBA")
+                        bg = Image.new("RGBA", im.size, (12, 12, 14, 255))
+                        bg.alpha_composite(im)
+                        im = bg
+                    val = self._dhash_of(im)
             except Exception:
                 val = None
         hashes[name] = val
@@ -4075,7 +4100,7 @@ class App:
         img = grab_image(coord[0] - crop / 2, coord[1] - crop / 2, crop, crop)
         if img is None:
             return None, None
-        got = self._dhash(img)
+        got = self._dhash_of(img)
         expected = hashes.get(perk)
         best, best_d = None, 1 << 30
         for name, h in hashes.items():
@@ -4113,6 +4138,14 @@ class App:
         for name in names:
             if self.icon_store.is_cached(name):
                 self._perk_icon_hash(name, hashes)
+        # уводим курсор с слота: ховер-подсветка и тултип с текстом поверх слота
+        # ломают любое сравнение картинки; заодно гасим тултип паузой
+        spot = self.get_coord("search") or (8, 8)
+        try:
+            INPUT.move(spot[0], spot[1], steps=4, wiggle=0, settle=0.05)
+        except Exception:
+            pass
+        self._sleep(self.timing("slot_icon_settle"))
         for i, perk in enumerate(b.get("perks") or [], start=1):
             if not perk or perk == EMPTY:
                 continue

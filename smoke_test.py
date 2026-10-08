@@ -1369,6 +1369,36 @@ class TestAutomation(unittest.TestCase):
         self.assertEqual(pastes, ["П1"])
         self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П1")])
 
+    def test_icon_hash_composites_alpha_and_crops_background(self):
+        """Файл иконки с вики: прозрачные углы ромба + рамка по контенту —
+        хеш считается по самой иконке, как в слоте игры."""
+        import tempfile
+        from PIL import Image
+        grad = self._pattern(0)
+        rgba = grad.convert("RGBA")
+        px = rgba.load()
+        for x in range(8):                      # прозрачная полоса, как углы ромба
+            for y in range(64):
+                px[x, y] = (0, 0, 0, 0)
+        with tempfile.TemporaryDirectory() as td:
+            store = self._stub_store(td, ["П1"])
+            path = store.local_path("П1")
+            rgba.save(path)
+            self.app.icon_store = store
+            h = self.app._perk_icon_hash("П1", {})
+        self.assertEqual(h, R.App._dhash(grad.crop((8, 0, 64, 64))))
+
+    def test_slot_verify_moves_cursor_off_slot(self):
+        """Перед снимком курсор уводится с слота (иначе ховер-тултип с текстом
+        поверх слота ломает сравнение)."""
+        self._verify_setup(["П1", "П2"])
+        good = self._pattern(0).resize((72, 72))
+        with mock.patch.object(R, "grab_image", lambda x, y, w, h: good):
+            self.app._run_automation(self.app._equip_steps())
+        moves = [c for c in self.fake.calls if c[0] == "move"]
+        self.assertTrue(any(c[1] == 10 and c[2] == 20 for c in moves),
+                        f"курсор не уведён к полю поиска: {moves[-3:]}")
+
     def test_slot_verify_disabled_skips_grab(self):
         self._verify_setup(["П1", "П2"])
         self.app.option = lambda key: {"result_index": 1, "use_clear_button": False,
