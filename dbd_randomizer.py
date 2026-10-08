@@ -4094,13 +4094,37 @@ class App:
         hashes[name] = val
         return val
 
+    def _grab_slot_icon(self, coord, crop):
+        """Снимает слот и ловит иконку целиком: если содержимое упирается в края
+        кадра (иконка в слоте крупнее, масштаб интерфейса неизвестен) — кадр
+        расширяется и снимок повторяется. Возвращает (img, bb, уперлось)."""
+        img, bb = None, None
+        for _ in range(4):
+            img = grab_image(coord[0] - crop / 2, coord[1] - crop / 2, crop, crop)
+            if img is None:
+                return None, None, False
+            bb = self._content_bbox(img)
+            if bb is None:
+                return img, None, False          # в кадре темно: слот пуст или не отрисован
+            w, h = img.size
+            touches = bb[0] <= 1 or bb[1] <= 1 or bb[2] >= w - 1 or bb[3] >= h - 1
+            if not touches:
+                return img, bb, False
+            if crop >= 384:
+                break
+            crop = int(crop * 1.5)
+        return img, bb, True
+
     def _slot_shows_perk(self, coord, perk, hashes, crop, thr):
-        """Снимает слот и сравнивает с иконкой навыка. Возвращает (ok, имя
-        лучшего кандидата): ok=None — снимок не удался, сверка пропущена."""
-        img = grab_image(coord[0] - crop / 2, coord[1] - crop / 2, crop, crop)
+        """Снимает слот и сравнивает с иконкой навыка по вырезанной иконке.
+        Возвращает (ok, имя лучшего кандидата): ok=None — сверка невозможна
+        (нет снимка / иконка не поймана целиком), угадывать в этом случае нельзя."""
+        img, bb, touches = self._grab_slot_icon(coord, crop)
         if img is None:
             return None, None
-        got = self._dhash_of(img)
+        if touches:
+            return None, "crop"
+        got = self._dhash(img.crop(bb))
         expected = hashes.get(perk)
         best, best_d = None, 1 << 30
         for name, h in hashes.items():
@@ -4116,10 +4140,35 @@ class App:
             return True, perk
         return False, (best if best_d <= thr else None)
 
+    def _dump_verify_debug(self, i, perk, coord, crop):
+        """Кладёт снимок слота и эталон рядом (verify_debug/) — прислать разработчику,
+        если сверка снова спорит."""
+        try:
+            d = os.path.join(APP_DIR, "verify_debug")
+            os.makedirs(d, exist_ok=True)
+            img, _bb, _t = self._grab_slot_icon(coord, crop)
+            if img is not None:
+                img.save(os.path.join(d, f"slot{i}_got.png"))
+            path = self.icon_store.local_path(perk) if self.icon_store.enabled else None
+            if path and os.path.exists(path):
+                from PIL import Image
+                with Image.open(path) as im:
+                    if im.mode in ("RGBA", "LA", "P"):
+                        im = im.convert("RGBA")
+                        bg = Image.new("RGBA", im.size, (12, 12, 14, 255))
+                        bg.alpha_composite(im)
+                        im = bg
+                    im.convert("RGB").save(os.path.join(d, f"slot{i}_expected.png"))
+            self.log(f"· отладочные снимки сверки: verify_debug/slot{i}_got.png и "
+                     f"slot{i}_expected.png рядом с программой")
+        except Exception:
+            pass
+
     def _verify_perk_slots(self):
         """После экипировки: скриншот каждого слота навыка против иконки перка
         из кэша. Не совпало (клик-переключатель сорвал перк, поиск промахнулся)
-        — надеваем заново и сверяем ещё раз."""
+        — надеваем заново и сверяем ещё раз. Любая неуверенность (нет снимка,
+        иконка не влезла в кадр) = пропуск, а не «не совпадает»."""
         b = self.build or {}
         results = []
         crop = int(self.timing("slot_icon_crop"))
@@ -4156,8 +4205,12 @@ class App:
                 self.log("· слот %d: иконка «%s» не в кэше — сверка пропущена." % (i, perk))
                 results.append((i, perk, None, None))
                 continue
-            self._sleep(self.timing("slot_icon_settle"))
             ok, actual = self._slot_shows_perk(coord, perk, hashes, crop, thr)
+            if ok is None and actual == "crop":
+                self.log("· слот %d: иконка не поместилась в кадр даже после расширения — "
+                         "сверка пропущена (увеличьте slot_icon_crop)." % i)
+                results.append((i, perk, None, None))
+                continue
             if ok is None:
                 self.log("· слот %d: не удалось снять скриншот — сверка пропущена." % i)
                 results.append((i, perk, None, actual))
@@ -4166,6 +4219,15 @@ class App:
                 self.log("✓ слот %d: иконка совпадает с «%s»." % (i, perk))
                 results.append((i, perk, True, perk))
                 continue
+            # не совпало: контрольный снимок — вдруг кадр транзиторный (игра
+            # ещё дорисовывает слот после клика)
+            self._sleep(self.timing("slot_icon_settle"))
+            ok2, actual2 = self._slot_shows_perk(coord, perk, hashes, crop, thr)
+            if ok2:
+                self.log("✓ слот %d: совпало со второго снимка — «%s» на месте." % (i, perk))
+                results.append((i, perk, True, perk))
+                continue
+            actual = actual2 or actual
             who = ", там «%s»" % actual if actual else ""
             self.log("⚠ слот %d: иконка не совпадает с «%s»%s — надеваю заново…" % (i, perk, who))
             fixed = False
@@ -4174,14 +4236,15 @@ class App:
                 self._sleep(self.timing("after_slot_click"))
                 self.search_and_select(perk)
                 self._sleep(self.timing("slot_icon_settle"))
-                ok, _a = self._slot_shows_perk(coord, perk, hashes, crop, thr)
-                if ok:
+                ok3, _a = self._slot_shows_perk(coord, perk, hashes, crop, thr)
+                if ok3:
                     fixed = True
                     break
             if fixed:
                 self.log("✓ слот %d: после повтора иконка на месте." % i)
             else:
                 self.log("⚠ слот %d: и после повтора иконка не совпадает — проверьте вручную." % i)
+                self._dump_verify_debug(i, perk, coord, crop)
             results.append((i, perk, fixed, actual))
         self.last_slot_check = results
         return results

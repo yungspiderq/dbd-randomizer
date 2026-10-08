@@ -1343,11 +1343,20 @@ class TestAutomation(unittest.TestCase):
         self.assertLessEqual(R.App._hamming(R.App._dhash(a), R.App._dhash(a.resize((72, 72)))), 4)
         self.assertGreater(R.App._hamming(R.App._dhash(a), R.App._dhash(b)), 24)
 
+    @staticmethod
+    def _slot_frame(idx, size=72, inner=48):
+        """Как слот в игре: иконка (градиент) с тёмным фоном вокруг, а не во весь кадр."""
+        from PIL import Image
+        frame = Image.new("L", (size, size), 12)
+        frame.paste(TestAutomation._pattern(idx).resize((inner, inner)),
+                    ((size - inner) // 2, (size - inner) // 2))
+        return frame
+
     def test_slot_verify_reequips_on_mismatch(self):
         self._verify_setup(["П1", "П2"])
-        good = self._pattern(0).resize((72, 72))
-        wrong = self._pattern(1).resize((72, 72))
-        shots = [wrong, good]           # сначала в слоте чужой перк, после повтора — наш
+        good = self._slot_frame(0)
+        wrong = self._slot_frame(1)
+        shots = [wrong, wrong, good]     # снимок, контрольный, после повтора
         grabs = []
 
         def fake_grab(x, y, w, h):
@@ -1358,16 +1367,62 @@ class TestAutomation(unittest.TestCase):
         pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
         self.assertEqual(pastes, ["П1", "П1"])        # экипировка + повтор после сверки
         self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П2")])
-        self.assertEqual(len(grabs), 2)
+        self.assertEqual(len(grabs), 3)
 
     def test_slot_verify_ok_no_reequip(self):
         self._verify_setup(["П1", "П2"])
-        good = self._pattern(0).resize((72, 72))
+        good = self._slot_frame(0)
         with mock.patch.object(R, "grab_image", lambda x, y, w, h: good):
             self.app._run_automation(self.app._equip_steps())
         pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
         self.assertEqual(pastes, ["П1"])
         self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П1")])
+
+    def test_transient_mismatch_confirmed_without_reequip(self):
+        """Один транзиторный кадр не запускает перенадевание: контрольный снимок решил, что всё в порядке."""
+        self._verify_setup(["П1", "П2"])
+        good = self._slot_frame(0)
+        wrong = self._slot_frame(1)
+        shots = [wrong, good]
+        with mock.patch.object(R, "grab_image", lambda x, y, w, h: shots.pop(0) if shots else good):
+            self.app._run_automation(self.app._equip_steps())
+        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
+        self.assertEqual(pastes, ["П1"])
+        self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П1")])
+
+    def test_icon_bigger_than_crop_expands_frame(self):
+        """Иконка крупнее кадра (масштаб UI): кадр расширяется, пока иконка не
+        будет поймана целиком, и только потом сравнивается."""
+        self._verify_setup(["П1", "П2"])
+        good = self._slot_frame(0)
+        fullbleed = self._pattern(0).resize((72, 72))     # иконка во весь кадр = уперлась в края
+        widths = []
+
+        def fake_grab(x, y, w, h):
+            widths.append(int(w))
+            return fullbleed if int(w) <= 72 else good
+        with mock.patch.object(R, "grab_image", fake_grab):
+            self.app._run_automation(self.app._equip_steps())
+        self.assertEqual(widths[:2], [72, 108])
+        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
+        self.assertEqual(pastes, ["П1"])
+        self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П1")])
+
+    def test_uncertain_crop_skips_verify(self):
+        """Иконку так и не удалось поймить целиком — сверка пропускается,
+        ложного «не совпадает» и перенадевания НЕТ."""
+        self._verify_setup(["П1", "П2"])
+        widths = []
+
+        def fake_grab(x, y, w, h):
+            widths.append(int(w))
+            return self._pattern(0).resize((int(w), int(h)))
+        with mock.patch.object(R, "grab_image", fake_grab):
+            self.app._run_automation(self.app._equip_steps())
+        self.assertEqual(widths, [72, 108, 162, 243])
+        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
+        self.assertEqual(pastes, ["П1"])
+        self.assertEqual(self.app.last_slot_check, [(1, "П1", None, None)])
 
     def test_icon_hash_composites_alpha_and_crops_background(self):
         """Файл иконки с вики: прозрачные углы ромба + рамка по контенту —
@@ -1392,7 +1447,7 @@ class TestAutomation(unittest.TestCase):
         """Перед снимком курсор уводится с слота (иначе ховер-тултип с текстом
         поверх слота ломает сравнение)."""
         self._verify_setup(["П1", "П2"])
-        good = self._pattern(0).resize((72, 72))
+        good = self._slot_frame(0)
         with mock.patch.object(R, "grab_image", lambda x, y, w, h: good):
             self.app._run_automation(self.app._equip_steps())
         moves = [c for c in self.fake.calls if c[0] == "move"]
