@@ -1459,6 +1459,12 @@ class App:
 
         self._setup_style()
         _set_dark_titlebar(root)
+        # «заморозка» тяжёлых канвасов на время драга границы окна: Tk иначе
+        # перерисовывает сотни элементов на каждый тик ресайза (кейс «fps 5»)
+        self._resize_heavy = []
+        self._resize_job = None
+        self._last_root_size = None
+        self.root.bind("<Configure>", self._on_root_configure)
         self._build_ui()
         self._poll_ui_queue()
         self._register_abort_hotkey()
@@ -1837,6 +1843,7 @@ class App:
                              highlightthickness=1)
         win = canvas.create_window((0, 0), window=self.card, anchor="nw")
         bind_scroll_width(canvas, self.card, win, pad=2)
+        self._resize_heavy.append(canvas)
         canvas.configure(yscrollcommand=sb.set)
         canvas.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=6)
         sb.grid(row=0, column=1, sticky="ns", pady=6)
@@ -2649,6 +2656,7 @@ class App:
         inner = ttk.Frame(canvas)
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
         bind_scroll_width(canvas, inner, win)
+        self._resize_heavy.append(canvas)
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
@@ -2870,6 +2878,7 @@ class App:
         inner = ttk.Frame(canvas)
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
         bind_scroll_width(canvas, inner, win)
+        self._resize_heavy.append(canvas)
         canvas.configure(yscrollcommand=sb.set)
         canvas.grid(row=0, column=0, sticky="nsew")
         sb.grid(row=0, column=1, sticky="ns")
@@ -3406,6 +3415,7 @@ class App:
         page_inner = tk.Frame(page, bg="#0e1116")
         win = page.create_window((0, 0), window=page_inner, anchor="nw")
         bind_scroll_width(page, page_inner, win)
+        self._resize_heavy.append(page)
         page.configure(yscrollcommand=psb.set)
         page.pack(side="left", fill="both", expand=True)
         psb.pack(side="right", fill="y")
@@ -4064,6 +4074,37 @@ class App:
         perks = (st.get("perks") or [])[:4] + [None] * 4
         addons = (st.get("addons") or [])[:2] + [None] * 2
         return perks[:4], addons[:2]
+
+    # ------------------------------------------------ заморозка на ресайз --
+    def _on_root_configure(self, e):
+        """Тик ресайза окна: прячем содержимое тяжёлых канвасов, чтобы Tk не
+        перерисовывал сотни элементов (иконок в том числе) на каждый пиксель
+        движения границы. Отпускаем через паузу после последнего тика."""
+        if e.widget is not self.root:
+            return
+        size = (e.width, e.height)
+        if size == self._last_root_size:
+            return
+        self._last_root_size = size
+        for c in self._resize_heavy:
+            try:
+                c.itemconfigure("all", state="hidden")
+            except Exception:
+                pass
+        if self._resize_job is not None:
+            try:
+                self.root.after_cancel(self._resize_job)
+            except Exception:
+                pass
+        self._resize_job = self.root.after(160, self._unfreeze_resize)
+
+    def _unfreeze_resize(self):
+        self._resize_job = None
+        for c in self._resize_heavy:
+            try:
+                c.itemconfigure("all", state="normal")
+            except Exception:
+                pass
 
     # ----------------------------------------------- сверка слотов по иконкам --
     @staticmethod

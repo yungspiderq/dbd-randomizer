@@ -2476,6 +2476,38 @@ class TestResizeDebounce(unittest.TestCase):
         self.assertEqual(len(c.jobs), before)
         self.assertEqual(c.widths, [898])
 
+    def test_root_resize_hides_heavy_until_settle(self):
+        """Тики ресайза окна прячут содержимое тяжёлых канвасов (Tk не
+        перерисовывает сотни элементов на пиксель драга), а после паузы
+        содержимое возвращается; повтор того же размера игнорируется."""
+        app = make_app()
+
+        class Heavy:
+            def __init__(self):
+                self.states = []
+
+            def itemconfigure(self, tag, state=None):
+                self.states.append(state)
+        h = Heavy()
+        app._resize_heavy = [h]
+        jobs = []
+        app.root.after = lambda ms, fn: (jobs.append(fn), 1)[1]
+        app.root.after_cancel = lambda job: None
+
+        def ev(w, hh=700):
+            e = mock.MagicMock()
+            e.widget = app.root
+            e.width, e.height = w, hh
+            return e
+        for w in (1000, 1010, 1020, 1030):
+            app._on_root_configure(ev(w))
+        self.assertEqual(h.states, ["hidden"] * 4, "каждый тик драга прячет контент")
+        self.assertTrue(jobs)
+        jobs[-1]()
+        self.assertEqual(h.states[-1], "normal", "после паузы контент виден")
+        app._on_root_configure(ev(1030))
+        self.assertEqual(len(h.states), 5, "тот же размер игнорируется")
+
     def test_inner_configure_updates_scrollregion(self):
         c, inner = self.FakeCanvas(), self.FakeInner()
         R.bind_scroll_width(c, inner, "win")
