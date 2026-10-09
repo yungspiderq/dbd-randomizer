@@ -563,9 +563,6 @@ TIMING_DEFAULTS = {
     "hover_settle":    (0.14, "Пауза на наведение: игра «видит» курсор над слотом, сек"),
     "wiggle":          (2,    "Микро-сдвиг курсора над слотом, px (0 = выключить)"),
     "result_step":     (84,   "Шаг сетки выдачи, px (для result_index > 1)"),
-    "slot_icon_settle":(0.4,  "Пауза перед снятием слота (дать игре отрисовать), сек"),
-    "slot_icon_crop":  (72,   "Сверка слотов: кадр захвата иконки, px"),
-    "slot_icon_dist":  (12,   "Сверка слотов: порог dhash-расстояния (0–64, меньше строже)"),
 }
 
 OPTION_DEFAULTS = {
@@ -587,7 +584,6 @@ OPTION_DEFAULTS = {
     "focus_game":      True,        # поднимать окно игры на передний план перед стартом
     "hover_verify":    True,        # сверять фактическую позицию курсора с целевой
     "hover_retry":     True,        # повторно наводить, если курсор не долетел до слота
-    "verify_slot_icons": True,      # после экипировки сверять слоты с иконками перков
 }
 
 
@@ -1368,30 +1364,13 @@ def ocr_read(x, y, w, h, lang="rus"):
         return None
 
 
-def grab_image(x, y, w, h):
-    """Снимок области экрана -> PIL Image или None (без PIL / без экрана).
-
-    Отдельная функция, чтобы тесты могли подменить её заглушкой, не трогая
-    настоящий захват рабочего стола.
-    """
-    try:
-        from PIL import ImageGrab
-    except Exception:
-        return None
-    try:
-        return ImageGrab.grab(bbox=(int(x), int(y), int(x) + int(w), int(y) + int(h)))
-    except Exception:
-        return None
-
-
 def bind_scroll_width(canvas, inner, win, pad=0, delay=120):
-    """Связка «скролл-область по содержимому + ширина вкладыша по канвасу».
+    """Связка «канвас <-> встроенный фрейм» для скролл-областей.
 
-    Канвас шлёт <Configure> на каждый пиксель движения границы окна; прямое
-    itemconfigure(width=...) на каждом тике перекладывает всё содержимое
-    (сотни виджетов, переносы текста, иконки) — окно жутко лагает при
-    расширении. Применяем ширину с дебаунсом: до содержимого доезжает только
-    последнее событие всплеска, а одинаковая ширина не доезжает вовсе.
+    Канвасовый <Configure> стреляет на каждый пиксель движения границы окна;
+    немедленное itemconfigure(width=...) заставляло бы всё содержимое (сотни
+    виджетов) перекладываться на каждом тике. Ширина применяется отложенно:
+    всплеск событий схлопывается в один вызов после паузы.
     """
     state = {"job": None, "width": None}
 
@@ -1461,8 +1440,8 @@ class App:
         _set_dark_titlebar(root)
         # «заморозка» тяжёлых канвасов на время драга границы окна: Tk иначе
         # перерисовывает сотни элементов на каждый тик ресайза (кейс «fps 5»)
-        self._resize_heavy = []
         self._resize_job = None
+        self._frozen_tab = None
         self._last_root_size = None
         self.root.bind("<Configure>", self._on_root_configure)
         self._build_ui()
@@ -1843,7 +1822,6 @@ class App:
                              highlightthickness=1)
         win = canvas.create_window((0, 0), window=self.card, anchor="nw")
         bind_scroll_width(canvas, self.card, win, pad=2)
-        self._resize_heavy.append(canvas)
         canvas.configure(yscrollcommand=sb.set)
         canvas.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=6)
         sb.grid(row=0, column=1, sticky="ns", pady=6)
@@ -2656,7 +2634,6 @@ class App:
         inner = ttk.Frame(canvas)
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
         bind_scroll_width(canvas, inner, win)
-        self._resize_heavy.append(canvas)
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
@@ -2833,7 +2810,6 @@ class App:
         self._add_option(of, "focus_game", "Поднимать окно игры на передний план перед стартом")
         self._add_option(of, "hover_verify", "Сверять, что курсор реально встал на слот")
         self._add_option(of, "hover_retry", "Наводить заново, если курсор не долетел до слота")
-        self._add_option(of, "verify_slot_icons", "После экипировки сверять слоты с иконками навыков")
         row = ttk.Frame(of)
         row.pack(fill="x", padx=6, pady=3)
         ttk.Label(row, text="Номер иконки в выдаче (1–9):").pack(side="left")
@@ -2878,7 +2854,6 @@ class App:
         inner = ttk.Frame(canvas)
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
         bind_scroll_width(canvas, inner, win)
-        self._resize_heavy.append(canvas)
         canvas.configure(yscrollcommand=sb.set)
         canvas.grid(row=0, column=0, sticky="nsew")
         sb.grid(row=0, column=1, sticky="ns")
@@ -3415,7 +3390,6 @@ class App:
         page_inner = tk.Frame(page, bg="#0e1116")
         win = page.create_window((0, 0), window=page_inner, anchor="nw")
         bind_scroll_width(page, page_inner, win)
-        self._resize_heavy.append(page)
         page.configure(yscrollcommand=psb.set)
         page.pack(side="left", fill="both", expand=True)
         psb.pack(side="right", fill="y")
@@ -4076,250 +4050,61 @@ class App:
         return perks[:4], addons[:2]
 
     # ------------------------------------------------ заморозка на ресайз --
+    def _tab_frames(self):
+        return {k: getattr(self, a, None) for k, a in
+                (("main", "tab_main"), ("maker", "tab_maker"), ("builds", "tab_builds"),
+                 ("chars", "tab_chars"), ("skins", "tab_skins"), ("coords", "tab_coords"))}
+
     def _on_root_configure(self, e):
-        """Тик ресайза окна: прячем содержимое тяжёлых канвасов, чтобы Tk не
-        перерисовывал сотни элементов (иконок в том числе) на каждый пиксель
-        движения границы. Отпускаем через паузу после последнего тика."""
+        """Тик ресайза окна: прячем ВСЮ активную вкладку. Tk иначе перекладывает
+        и перерисовывает её виджеты (сотни штук) на каждый пиксель движения
+        границы — отсюда «fps 5». Возвращаем вкладку через паузу после
+        последнего тика: одна перекладка вместо сотен."""
         if e.widget is not self.root:
             return
         size = (e.width, e.height)
         if size == self._last_root_size:
             return
         self._last_root_size = size
-        for c in self._resize_heavy:
-            try:
-                c.itemconfigure("all", state="hidden")
-            except Exception:
-                pass
+        if self._frozen_tab is None:
+            tab = self._tab_frames().get(getattr(self, "_page", "main"))
+            if tab is not None:
+                try:
+                    mgr = tab.winfo_manager()
+                    info = None
+                    if mgr == "grid":
+                        tab.grid_remove()
+                    elif mgr == "pack":
+                        info = {k: v for k, v in tab.pack_info().items() if k != "in"}
+                        tab.pack_forget()
+                    elif mgr == "place":
+                        info = {k: v for k, v in tab.place_info().items() if k != "in"}
+                        tab.place_forget()
+                    self._frozen_tab = (tab, mgr, info)
+                except Exception:
+                    self._frozen_tab = None
         if self._resize_job is not None:
             try:
                 self.root.after_cancel(self._resize_job)
             except Exception:
                 pass
-        self._resize_job = self.root.after(160, self._unfreeze_resize)
+        self._resize_job = self.root.after(180, self._unfreeze_resize)
 
     def _unfreeze_resize(self):
         self._resize_job = None
-        for c in self._resize_heavy:
-            try:
-                c.itemconfigure("all", state="normal")
-            except Exception:
-                pass
-
-    # ----------------------------------------------- сверка слотов по иконкам --
-    @staticmethod
-    def _dhash(img, size=8):
-        """Перцептивный хеш (dHash, 64 бита): устойчив к масштабу и яркости,
-        зато резко отличается у разной картинки."""
-        g = img.convert("L").resize((size + 1, size))
-        px = list(g.getdata())
-        h = 0
-        for r in range(size):
-            row = r * (size + 1)
-            for c in range(size):
-                if px[row + c] < px[row + c + 1]:
-                    h |= 1 << (r * size + c)
-        return h
-
-    @staticmethod
-    def _hamming(a, b):
-        return bin(a ^ b).count("1")
-
-    @staticmethod
-    def _content_bbox(img, thr=45):
-        """Рамка светлого содержимого (иконки) на тёмном фоне слота."""
+        if not self._frozen_tab:
+            return
+        tab, mgr, info = self._frozen_tab
+        self._frozen_tab = None
         try:
-            mask = img.convert("L").point(lambda p: 255 if p > thr else 0)
-            return mask.getbbox()
-        except Exception:
-            return None
-
-    def _dhash_of(self, img):
-        """dHash по самой иконке: сначала вырезаем содержимое по рамке, чтобы
-        тёмный фон слота и масштаб иконки в кадре не влияли на хеш."""
-        bb = self._content_bbox(img)
-        if bb and (bb[2] - bb[0]) >= 8 and (bb[3] - bb[1]) >= 8:
-            img = img.crop(bb)
-        return self._dhash(img)
-
-    def _perk_icon_hash(self, name, hashes):
-        """dHash кэшированной иконки навыка (None — иконки в кэше нет).
-
-        Файлы с вики имеют прозрачные углы ромба, а в слоте игры там тёмный фон:
-        перед хешированием композитим иконку на такой же тёмный фон."""
-        if name in hashes:
-            return hashes[name]
-        val = None
-        path = self.icon_store.local_path(name) if self.icon_store.enabled else None
-        if path and os.path.exists(path):
-            try:
-                from PIL import Image
-                with Image.open(path) as im:
-                    if im.mode in ("RGBA", "LA", "P"):
-                        im = im.convert("RGBA")
-                        bg = Image.new("RGBA", im.size, (12, 12, 14, 255))
-                        bg.alpha_composite(im)
-                        im = bg
-                    val = self._dhash_of(im)
-            except Exception:
-                val = None
-        hashes[name] = val
-        return val
-
-    def _grab_slot_icon(self, coord, crop):
-        """Снимает слот и ловит иконку целиком: если содержимое упирается в края
-        кадра (иконка в слоте крупнее, масштаб интерфейса неизвестен) — кадр
-        расширяется и снимок повторяется. Возвращает (img, bb, уперлось)."""
-        img, bb = None, None
-        for _ in range(4):
-            img = grab_image(coord[0] - crop / 2, coord[1] - crop / 2, crop, crop)
-            if img is None:
-                return None, None, False
-            bb = self._content_bbox(img)
-            if bb is None:
-                return img, None, False          # в кадре темно: слот пуст или не отрисован
-            w, h = img.size
-            touches = bb[0] <= 1 or bb[1] <= 1 or bb[2] >= w - 1 or bb[3] >= h - 1
-            if not touches:
-                return img, bb, False
-            if crop >= 384:
-                break
-            crop = int(crop * 1.5)
-        return img, bb, True
-
-    def _slot_shows_perk(self, coord, perk, hashes, crop, thr):
-        """Снимает слот и сравнивает с иконкой навыка по вырезанной иконке.
-        Возвращает (ok, имя лучшего кандидата): ok=None — сверка невозможна
-        (нет снимка / иконка не поймана целиком), угадывать в этом случае нельзя."""
-        img, bb, touches = self._grab_slot_icon(coord, crop)
-        if img is None:
-            return None, None
-        if touches:
-            return None, "crop"
-        got = self._dhash(img.crop(bb))
-        expected = hashes.get(perk)
-        best, best_d = None, 1 << 30
-        for name, h in hashes.items():
-            if h is None:
-                continue
-            d = self._hamming(got, h)
-            if d < best_d:
-                best, best_d = name, d
-        if expected is None:
-            return None, best
-        d_exp = self._hamming(got, expected)
-        if d_exp <= thr and d_exp <= best_d:
-            return True, perk
-        return False, (best if best_d <= thr else None)
-
-    def _dump_verify_debug(self, i, perk, coord, crop):
-        """Кладёт снимок слота и эталон рядом (verify_debug/) — прислать разработчику,
-        если сверка снова спорит."""
-        try:
-            d = os.path.join(APP_DIR, "verify_debug")
-            os.makedirs(d, exist_ok=True)
-            img, _bb, _t = self._grab_slot_icon(coord, crop)
-            if img is not None:
-                img.save(os.path.join(d, f"slot{i}_got.png"))
-            path = self.icon_store.local_path(perk) if self.icon_store.enabled else None
-            if path and os.path.exists(path):
-                from PIL import Image
-                with Image.open(path) as im:
-                    if im.mode in ("RGBA", "LA", "P"):
-                        im = im.convert("RGBA")
-                        bg = Image.new("RGBA", im.size, (12, 12, 14, 255))
-                        bg.alpha_composite(im)
-                        im = bg
-                    im.convert("RGB").save(os.path.join(d, f"slot{i}_expected.png"))
-            self.log(f"· отладочные снимки сверки: verify_debug/slot{i}_got.png и "
-                     f"slot{i}_expected.png рядом с программой")
+            if mgr == "grid":
+                tab.grid()
+            elif mgr == "pack":
+                tab.pack(**(info or {"fill": "both", "expand": True}))
+            elif mgr == "place":
+                tab.place(**(info or {}))
         except Exception:
             pass
-
-    def _verify_perk_slots(self):
-        """После экипировки: скриншот каждого слота навыка против иконки перка
-        из кэша. Не совпало (клик-переключатель сорвал перк, поиск промахнулся)
-        — надеваем заново и сверяем ещё раз. Любая неуверенность (нет снимка,
-        иконка не влезла в кадр) = пропуск, а не «не совпадает»."""
-        b = self.build or {}
-        results = []
-        crop = int(self.timing("slot_icon_crop"))
-        thr = int(self.timing("slot_icon_dist"))
-        hashes = {}
-        # пул кандидатов для опознания «что вообще надето» — все кэшированные
-        # перки: карта иконок + всё, что знает база, + перки текущего билда
-        names = set(ICONS.PERK_ICONS)
-        for info in self.db.get("killers", {}).values():
-            names.update(info.get("perks", []))
-        for seq in self.db.get("survivors", {}).values():
-            names.update(seq)
-        names.update(self.db.get("killer_common_perks", []))
-        names.update(self.db.get("surv_common_perks", []))
-        names.update(b.get("perks") or [])
-        for name in names:
-            if self.icon_store.is_cached(name):
-                self._perk_icon_hash(name, hashes)
-        # уводим курсор с слота: ховер-подсветка и тултип с текстом поверх слота
-        # ломают любое сравнение картинки; заодно гасим тултип паузой
-        spot = self.get_coord("search") or (8, 8)
-        try:
-            INPUT.move(spot[0], spot[1], steps=4, wiggle=0, settle=0.05)
-        except Exception:
-            pass
-        self._sleep(self.timing("slot_icon_settle"))
-        for i, perk in enumerate(b.get("perks") or [], start=1):
-            if not perk or perk == EMPTY:
-                continue
-            coord = self.get_coord(f"slot{i}")
-            if coord is None:
-                continue
-            if self._perk_icon_hash(perk, hashes) is None:
-                self.log("· слот %d: иконка «%s» не в кэше — сверка пропущена." % (i, perk))
-                results.append((i, perk, None, None))
-                continue
-            ok, actual = self._slot_shows_perk(coord, perk, hashes, crop, thr)
-            if ok is None and actual == "crop":
-                self.log("· слот %d: иконка не поместилась в кадр даже после расширения — "
-                         "сверка пропущена (увеличьте slot_icon_crop)." % i)
-                results.append((i, perk, None, None))
-                continue
-            if ok is None:
-                self.log("· слот %d: не удалось снять скриншот — сверка пропущена." % i)
-                results.append((i, perk, None, actual))
-                continue
-            if ok:
-                self.log("✓ слот %d: иконка совпадает с «%s»." % (i, perk))
-                results.append((i, perk, True, perk))
-                continue
-            # не совпало: контрольный снимок — вдруг кадр транзиторный (игра
-            # ещё дорисовывает слот после клика)
-            self._sleep(self.timing("slot_icon_settle"))
-            ok2, actual2 = self._slot_shows_perk(coord, perk, hashes, crop, thr)
-            if ok2:
-                self.log("✓ слот %d: совпало со второго снимка — «%s» на месте." % (i, perk))
-                results.append((i, perk, True, perk))
-                continue
-            actual = actual2 or actual
-            who = ", там «%s»" % actual if actual else ""
-            self.log("⚠ слот %d: иконка не совпадает с «%s»%s — надеваю заново…" % (i, perk, who))
-            fixed = False
-            for _ in range(2):
-                self._click(coord, f"slot{i}")
-                self._sleep(self.timing("after_slot_click"))
-                self.search_and_select(perk)
-                self._sleep(self.timing("slot_icon_settle"))
-                ok3, _a = self._slot_shows_perk(coord, perk, hashes, crop, thr)
-                if ok3:
-                    fixed = True
-                    break
-            if fixed:
-                self.log("✓ слот %d: после повтора иконка на месте." % i)
-            else:
-                self.log("⚠ слот %d: и после повтора иконка не совпадает — проверьте вручную." % i)
-                self._dump_verify_debug(i, perk, coord, crop)
-            results.append((i, perk, fixed, actual))
-        self.last_slot_check = results
-        return results
 
     def _persist_last_equipped(self, value):
         """Раскладка по слотам после экипировки (None = неизвестна). В тестах
@@ -4438,10 +4223,6 @@ class App:
                     self.log(f"⚠ «{name}» — не подтверждено, продолжаю дальше.")
                 self.ui_q.put(("progress", done / max(1, total) * 100))
                 self._sleep(self.timing("between_steps"))
-
-            if (not self.dry_var.get() and self.option("verify_slot_icons")
-                    and self.icon_store.enabled and INPUT.available):
-                self._verify_perk_slots()
 
             self.set_status("🎉 Готово: билд экипирован.", "#3fb950")
             self.log("=== Автоэкипировка завершена ===")

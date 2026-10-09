@@ -1284,192 +1284,6 @@ class TestAutomation(unittest.TestCase):
         self.assertEqual(self.app.cfg["last_equipped"]["KILLER"]["perks"],
                          ["П1", "П2", "П3", "П4"])
 
-    # --- сверка слотов по иконкам -------------------------------------------
-    @staticmethod
-    def _pattern(idx, size=64):
-        """Монотонный градиент: dHash от него устойчив к масштабу (все биты 1),
-        а инверсия даёт максимальное расстояние (все биты 0)."""
-        from PIL import Image
-        img = Image.new("L", (size, size))
-        for x in range(size):
-            v = int(255 * x / max(1, size - 1))
-            if idx % 2:
-                v = 255 - v
-            for y in range(size):
-                img.putpixel((x, y), v)
-        return img
-
-    def _stub_store(self, td, names):
-        paths = {}
-        for idx, name in enumerate(names):
-            path = os.path.join(td, f"icon{idx}.png")
-            self._pattern(idx).save(path)
-            paths[name] = path
-
-        class StubStore:
-            enabled = True
-
-            def is_cached(self, n):
-                return n in paths
-
-            def local_path(self, n):
-                return paths.get(n)
-        return StubStore()
-
-    def _verify_setup(self, store_names):
-        import tempfile
-        self._set_coords()
-        self.app.dry_var.set(False)
-        self.app.option = lambda key: {"result_index": 1, "use_clear_button": False,
-                                       "verify_clipboard": True, "ocr_verify": False,
-                                       "abort_key": "f9", "verify_slot_icons": True}.get(key, False)
-        self.app._sleep = lambda s, abortable=True: None
-        self.app.timing = lambda key: {"retries": 1, "slot_icon_crop": 72,
-                                       "slot_icon_dist": 12}.get(key, 0.0)
-        td = tempfile.TemporaryDirectory()
-        self.addCleanup(td.cleanup)
-        self.app.icon_store = self._stub_store(td.name, store_names)
-        # фейковые перки обязаны быть в базе: пул опознания «что надето»
-        # строится из имён базы (в игре других не бывает)
-        self.app.db["killers"]["Охотник"] = {"power": "Медвежий капкан", "addons": [],
-                                             "perks": ["П1", "П2", "П3", "П4"]}
-        self.app.build = {"side": "KILLER", "char": "Охотник", "power_or_item": "Медвежий капкан",
-                          "power_is_item": False, "addons": [],
-                          "perks": ["П1", R.EMPTY, R.EMPTY, R.EMPTY]}
-        return td
-
-    def test_dhash_scale_stable_and_distinct(self):
-        a, b = self._pattern(0), self._pattern(1)
-        self.assertLessEqual(R.App._hamming(R.App._dhash(a), R.App._dhash(a.resize((72, 72)))), 4)
-        self.assertGreater(R.App._hamming(R.App._dhash(a), R.App._dhash(b)), 24)
-
-    @staticmethod
-    def _slot_frame(idx, size=72, inner=48):
-        """Как слот в игре: иконка (градиент) с тёмным фоном вокруг, а не во весь кадр."""
-        from PIL import Image
-        frame = Image.new("L", (size, size), 12)
-        frame.paste(TestAutomation._pattern(idx).resize((inner, inner)),
-                    ((size - inner) // 2, (size - inner) // 2))
-        return frame
-
-    def test_slot_verify_reequips_on_mismatch(self):
-        self._verify_setup(["П1", "П2"])
-        good = self._slot_frame(0)
-        wrong = self._slot_frame(1)
-        shots = [wrong, wrong, good]     # снимок, контрольный, после повтора
-        grabs = []
-
-        def fake_grab(x, y, w, h):
-            grabs.append((int(x), int(y), int(w), int(h)))
-            return shots.pop(0) if shots else good
-        with mock.patch.object(R, "grab_image", fake_grab):
-            self.app._run_automation(self.app._equip_steps())
-        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
-        self.assertEqual(pastes, ["П1", "П1"])        # экипировка + повтор после сверки
-        self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П2")])
-        self.assertEqual(len(grabs), 3)
-
-    def test_slot_verify_ok_no_reequip(self):
-        self._verify_setup(["П1", "П2"])
-        good = self._slot_frame(0)
-        with mock.patch.object(R, "grab_image", lambda x, y, w, h: good):
-            self.app._run_automation(self.app._equip_steps())
-        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
-        self.assertEqual(pastes, ["П1"])
-        self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П1")])
-
-    def test_transient_mismatch_confirmed_without_reequip(self):
-        """Один транзиторный кадр не запускает перенадевание: контрольный снимок решил, что всё в порядке."""
-        self._verify_setup(["П1", "П2"])
-        good = self._slot_frame(0)
-        wrong = self._slot_frame(1)
-        shots = [wrong, good]
-        with mock.patch.object(R, "grab_image", lambda x, y, w, h: shots.pop(0) if shots else good):
-            self.app._run_automation(self.app._equip_steps())
-        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
-        self.assertEqual(pastes, ["П1"])
-        self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П1")])
-
-    def test_icon_bigger_than_crop_expands_frame(self):
-        """Иконка крупнее кадра (масштаб UI): кадр расширяется, пока иконка не
-        будет поймана целиком, и только потом сравнивается."""
-        self._verify_setup(["П1", "П2"])
-        good = self._slot_frame(0)
-        fullbleed = self._pattern(0).resize((72, 72))     # иконка во весь кадр = уперлась в края
-        widths = []
-
-        def fake_grab(x, y, w, h):
-            widths.append(int(w))
-            return fullbleed if int(w) <= 72 else good
-        with mock.patch.object(R, "grab_image", fake_grab):
-            self.app._run_automation(self.app._equip_steps())
-        self.assertEqual(widths[:2], [72, 108])
-        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
-        self.assertEqual(pastes, ["П1"])
-        self.assertEqual(self.app.last_slot_check, [(1, "П1", True, "П1")])
-
-    def test_uncertain_crop_skips_verify(self):
-        """Иконку так и не удалось поймить целиком — сверка пропускается,
-        ложного «не совпадает» и перенадевания НЕТ."""
-        self._verify_setup(["П1", "П2"])
-        widths = []
-
-        def fake_grab(x, y, w, h):
-            widths.append(int(w))
-            return self._pattern(0).resize((int(w), int(h)))
-        with mock.patch.object(R, "grab_image", fake_grab):
-            self.app._run_automation(self.app._equip_steps())
-        self.assertEqual(widths, [72, 108, 162, 243])
-        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
-        self.assertEqual(pastes, ["П1"])
-        self.assertEqual(self.app.last_slot_check, [(1, "П1", None, None)])
-
-    def test_icon_hash_composites_alpha_and_crops_background(self):
-        """Файл иконки с вики: прозрачные углы ромба + рамка по контенту —
-        хеш считается по самой иконке, как в слоте игры."""
-        import tempfile
-        from PIL import Image
-        grad = self._pattern(0)
-        rgba = grad.convert("RGBA")
-        px = rgba.load()
-        for x in range(8):                      # прозрачная полоса, как углы ромба
-            for y in range(64):
-                px[x, y] = (0, 0, 0, 0)
-        with tempfile.TemporaryDirectory() as td:
-            store = self._stub_store(td, ["П1"])
-            path = store.local_path("П1")
-            rgba.save(path)
-            self.app.icon_store = store
-            h = self.app._perk_icon_hash("П1", {})
-        self.assertEqual(h, R.App._dhash(grad.crop((8, 0, 64, 64))))
-
-    def test_slot_verify_moves_cursor_off_slot(self):
-        """Перед снимком курсор уводится с слота (иначе ховер-тултип с текстом
-        поверх слота ломает сравнение)."""
-        self._verify_setup(["П1", "П2"])
-        good = self._slot_frame(0)
-        with mock.patch.object(R, "grab_image", lambda x, y, w, h: good):
-            self.app._run_automation(self.app._equip_steps())
-        moves = [c for c in self.fake.calls if c[0] == "move"]
-        self.assertTrue(any(c[1] == 10 and c[2] == 20 for c in moves),
-                        f"курсор не уведён к полю поиска: {moves[-3:]}")
-
-    def test_slot_verify_disabled_skips_grab(self):
-        self._verify_setup(["П1", "П2"])
-        self.app.option = lambda key: {"result_index": 1, "use_clear_button": False,
-                                       "verify_clipboard": True, "ocr_verify": False,
-                                       "abort_key": "f9", "verify_slot_icons": False}.get(key, False)
-        grabs = []
-
-        def fake_grab(x, y, w, h):
-            grabs.append(1)
-            return self._pattern(1)
-        with mock.patch.object(R, "grab_image", fake_grab):
-            self.app._run_automation(self.app._equip_steps())
-        self.assertEqual(grabs, [])
-        pastes = [c[1] for c in self.fake.calls if c[0] == "paste"]
-        self.assertEqual(pastes, ["П1"])
-
     def test_abort_forgets_last_equipped(self):
         self._set_coords()
         self.app.dry_var.set(False)
@@ -2476,20 +2290,31 @@ class TestResizeDebounce(unittest.TestCase):
         self.assertEqual(len(c.jobs), before)
         self.assertEqual(c.widths, [898])
 
-    def test_root_resize_hides_heavy_until_settle(self):
-        """Тики ресайза окна прячут содержимое тяжёлых канвасов (Tk не
-        перерисовывает сотни элементов на пиксель драга), а после паузы
-        содержимое возвращается; повтор того же размера игнорируется."""
+    def test_root_resize_hides_active_tab_until_settle(self):
+        """Тики ресайза прячут ВСЮ активную вкладку один раз на всплеск (Tk не
+        перекладывает сотни её виджетов на пиксель драга); после паузы вкладка
+        возвращается; повтор того же размера игнорируется."""
         app = make_app()
 
-        class Heavy:
+        class Tab:
             def __init__(self):
-                self.states = []
+                self.hidden = 0
+                self.shown = 0
 
-            def itemconfigure(self, tag, state=None):
-                self.states.append(state)
-        h = Heavy()
-        app._resize_heavy = [h]
+            def winfo_manager(self):
+                return "pack"
+
+            def pack_info(self):
+                return {"fill": "both", "expand": 1, "in": "root"}
+
+            def pack_forget(self):
+                self.hidden += 1
+
+            def pack(self, **kw):
+                self.shown += 1
+        tab = Tab()
+        app.tab_main = tab
+        app._page = "main"
         jobs = []
         app.root.after = lambda ms, fn: (jobs.append(fn), 1)[1]
         app.root.after_cancel = lambda job: None
@@ -2501,12 +2326,12 @@ class TestResizeDebounce(unittest.TestCase):
             return e
         for w in (1000, 1010, 1020, 1030):
             app._on_root_configure(ev(w))
-        self.assertEqual(h.states, ["hidden"] * 4, "каждый тик драга прячет контент")
+        self.assertEqual(tab.hidden, 1, "вкладка прячется один раз на всплеск")
         self.assertTrue(jobs)
         jobs[-1]()
-        self.assertEqual(h.states[-1], "normal", "после паузы контент виден")
+        self.assertEqual(tab.shown, 1, "после паузы вкладка возвращается")
         app._on_root_configure(ev(1030))
-        self.assertEqual(len(h.states), 5, "тот же размер игнорируется")
+        self.assertEqual(tab.hidden, 1, "тот же размер игнорируется")
 
     def test_inner_configure_updates_scrollregion(self):
         c, inner = self.FakeCanvas(), self.FakeInner()
