@@ -2290,31 +2290,27 @@ class TestResizeDebounce(unittest.TestCase):
         self.assertEqual(len(c.jobs), before)
         self.assertEqual(c.widths, [898])
 
-    def test_root_resize_hides_active_tab_until_settle(self):
-        """Тики ресайза прячут ВСЮ активную вкладку один раз на всплеск (Tk не
-        перекладывает сотни её виджетов на пиксель драга); после паузы вкладка
-        возвращается; повтор того же размера игнорируется."""
+    def test_root_resize_hides_content_until_settle(self):
+        """Тики ресайза снимают с геометрии ВЕСЬ контейнер вкладок один раз на
+        всплеск (все шесть вкладок замэплены одновременно — прятать только
+        активную бесполезно и моргает); после паузы контейнер возвращается."""
         app = make_app()
 
-        class Tab:
+        class Content:
             def __init__(self):
                 self.hidden = 0
                 self.shown = 0
 
             def winfo_manager(self):
-                return "pack"
+                return "grid"
 
-            def pack_info(self):
-                return {"fill": "both", "expand": 1, "in": "root"}
-
-            def pack_forget(self):
+            def grid_remove(self):
                 self.hidden += 1
 
-            def pack(self, **kw):
+            def grid(self, **kw):
                 self.shown += 1
-        tab = Tab()
-        app.tab_main = tab
-        app._page = "main"
+        content = Content()
+        app.content = content
         jobs = []
         app.root.after = lambda ms, fn: (jobs.append(fn), 1)[1]
         app.root.after_cancel = lambda job: None
@@ -2326,12 +2322,12 @@ class TestResizeDebounce(unittest.TestCase):
             return e
         for w in (1000, 1010, 1020, 1030):
             app._on_root_configure(ev(w))
-        self.assertEqual(tab.hidden, 1, "вкладка прячется один раз на всплеск")
+        self.assertEqual(content.hidden, 1, "контейнер прячется один раз на всплеск")
         self.assertTrue(jobs)
         jobs[-1]()
-        self.assertEqual(tab.shown, 1, "после паузы вкладка возвращается")
+        self.assertEqual(content.shown, 1, "после паузы контейнер возвращается")
         app._on_root_configure(ev(1030))
-        self.assertEqual(tab.hidden, 1, "тот же размер игнорируется")
+        self.assertEqual(content.hidden, 1, "тот же размер игнорируется")
 
     def test_inner_configure_updates_scrollregion(self):
         c, inner = self.FakeCanvas(), self.FakeInner()

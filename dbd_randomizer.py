@@ -4050,39 +4050,36 @@ class App:
         return perks[:4], addons[:2]
 
     # ------------------------------------------------ заморозка на ресайз --
-    def _tab_frames(self):
-        return {k: getattr(self, a, None) for k, a in
-                (("main", "tab_main"), ("maker", "tab_maker"), ("builds", "tab_builds"),
-                 ("chars", "tab_chars"), ("skins", "tab_skins"), ("coords", "tab_coords"))}
-
     def _on_root_configure(self, e):
-        """Тик ресайза окна: прячем ВСЮ активную вкладку. Tk иначе перекладывает
-        и перерисовывает её виджеты (сотни штук) на каждый пиксель движения
-        границы — отсюда «fps 5». Возвращаем вкладку через паузу после
-        последнего тика: одна перекладка вместо сотен."""
+        """Тик ресайза окна: снимаем с геометрии ВЕСЬ контейнер вкладок.
+
+        Все шесть вкладок замэплены одновременно (переключение — tkraise),
+        поэтому Tk перекладывает их виджеты на каждый пиксель движения границы
+        окна: отсюда «fps 5». Скрытием одной активной вкладки дело не решить —
+        остальные продолжают перекладываться, а снятая открывает нижние
+        (моргание и «чужие вкладки»). Одна grid_remove всего контейнера
+        отмапливает всё поддерево: тику ресайза нечего перекладывать.
+        Возвращаем контейнер через паузу после последнего тика."""
         if e.widget is not self.root:
             return
         size = (e.width, e.height)
         if size == self._last_root_size:
             return
         self._last_root_size = size
-        if self._frozen_tab is None:
-            tab = self._tab_frames().get(getattr(self, "_page", "main"))
-            if tab is not None:
-                try:
-                    mgr = tab.winfo_manager()
-                    info = None
-                    if mgr == "grid":
-                        tab.grid_remove()
-                    elif mgr == "pack":
-                        info = {k: v for k, v in tab.pack_info().items() if k != "in"}
-                        tab.pack_forget()
-                    elif mgr == "place":
-                        info = {k: v for k, v in tab.place_info().items() if k != "in"}
-                        tab.place_forget()
-                    self._frozen_tab = (tab, mgr, info)
-                except Exception:
+        content = getattr(self, "content", None)
+        if self._frozen_tab is None and content is not None:
+            try:
+                if content.winfo_manager() == "grid":
+                    content.grid_remove()
+                    self._frozen_tab = ("grid", content)
+                elif content.winfo_manager() == "pack":
+                    info = {k: v for k, v in content.pack_info().items() if k != "in"}
+                    content.pack_forget()
+                    self._frozen_tab = ("pack", content, info)
+                else:
                     self._frozen_tab = None
+            except Exception:
+                self._frozen_tab = None
         if self._resize_job is not None:
             try:
                 self.root.after_cancel(self._resize_job)
@@ -4094,15 +4091,12 @@ class App:
         self._resize_job = None
         if not self._frozen_tab:
             return
-        tab, mgr, info = self._frozen_tab
-        self._frozen_tab = None
+        frozen, self._frozen_tab = self._frozen_tab, None
         try:
-            if mgr == "grid":
-                tab.grid()
-            elif mgr == "pack":
-                tab.pack(**(info or {"fill": "both", "expand": True}))
-            elif mgr == "place":
-                tab.place(**(info or {}))
+            if frozen[0] == "grid":
+                frozen[1].grid()          # grid_remove запомнил row/column/sticky
+            elif frozen[0] == "pack":
+                frozen[1].pack(**(frozen[2] or {"fill": "both", "expand": True}))
         except Exception:
             pass
 
