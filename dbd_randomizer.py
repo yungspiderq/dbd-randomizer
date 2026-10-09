@@ -213,8 +213,7 @@ class IconCombo:
         sb = ttk.Scrollbar(top, orient="vertical", command=canvas.yview)
         inner = tk.Frame(canvas, bg="#151a21")
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        bind_scroll_width(canvas, inner, win)
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(0, 6))
         sb.pack(side="right", fill="y", pady=6)
@@ -1385,6 +1384,42 @@ def grab_image(x, y, w, h):
         return None
 
 
+def bind_scroll_width(canvas, inner, win, pad=0, delay=120):
+    """Связка «скролл-область по содержимому + ширина вкладыша по канвасу».
+
+    Канвас шлёт <Configure> на каждый пиксель движения границы окна; прямое
+    itemconfigure(width=...) на каждом тике перекладывает всё содержимое
+    (сотни виджетов, переносы текста, иконки) — окно жутко лагает при
+    расширении. Применяем ширину с дебаунсом: до содержимого доезжает только
+    последнее событие всплеска, а одинаковая ширина не доезжает вовсе.
+    """
+    state = {"job": None, "width": None}
+
+    def _apply(w):
+        state["job"] = None
+        if state["width"] == w:
+            return
+        state["width"] = w
+        canvas.itemconfigure(win, width=max(1, w - pad))
+
+    def on_canvas(e):
+        if state["width"] == e.width and state["job"] is None:
+            return
+        if state["job"] is not None:
+            try:
+                canvas.after_cancel(state["job"])
+            except Exception:
+                pass
+        state["job"] = canvas.after(delay, lambda w=e.width: _apply(w))
+
+    def on_inner(_e):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    inner.bind("<Configure>", on_inner)
+    canvas.bind("<Configure>", on_canvas)
+    return on_canvas
+
+
 # ----------------------------------------------------------------------------
 # Приложение
 # ----------------------------------------------------------------------------
@@ -1801,8 +1836,7 @@ class App:
         self.card = tk.Frame(canvas, bg="#151a21", highlightbackground="#2a323d",
                              highlightthickness=1)
         win = canvas.create_window((0, 0), window=self.card, anchor="nw")
-        self.card.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width - 2))
+        bind_scroll_width(canvas, self.card, win, pad=2)
         canvas.configure(yscrollcommand=sb.set)
         canvas.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=6)
         sb.grid(row=0, column=1, sticky="ns", pady=6)
@@ -2614,8 +2648,7 @@ class App:
         sb = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
         inner = ttk.Frame(canvas)
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        bind_scroll_width(canvas, inner, win)
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
@@ -2836,8 +2869,7 @@ class App:
         sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         inner = ttk.Frame(canvas)
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+        bind_scroll_width(canvas, inner, win)
         canvas.configure(yscrollcommand=sb.set)
         canvas.grid(row=0, column=0, sticky="nsew")
         sb.grid(row=0, column=1, sticky="ns")
@@ -3373,8 +3405,7 @@ class App:
         psb = ttk.Scrollbar(self.tab_builds, orient="vertical", command=page.yview)
         page_inner = tk.Frame(page, bg="#0e1116")
         win = page.create_window((0, 0), window=page_inner, anchor="nw")
-        page_inner.bind("<Configure>", lambda e: page.configure(scrollregion=page.bbox("all")))
-        page.bind("<Configure>", lambda e: page.itemconfigure(win, width=e.width))
+        bind_scroll_width(page, page_inner, win)
         page.configure(yscrollcommand=psb.set)
         page.pack(side="left", fill="both", expand=True)
         psb.pack(side="right", fill="y")

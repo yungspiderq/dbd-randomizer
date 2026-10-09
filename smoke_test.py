@@ -2416,5 +2416,139 @@ class TestChallenges(unittest.TestCase):
             self.assertTrue({c["ru"] for c in any_c} <= pool)
 
 
+class TestResizeDebounce(unittest.TestCase):
+    """Расширение окна не должно перекладывать содержимое на каждый пиксель:
+    ширина вкладыша применяется один раз после всплеска <Configure>."""
+
+    class FakeCanvas:
+        def __init__(self):
+            self.widths = []
+            self.jobs = []
+            self.regions = []
+            self.bound = {}
+            self._n = 0
+
+        def bind(self, seq, fn):
+            self.bound[seq] = fn
+
+        def itemconfigure(self, win, width=None):
+            self.widths.append(width)
+
+        def after(self, ms, fn):
+            self._n += 1
+            self.jobs.append((self._n, fn))
+            return self._n
+
+        def after_cancel(self, job):
+            self.jobs = [(i, f) for i, f in self.jobs if i != job]
+
+        def configure(self, **kw):
+            if "scrollregion" in kw:
+                self.regions.append(kw["scrollregion"])
+
+        def bbox(self, *a):
+            return (0, 0, 10, 10)
+
+    class FakeInner:
+        def __init__(self):
+            self.bound = {}
+
+        def bind(self, seq, fn):
+            self.bound[seq] = fn
+
+    def _ev(self, w):
+        e = mock.MagicMock()
+        e.width = w
+        return e
+
+    def test_burst_collapses_to_single_relayout(self):
+        c, inner = self.FakeCanvas(), self.FakeInner()
+        on_canvas = R.bind_scroll_width(c, inner, "win", pad=2, delay=100)
+        for w in (800, 820, 840, 900):
+            on_canvas(self._ev(w))
+        self.assertEqual(len(c.jobs), 1, "всплеск не схлопнут в один таймер")
+        self.assertEqual(c.widths, [], "во время_drag содержимое не трогаем")
+        c.jobs[0][1]()
+        self.assertEqual(c.widths, [898])
+        # та же ширина повторно — ни новых таймеров, ни перекладываний
+        before = len(c.jobs)
+        on_canvas(self._ev(900))
+        self.assertEqual(len(c.jobs), before)
+        self.assertEqual(c.widths, [898])
+
+    def test_inner_configure_updates_scrollregion(self):
+        c, inner = self.FakeCanvas(), self.FakeInner()
+        R.bind_scroll_width(c, inner, "win")
+        inner.bound["<Configure>"](self._ev(100))
+        self.assertEqual(c.regions, [(0, 0, 10, 10)])
+
+
+class TestResizeDebounce(unittest.TestCase):
+    """Расширение окна не должно перекладывать содержимое на каждый пиксель:
+    ширина вкладыша применяется один раз после всплеска <Configure>."""
+
+    class FakeCanvas:
+        def __init__(self):
+            self.widths = []
+            self.jobs = []
+            self.regions = []
+            self.bound = {}
+            self._n = 0
+
+        def bind(self, seq, fn):
+            self.bound[seq] = fn
+
+        def itemconfigure(self, win, width=None):
+            self.widths.append(width)
+
+        def after(self, ms, fn):
+            self._n += 1
+            self.jobs.append((self._n, fn))
+            return self._n
+
+        def after_cancel(self, job):
+            self.jobs = [(i, f) for i, f in self.jobs if i != job]
+
+        def configure(self, **kw):
+            if "scrollregion" in kw:
+                self.regions.append(kw["scrollregion"])
+
+        def bbox(self, *a):
+            return (0, 0, 10, 10)
+
+    class FakeInner:
+        def __init__(self):
+            self.bound = {}
+
+        def bind(self, seq, fn):
+            self.bound[seq] = fn
+
+    def _ev(self, w):
+        e = mock.MagicMock()
+        e.width = w
+        return e
+
+    def test_burst_collapses_to_single_relayout(self):
+        c, inner = self.FakeCanvas(), self.FakeInner()
+        on_canvas = R.bind_scroll_width(c, inner, "win", pad=2, delay=100)
+        for w in (800, 820, 840, 900):
+            on_canvas(self._ev(w))
+        self.assertEqual(len(c.jobs), 1, "всплеск не схлопнут в один таймер")
+        self.assertEqual(c.widths, [], "во время_drag содержимое не трогаем")
+        c.jobs[0][1]()
+        self.assertEqual(c.widths, [898])
+        # та же ширина повторно — ни новых таймеров, ни перекладываний
+        before = len(c.jobs)
+        on_canvas(self._ev(900))
+        self.assertEqual(len(c.jobs), before)
+        self.assertEqual(c.widths, [898])
+
+    def test_inner_configure_updates_scrollregion(self):
+        c, inner = self.FakeCanvas(), self.FakeInner()
+        R.bind_scroll_width(c, inner, "win")
+        inner.bound["<Configure>"](self._ev(100))
+        self.assertEqual(c.regions, [(0, 0, 10, 10)])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
