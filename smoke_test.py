@@ -2182,9 +2182,13 @@ class TestChallenges(unittest.TestCase):
             self.assertIn(ch["side"], ("KILLER", "ANY"))
             seen.add(ch["ru"])
         self.assertGreater(len(seen), 1, "челендж не меняется при перегенерации")
-        self.assertEqual(app.build["perks"], before["perks"])
-        self.assertEqual(app.build["char"], before["char"])
-        self.assertEqual(app.build["addons"], before["addons"])
+        # билд пересобирается под эффекты нового челленджа — проверяем валидность
+        self.assertEqual(len(app.build["perks"]), 4)
+        self.assertTrue(app.build["char"])
+        cur = [c for c in R.DATA.CHALLENGES if c["ru"] == app.build["challenge"]["ru"]][0]
+        if (cur.get("fx") or {}).get("drop"):
+            self.assertTrue(app.build.get("forbidden"),
+                            "эффекты челленджа не применены к пересобранному билду")
 
     def test_reroll_challenge_without_build_is_safe(self):
         app = make_app()
@@ -2401,6 +2405,96 @@ class TestResizeDebounce(unittest.TestCase):
         R.bind_scroll_width(c, inner, "win")
         inner.bound["<Configure>"](self._ev(100))
         self.assertEqual(c.regions, [(0, 0, 10, 10)])
+
+
+class TestChallengeFx(unittest.TestCase):
+    """Челлендж управляет билдом и автоэкипировкой: запрещённые слоты
+    помечаются forbidden (карточка перечёркивает, экипировка пропускает)."""
+
+    def setUp(self):
+        self.db = R.db_defaults()
+        self.app = make_app()
+        self.app.db = self.db
+
+    def test_fx_keys_are_valid(self):
+        known = {"drop", "ban_item_cats", "ban_addon_start", "perk_pool",
+                 "ban_perks_last", "ban_char_last"}
+        cats = set(self.db["survivor_items"])
+        for c in R.DATA.CHALLENGES:
+            fx = c.get("fx")
+            if not fx:
+                continue
+            self.assertTrue(set(fx) <= known, c["ru"])
+            for slot in fx.get("drop", []):
+                self.assertIn(slot, ("item", "addons", "perks"), c["ru"])
+            for cat in fx.get("ban_item_cats", []):
+                self.assertIn(cat, cats, c["ru"])
+            self.assertIn(fx.get("perk_pool", "common"), ("common", "own", "half"), c["ru"])
+
+    def test_drop_item_forbidden_and_not_equipped(self):
+        b = R.make_survivor_build(self.db, ["Мэг Томас"], fx={"drop": ["item"]})
+        self.assertTrue(b["forbidden"]["item"])
+        self.app.build = b
+        keys = [s[0] for s in self.app._equip_steps()]
+        self.assertNotIn("item_slot", keys)
+        self.assertIn("slot1", keys)                      # перки всё ещё ставятся
+
+    def test_drop_perks_forbidden_and_not_equipped(self):
+        b = R.make_killer_build(self.db, ["Охотник"], fx={"drop": ["perks"]})
+        self.assertTrue(b["forbidden"]["perks"])
+        self.app.build = b
+        keys = [s[0] for s in self.app._equip_steps()]
+        self.assertFalse([k for k in keys if k.startswith("slot")])
+        self.assertIn("addon1_slot", keys)
+
+    def test_perk_pool_common(self):
+        for _ in range(10):
+            b = R.make_killer_build(self.db, ["Охотник"], fx={"perk_pool": "common"})
+            real = [p for p in b["perks"] if p != R.EMPTY]
+            self.assertTrue(set(real) <= set(self.db["killer_common_perks"]), b["perks"])
+
+    def test_perk_pool_own_and_half(self):
+        for _ in range(10):
+            b = R.make_killer_build(self.db, ["Охотник"], fx={"perk_pool": "own"})
+            real = [p for p in b["perks"] if p != R.EMPTY]
+            self.assertTrue(set(real) <= set(self.db["killers"]["Охотник"]["perks"]))
+        for _ in range(10):
+            b = R.make_killer_build(self.db, ["Охотник"], fx={"perk_pool": "half"})
+            real = [p for p in b["perks"] if p != R.EMPTY]
+            uniq = set(self.db["killers"]["Охотник"]["perks"])
+            self.assertEqual(len([p for p in real if p in uniq]), 2, b["perks"])
+            self.assertEqual(len([p for p in real if p not in uniq]), 2, b["perks"])
+
+    def test_ban_item_cats(self):
+        for _ in range(30):
+            b = R.make_survivor_build(self.db, ["Мэг Томас"], fx={"ban_item_cats": ["Фонарики"]})
+            self.assertNotEqual(b["category"], "Фонарики")
+
+    def test_ban_addon_start(self):
+        for _ in range(30):
+            b = R.make_killer_build(self.db, ["Чума"], fx={"ban_addon_start": ["Радужн"]})
+            self.assertFalse([a for a in b["addons"] if a.startswith("Радужн")], b["addons"])
+
+    def test_ban_perks_list(self):
+        banned = list(self.db["killer_common_perks"])[:2]
+        for _ in range(10):
+            b = R.make_killer_build(self.db, ["Охотник"], fx={"ban_perks": banned})
+            self.assertFalse(set(b["perks"]) & set(banned))
+
+    def test_challenge_fx_reads_last_equipped(self):
+        cfg = {"last_equipped": {"KILLER": {"perks": ["А", "Б", "В", "Г"],
+                                           "addons": [], "char": "Охотник"}}}
+        ch = {"ru": "тест", "fx": {"ban_perks_last": True, "ban_char_last": True}}
+        fx = R.challenge_fx(ch, "KILLER", cfg)
+        self.assertEqual(fx["ban_perks"], ["А", "Б", "В", "Г"])
+        self.assertEqual(fx["ban_chars"], ["Охотник"])
+        b = R.make_killer_build(self.db, ["Охотник", "Каннибал"], fx=fx)
+        self.assertNotEqual(b["char"], "Охотник")
+
+    def test_build_text_marks_forbidden(self):
+        b = R.make_survivor_build(self.db, ["Мэг Томас"], fx={"drop": ["item"]})
+        text = R.build_to_text(b)
+        self.assertIn("🚫", text)
 
 
 if __name__ == "__main__":

@@ -1030,15 +1030,74 @@ def classes_to_text(entries):
     return "\n".join(lines)
 
 
+def _forbidden_from_fx(fx, build):
+    """Слоты, которые челлендж запрещает экипировать (карточка перечёркивает)."""
+    forb = dict(build.get("forbidden") or {})
+    for slot in ("item", "addons", "perks"):
+        if slot in set((fx or {}).get("drop") or ()):
+            forb[slot] = True
+    return forb
+
+
+def challenge_fx(challenge, side, cfg=None):
+    """Машинные эффекты челленджа для генератора и автоэкипировки.
+
+    fx из базы (drop/ban_*/perk_pool) плюс динамические баны из конфига:
+    «без повтора перков» и «без любимого персонажа» смотрят на последнюю
+    экипированную раскладку (last_equipped)."""
+    fx = dict((challenge or {}).get("fx") or {})
+    le = ((cfg or {}).get("last_equipped") or {}).get(side)
+    if fx.get("ban_perks_last"):
+        fx["ban_perks"] = list((le or {}).get("perks") or []) if isinstance(le, dict) else []
+    if fx.get("ban_char_last") and isinstance(le, dict) and le.get("char"):
+        fx["ban_chars"] = [le["char"]]
+    return fx
+
+
+def _ban_addons(pool, fx):
+    pref = tuple(fx.get("ban_addon_start") or ())
+    return [a for a in pool if not a.startswith(pref)] if pref else list(pool)
+
+
+def _pick_perks_fx(db, side, name, perk_mode, respect_owned, available, fx):
+    """Перки с учётом эффектов челленджа: пул (общий/свои/половина) и бан списка."""
+    ban = set(fx.get("ban_perks") or ())
+    pool_mode = fx.get("perk_pool")
+    if not pool_mode and not ban:
+        return pick_perks(db, side, name, perk_mode, respect_owned, available)
+    if side == "KILLER":
+        uniques = list(db["killers"].get(name, {}).get("perks", []))
+        common = list(db.get("killer_common_perks", []))
+    else:
+        uniques = list(db["survivors"].get(name, []))
+        common = list(db.get("surv_common_perks", []))
+    uniques = [x for x in uniques if x not in ban]
+    common = [x for x in common if x not in ban]
+    if pool_mode == "common":
+        out = _pick(common, 4)
+    elif pool_mode == "own":
+        out = _pick(uniques, 4)
+    elif pool_mode == "half":
+        out = _pick(uniques, 2) + _pick(common, 2)
+    else:
+        out = _pick(list(dict.fromkeys(uniques + common)), 4)
+    while len(out) < 4:
+        out.append(EMPTY)
+    return out
+
+
 def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
-                      addons_enabled=True, skin_enabled=True, owned_skins=None):
+                      addons_enabled=True, skin_enabled=True, owned_skins=None, fx=None):
+    fx = fx or {}
     owned = db.get("owned", {})
-    name = random.choice(sorted(available))
+    avail = [a for a in sorted(available) if a not in set(fx.get("ban_chars") or ())]
+    name = random.choice(avail or sorted(available))
     info = db["killers"][name]
 
     if addons_enabled:
         addon_pool = _filter_owned(_playable_addons(info.get("addons", [])),
                                    owned.get("killer_addons"), respect_owned)
+        addon_pool = _ban_addons(addon_pool, fx)
         addons = _pick(addon_pool, 2)
     else:
         addons = []
@@ -1046,11 +1105,18 @@ def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
         addons.append(NO_ADDONS if not addons else EMPTY)
 
 
-    perks = pick_perks(db, "KILLER", name, perk_mode, respect_owned, available)
+    perks = _pick_perks_fx(db, "KILLER", name, perk_mode, respect_owned, available, fx)
 
+    forbidden = {}
+    if "addons" in (fx.get("drop") or ()):
+        forbidden["addons"] = True
+    if "perks" in (fx.get("drop") or ()):
+        forbidden["perks"] = True
     return {
         "side": "KILLER",
         "char": name,
+        "fx": fx,
+        "forbidden": forbidden,
         "power_or_item": info.get("power", EMPTY),
         "power_is_item": False,
         "addons": addons,
@@ -1060,12 +1126,15 @@ def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
 
 
 def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False,
-                        addons_enabled=True, skin_enabled=True, owned_skins=None):
+                        addons_enabled=True, skin_enabled=True, owned_skins=None, fx=None):
+    fx = fx or {}
     owned = db.get("owned", {})
-    name = random.choice(sorted(available))
+    avail = [a for a in sorted(available) if a not in set(fx.get("ban_chars") or ())]
+    name = random.choice(avail or sorted(available))
 
-    categories = list(db["survivor_items"].keys())
-    cat = random.choice(categories)
+    banned_cats = set(fx.get("ban_item_cats") or ())
+    categories = [c for c in db["survivor_items"] if c not in banned_cats]
+    cat = random.choice(categories or list(db["survivor_items"]))
     entry = db["survivor_items"][cat]
 
     item_pool = _filter_owned(entry.get("items", []), owned.get("survivor_items"), respect_owned)
@@ -1074,6 +1143,7 @@ def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False,
     if addons_enabled:
         addon_pool = _filter_owned(_playable_addons(entry.get("addons", [])),
                                    owned.get("survivor_addons"), respect_owned)
+        addon_pool = _ban_addons(addon_pool, fx)
         addons = _pick(addon_pool, 2)
         if not addons:
             addons = [NO_ADDONS if not entry.get("addons") else EMPTY]
@@ -1082,11 +1152,20 @@ def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False,
     while len(addons) < 2:
         addons.append(EMPTY)
 
-    perks = pick_perks(db, "SURVIVOR", name, perk_mode, respect_owned, available)
+    perks = _pick_perks_fx(db, "SURVIVOR", name, perk_mode, respect_owned, available, fx)
 
+    forbidden = {}
+    if "item" in (fx.get("drop") or ()):
+        forbidden["item"] = True
+    if "addons" in (fx.get("drop") or ()):
+        forbidden["addons"] = True
+    if "perks" in (fx.get("drop") or ()):
+        forbidden["perks"] = True
     return {
         "side": "SURVIVOR",
         "char": name,
+        "fx": fx,
+        "forbidden": forbidden,
         "power_or_item": item,
         "category": cat,
         "power_is_item": True,
@@ -1100,14 +1179,16 @@ def build_to_text(b):
     if b["side"] == "KILLER":
         lines = [f"👹 Убийца: {b['char']}", f"⚡ Сила: {b['power_or_item']}  (не экипируется)"]
     else:
+        forb_i = "  🚫 не экипируется (челлендж)" if (b.get("forbidden") or {}).get("item") else ""
         lines = [f"👤 Выживший: {b['char']}",
-                 f"📦 Предмет: {b['power_or_item']}  [{b.get('category', '')}]"]
-    lines.append("🔧 Аддоны:")
+                 f"📦 Предмет: {b['power_or_item']}  [{b.get('category', '')}]{forb_i}"]
+    forb = b.get("forbidden") or {}
+    lines.append("🔧 Аддоны:" + ("  🚫 не экипируются (челлендж)" if forb.get("addons") else ""))
     for a in b["addons"]:
-        lines.append(f"   • {a}")
-    lines.append("🔮 Навыки:")
+        lines.append(f"   • {'🚫 ' if forb.get('addons') else ''}{a}")
+    lines.append("🔮 Навыки:" + ("  🚫 не экипируются (челлендж)" if forb.get("perks") else ""))
     for i, p in enumerate(b["perks"], 1):
-        lines.append(f"   {i}. {p}")
+        lines.append(f"   {i}. {'🚫 ' if forb.get('perks') else ''}{p}")
     skin = b.get("skin")
     if isinstance(skin, dict) and skin:
         lines.append(f"👗 Внешность (случайный набор): "
@@ -2953,6 +3034,30 @@ class App:
             img.config(image=self._icon_photo(None, ICON_SIZE), text="")
             lbl.config(text=filler, fg="#56606c")
 
+    def _set_strike(self, lbl, on, size=9):
+        """Перечёркнутый шрифт для слотов, запрещённых челленджем (и возврат
+        обычного шрифта, когда запрет снят)."""
+        try:
+            import tkinter.font as tkfont
+        except Exception:
+            return                      # headless: хватит пометки 🚫 и цвета
+        if not hasattr(lbl, "_orig_font"):
+            lbl._orig_font = lbl.cget("font")
+        if on:
+            if not hasattr(self, "_strike_fonts"):
+                self._strike_fonts = {}
+            f = self._strike_fonts.get(size)
+            if f is None:
+                family = "Segoe UI"
+                base = lbl._orig_font
+                if isinstance(base, str) and base.strip():
+                    family = base.strip().split()[0].strip("{}")
+                f = tkfont.Font(family=family, size=size, overstrike=True)
+                self._strike_fonts[size] = f
+            lbl.config(font=f)
+        else:
+            lbl.config(font=lbl._orig_font)
+
     def _render_build(self):
         b = self.build
         if not b:
@@ -2971,6 +3076,7 @@ class App:
         self.card_stripe.config(bg=self._pal["killer"] if b["side"] == "KILLER"
                                 else self._pal["surv"])
         ch = b.get("challenge")
+        forb = b.get("forbidden") or {}
         if ch:
             diff = (getattr(DATA, "CHALLENGE_DIFFS", {}) or {}).get(ch.get("diff"), "")
             parts = [f"🔥 Челендж [{diff}]: {ch.get('ru', '?')}"]
@@ -2978,6 +3084,12 @@ class App:
                 parts.append(ch["why"])
             if ch.get("text"):
                 parts.append(ch["text"])
+            if forb:
+                ru = {"item": "предмет", "addons": "аддоны", "perks": "навыки"}
+                parts.append("🚫 Автоэкипировка пропустит: "
+                             + ", ".join(ru[k] for k in ("item", "addons", "perks")
+                                         if forb.get(k))
+                             + " (в карточке перечёркнуто)")
             self.card_challenge.config(text="\n".join(parts), fg="#e0a33e")
         else:
             self.card_challenge.config(text="", fg="#56606c")
@@ -3004,9 +3116,16 @@ class App:
             self.card_char.config(text=f"👹 {b['char']}", fg="#ff7b72")
             self.card_main.config(text=f"⚡ {b['power_or_item']}")
             self.card_sub.config(text="сила убийцы не экипируется — ставятся только аддоны и навыки")
+            self._set_strike(self.card_main, False, 10)
         else:
             self.card_char.config(text=f"👤 {b['char']}", fg="#58a6ff")
-            self.card_main.config(text=f"📦 {b['power_or_item']}")
+            if forb.get("item"):
+                self.card_main.config(text=f"📦 {b['power_or_item']}  🚫 челлендж",
+                                      fg="#7d8894")
+                self._set_strike(self.card_main, True, 10)
+            else:
+                self.card_main.config(text=f"📦 {b['power_or_item']}", fg="#dfe5ea")
+                self._set_strike(self.card_main, False, 10)
             self.card_sub.config(text=f"категория: {b.get('category', '')}")
 
         for img_label, name in ((self.card_char_img, b["char"]),
@@ -3028,7 +3147,12 @@ class App:
                 lbl.config(text="   •  🚫 аддон не подобран", fg="#7d8894")
                 continue
             img.config(image=self._icon_photo(addon, ICON_SIZE), text="")
-            lbl.config(text=f"   •  {addon}", fg="#dfe5ea")
+            if forb.get("addons"):
+                lbl.config(text=f"   •  🚫 {addon}", fg="#7d8894")
+                self._set_strike(lbl, True, 9)
+            else:
+                lbl.config(text=f"   •  {addon}", fg="#dfe5ea")
+                self._set_strike(lbl, False, 9)
             want_addons.append(addon)
 
         want = []
@@ -3039,7 +3163,12 @@ class App:
                 lbl.config(text=f"{i + 1}.  —  (слот пуст)", fg="#56606c")
                 continue
             img.config(image=self._icon_photo(perk, ICON_SIZE), text="")
-            lbl.config(text=f"{i + 1}.  {perk}", fg="#3fb950")
+            if forb.get("perks"):
+                lbl.config(text=f"{i + 1}.  🚫 {perk}", fg="#7d8894")
+                self._set_strike(lbl, True, 9)
+            else:
+                lbl.config(text=f"{i + 1}.  {perk}", fg="#3fb950")
+                self._set_strike(lbl, False, 9)
             want.append(perk)
         self._request_icons(want + want_addons + want_extra + want_skin)
 
@@ -3257,17 +3386,23 @@ class App:
                 out.append(name)
         return out
 
-    def generate_build(self):
+    def generate_build(self, preset_challenge=None):
         side = self.mode_var.get()
         available = self.available_characters(side)
         if not available:
             messagebox.showwarning("Внимание", "Не отмечен ни один персонаж на вкладке «ПЕРСОНАЖИ».")
             return
+        # челлендж выбираем ДО билда: его эффекты (fx) влияют на генерацию
+        ch = preset_challenge
+        if ch is None and self.challenge_var.get():
+            ch = pick_challenge(side, self.challenge_diff_value())
+        fx = challenge_fx(ch, side, self.cfg) if ch else {}
         kwargs = dict(perk_mode=self.perk_mode_var.get(),
                       respect_owned=bool(self.owned_var.get()),
                       addons_enabled=bool(self.addons_var.get()),
                       skin_enabled=bool(self.skin_var.get()),
-                      owned_skins=self.cfg.get("skins", {}))
+                      owned_skins=self.cfg.get("skins", {}),
+                      fx=fx)
         try:
             if side == "KILLER":
                 self.build = make_killer_build(self.db, available, **kwargs)
@@ -3277,8 +3412,7 @@ class App:
             messagebox.showerror("Генерация", f"Не удалось собрать билд:\n{exc}")
             return
         # челендж: самоограничение на матч (свой пул у стороны и у сложности)
-        if self.challenge_var.get():
-            ch = pick_challenge(side, self.challenge_diff_value())
+        if ch:
             self.build["challenge"] = ch
             if ch:
                 self.log(f"🔥 Челендж [{DATA.CHALLENGE_DIFFS[ch['diff']]}]: {ch['ru']}"
@@ -3336,9 +3470,10 @@ class App:
         if not ch:
             messagebox.showwarning("Челендж", "Для этой стороны и сложности больше нет вариантов.")
             return
-        self.build["challenge"] = ch
-        self._render_build()
+        # новый челлендж может запрещать слоты/пулы — билд пересобираем под его fx
+        self.generate_build(preset_challenge=ch)
         self.log(f"🔥 Челендж заменён [{DATA.CHALLENGE_DIFFS[ch['diff']]}]: {ch['ru']}"
+                 + (f" — {ch['why']}" if ch.get("why") else "")
                  + (f" — {ch['why']}" if ch.get("why") else "")
                  + f"\n   Условие: {ch['text']}")
         self.set_status(f"Челендж: {ch['ru']} ({DATA.CHALLENGE_DIFFS[ch['diff']]}).", "#3fb950")
@@ -4111,8 +4246,9 @@ class App:
         steps = []
         if self.selchar_var.get():
             steps.append(("char_search", b["char"], "персонаж"))
+        forb = b.get("forbidden") or {}
         if b["side"] == "SURVIVOR" and b.get("power_is_item"):
-            if b["power_or_item"] not in (EMPTY,):
+            if b["power_or_item"] not in (EMPTY,) and not forb.get("item"):
                 steps.append(("item_slot", b["power_or_item"], "предмет"))
         prev_perks, prev_addons = self._tracked_equipped(b["side"])
 
@@ -4138,11 +4274,19 @@ class App:
                 state[i - 1] = name
 
         state_addons = list(prev_addons) if prev_addons else [None, None]
-        plan(b["addons"], 2, state_addons, lambda i: f"addon{i}_slot", "аддон")
+        if not forb.get("addons"):
+            plan(b["addons"], 2, state_addons, lambda i: f"addon{i}_slot", "аддон")
         state_perks = list(prev_perks) if prev_perks else [None] * 4
-        plan(b["perks"], 4, state_perks, lambda i: f"slot{i}", "навык")
-        # чем закончится план — тем и считаем экипированным (если не прервут)
-        self._planned_equipped = {"perks": state_perks, "addons": state_addons}
+        if not forb.get("perks"):
+            plan(b["perks"], 4, state_perks, lambda i: f"slot{i}", "навык")
+        # чем закончится план — тем и считаем экипированным (если не прервут);
+        # запрещённые челленджем слоты в раскладку не попадают
+        if forb.get("addons"):
+            state_addons = [None, None]
+        if forb.get("perks"):
+            state_perks = [None] * 4
+        self._planned_equipped = {"perks": state_perks, "addons": state_addons,
+                                  "char": b.get("char")}
         return steps
 
     def start_equip(self):
@@ -4169,6 +4313,13 @@ class App:
         if self.build["side"] == "KILLER":
             self.log("Режим МАНЬЯК: сила не экипируется — ставим только аддоны и навыки. "
                      "Персонажа выберите в игре сами.")
+        forb = self.build.get("forbidden") or {}
+        ch = self.build.get("challenge")
+        if forb and ch:
+            ru = {"item": "предмет", "addons": "аддоны", "perks": "навыки"}
+            self.log("🚫 Челлендж «%s»: не экипирую %s (в карточке перечёркнуто)."
+                     % (ch.get("ru"), ", ".join(ru[k] for k in ("item", "addons", "perks")
+                                                  if forb.get(k))))
 
         save_config(self.cfg)
         self.abort.clear()
