@@ -1526,7 +1526,13 @@ class App:
         self._resize_job = None
         self._frozen_tab = None
         self._last_root_size = None
+        self._icons_pending = False
+        self._icon_refresh_job = None
         self.root.bind("<Configure>", self._on_root_configure)
+        # страховка: раскрытие окна (после сворачивания/восстановления) всегда
+        # возвращает контент, даже если таймер раззаморозки потерялся
+        self.root.bind("<Visibility>", lambda e: self._unfreeze_resize())
+        self.root.bind("<Map>", lambda e: self._unfreeze_resize())
         self._build_ui()
         self._poll_ui_queue()
         self._register_abort_hotkey()
@@ -2495,7 +2501,9 @@ class App:
         self._sk_all_chars = chars
         self.sk_char = ttk.Combobox(top, state="readonly", width=24, values=chars)
         self.sk_char.pack(side="left", padx=6)
-        self.sk_char.bind("<<ComboboxSelected>>", lambda e: self._sk_on_char())
+        self.sk_char.bind("<<ComboboxSelected>>",
+                          lambda e: (self._sk_on_char(), self._sk_restore_chars()))
+        self.sk_char.bind("<FocusOut>", self._sk_restore_chars)
         # «readonly» не запрещает ввод с клавиатуры: используем его как поиск по персонажу
         self.sk_char.bind("<KeyRelease>", lambda e: self._sk_filter_chars())
         ttk.Button(top, text="🎲 Случайный набор", command=self._sk_random).pack(side="left", padx=4)
@@ -2660,7 +2668,9 @@ class App:
         self._sk_apply_filter()
 
     def _sk_filter_chars(self):
-        """Поиск по списку персонажей: оставляем в дропдауне только подходящих."""
+        """Поиск по списку персонажей: оставляем в дропдауне только подходящих.
+        Полный список возвращаем в _sk_restore_chars (выбор/потеря фокуса),
+        иначе дропдаун навсегда оставался бы обрезанным (кейс «Гуль»)."""
         q = _norm(_entry_text(getattr(self, "sk_char", None)))
         chars = [c for c in getattr(self, "_sk_all_chars", []) if not q or q in _norm(c)]
         try:
@@ -2668,6 +2678,19 @@ class App:
             if len(chars) == 1:
                 self.sk_char.set(chars[0])
                 self._sk_on_char()
+        except Exception:
+            pass
+
+    def _sk_restore_chars(self, _e=None):
+        """Выбор сделан или фокус ушёл — возвращаем в дропдаун всех персонажей."""
+        try:
+            vals = list(getattr(self, "_sk_all_chars", []) or [])
+            cur = self.sk_char.get()
+            if cur not in vals:
+                cur = vals[0] if vals else ""
+            self.sk_char.config(values=vals)
+            if cur and self.sk_char.get() != cur:
+                self.sk_char.set(cur)
         except Exception:
             pass
 
@@ -2962,9 +2985,12 @@ class App:
     def set_status(self, text, color="#8d99a6"):
         self.ui_q.put(("status", (str(text), color)))
 
-    def _poll_ui_queue(self):
+    def _poll_ui_queue(self, budget=6):
+        """Очередь UI обрабатываем ПОЦИОННО: полный дренаж в одном тике мог
+        занять main-thread на минуты (пачки иконок => полные перерисовки),
+        и окно после долгого сворачивания выглядело мёртвым."""
         try:
-            while True:
+            for _ in range(budget):
                 kind, payload = self.ui_q.get_nowait()
                 if kind == "log":
                     self._append_log(payload)
@@ -2982,7 +3008,8 @@ class App:
                 elif kind == "info":
                     messagebox.showinfo("Готово", payload)
                 elif kind == "icons":
-                    self._on_icons_ready(payload)
+                    self._icons_pending = True
+                    self._schedule_icon_refresh()
                 elif kind == "icons_done":
                     self._on_icons_done(payload)
                 elif kind == "builds":
@@ -2991,7 +3018,23 @@ class App:
                     self._show_update_dialog(*payload)
         except queue.Empty:
             pass
-        self.root.after(70, self._poll_ui_queue)
+        # в очереди ещё есть задачи — следующий тик пораньше, чтобы не тянуть
+        delay = 10 if not self.ui_q.empty() else 70
+        self.root.after(delay, self._poll_ui_queue)
+
+    def _schedule_icon_refresh(self, delay=250):
+        """Несколько пачек готовых иконок за окно в 250 мс = одна перерисовка,
+        а не N полных обновлений всех виджетов подряд."""
+        if getattr(self, "_icon_refresh_job", None):
+            return
+
+        def _run():
+            self._icon_refresh_job = None
+            if not getattr(self, "_icons_pending", False):
+                return
+            self._icons_pending = False
+            self._on_icons_ready(None)
+        self._icon_refresh_job = self.root.after(delay, _run)
 
     def _append_log(self, line):
         stamp = time.strftime("%H:%M:%S")

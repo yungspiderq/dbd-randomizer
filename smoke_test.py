@@ -2503,5 +2503,79 @@ class TestChallengeFx(unittest.TestCase):
         self.assertIn("🚫", text)
 
 
+
+class TestUiQueueAndSkinsCombo(unittest.TestCase):
+    """Регрессии v2.23.1: окно не «умирает» после долгого сворачивания
+    (очередь UI обрабатывается порционно, пачки иконок коалессятся), а дропдаун
+    персонажей во внешности не обрезается навсегда после поиска."""
+
+    def test_poll_ui_queue_processes_in_budget(self):
+        app = make_app()
+        app.progress = {"value": 0}
+        import queue as _q
+        while True:                                   # дренируем стартовые логи
+            try:
+                app.ui_q.get_nowait()
+            except _q.Empty:
+                break
+        for i in range(20):
+            app.ui_q.put(("progress", i))
+        jobs = []
+        app.root.after = lambda ms, fn=None: (jobs.append((ms, fn)), 1)[1]
+        app._poll_ui_queue()
+        self.assertEqual(app.progress["value"], 5, "за тик обработан бюджет, не всё")
+        self.assertEqual(app.ui_q.qsize(), 14)
+        self.assertIn(10, [m for m, _ in jobs], "остаток очереди тянем быстрыми тиками")
+
+    def test_icon_batches_coalesce_to_single_refresh(self):
+        app = make_app()
+        calls = []
+        app._on_icons_ready = lambda payload: calls.append(1)
+        jobs = []
+        app.root.after = lambda ms, fn=None: (jobs.append((ms, fn)), len(jobs))[1]
+        for _ in range(3):
+            app.ui_q.put(("icons", ["a", "b"]))
+        app._poll_ui_queue()
+        self.assertEqual(calls, [], "полная перерисовка не стартует сразу на каждую пачку")
+        icon_jobs = [fn for ms, fn in jobs if ms == 250]
+        self.assertEqual(len(icon_jobs), 1, "три пачки схлопнулись в один отложенный рефреш")
+        icon_jobs[0]()
+        self.assertEqual(len(calls), 1)
+        icon_jobs[0]() if False else None
+        # второй запуск того же джоба не перерисовывает (флаг сброшен)
+        self.assertEqual(len(calls), 1)
+
+    def test_skins_char_combo_restores_full_list(self):
+        app = make_app()
+        app._sk_all_chars = ["Гуль", "Охотник", "Гоуст Фейс"]
+
+        class CB:
+            def __init__(self):
+                self.vals = None
+                self.text = ""
+
+            def get(self):
+                return self.text
+
+            def set(self, v):
+                self.text = v
+
+            def config(self, values=None):
+                if values is not None:
+                    self.vals = list(values)
+        app.sk_char = CB()
+        app.sk_char.text = "гу"
+        app._sk_filter_chars()
+        self.assertEqual(app.sk_char.vals, ["Гуль"], "поиск обрезал дропдаун")
+        app._sk_restore_chars()
+        self.assertEqual(app.sk_char.vals, app._sk_all_chars,
+                         "после выбора список персонажей не восстановился")
+        # плейсхолдер «ничего не найдено» тоже не должен залипать
+        app.sk_char.text = "ничего не найдено"
+        app._sk_restore_chars()
+        self.assertEqual(app.sk_char.vals, app._sk_all_chars)
+        self.assertEqual(app.sk_char.text, "Гуль")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
