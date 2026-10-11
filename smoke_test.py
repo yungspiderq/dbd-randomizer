@@ -572,6 +572,52 @@ class TestIcons(unittest.TestCase):
         self.assertEqual(st.missing([]), [])
 
 
+class TestSkinsIdMigration(unittest.TestCase):
+    """v2.24.0: игра перенумеровала id наборов — отметки «куплено» из конфига
+    старой схемы переносятся по карте старый id -> новый, а не сбрасываются."""
+
+    def _cfg_file(self, td, skins, schema):
+        path = os.path.join(td, "cfg.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"skins": skins, "skins_schema": schema}, fh, ensure_ascii=False)
+        return path
+
+    def test_marks_migrate_from_schema_2(self):
+        import dbd_skins as SK
+        with tempfile.TemporaryDirectory() as td:
+            path = self._cfg_file(td, {"Грязь": [676, 189, 999999]}, 2)
+            with mock.patch.object(R, "CONFIG_FILE", path):
+                R.SKINS_MIGRATION_NOTE = ""
+                cfg, _mig = R.load_config()
+            self.assertEqual(cfg["skins_schema"], R.SKINS_SCHEMA)
+            got = cfg["skins"]["Грязь"]
+            self.assertIn(R.SKIN_ID_REMAP[676], got, "отметка не переехала на новый id")
+            self.assertIn(R.SKIN_ID_REMAP[189], got)
+            self.assertNotIn(999999, got, "несуществующий id не сброшен")
+            self.assertTrue(all(i in SK.SKINS_BY_ID for i in got))
+            self.assertIn("перенесены", R.SKINS_MIGRATION_NOTE)
+
+    def test_current_schema_kept_as_is(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._cfg_file(td, {"Грязь": [667]}, R.SKINS_SCHEMA)
+            with mock.patch.object(R, "CONFIG_FILE", path):
+                cfg, _mig = R.load_config()
+            self.assertEqual(cfg["skins"], {"Грязь": [667]})
+
+    def test_remap_points_to_existing_skins(self):
+        import dbd_skins as SK
+        for old, new in R.SKIN_ID_REMAP.items():
+            self.assertIn(new, SK.SKINS_BY_ID, f"remap {old}->{new} ведёт в пустоту")
+
+    def test_frost_nightmare_has_ru_name(self):
+        """Кейс пользователя: «Frosty the Nightmare» (Грязь) в русском клиенте
+        называется «Морозный кошмар» — имя должно быть в базе."""
+        import dbd_skins as SK
+        hit = [v for v in SK.SKINS_BY_ID.values() if v.get("file") == "K28_outfit_008.png"]
+        self.assertTrue(hit)
+        self.assertEqual(hit[0].get("name_ru"), "Морозный кошмар")
+
+
 class TestSkinsMissingModule(unittest.TestCase):
     """v2.10.1: приложение обязано запускаться без dbd_skins.py (битые апдейты)."""
 
