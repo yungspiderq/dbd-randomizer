@@ -2426,7 +2426,7 @@ class TestChallengeFx(unittest.TestCase):
                 continue
             self.assertTrue(set(fx) <= known, c["ru"])
             for slot in fx.get("drop", []):
-                self.assertIn(slot, ("item", "addons", "perks"), c["ru"])
+                self.assertIn(slot, ("item", "addons", "perks", "skin"), c["ru"])
             for cat in fx.get("ban_item_cats", []):
                 self.assertIn(cat, cats, c["ru"])
             self.assertIn(fx.get("perk_pool", "common"), ("common", "own", "half"), c["ru"])
@@ -2490,6 +2490,12 @@ class TestChallengeFx(unittest.TestCase):
         self.assertEqual(fx["ban_chars"], ["Охотник"])
         b = R.make_killer_build(self.db, ["Охотник", "Каннибал"], fx=fx)
         self.assertNotEqual(b["char"], "Охотник")
+
+    def test_fx_drop_skin(self):
+        for _ in range(5):
+            b = R.make_survivor_build(self.db, ["Мэг Томас"],
+                                      fx={"drop": ["skin"]}, skin_enabled=True)
+            self.assertIsNone(b["skin"])
 
     def test_build_text_marks_forbidden(self):
         b = R.make_survivor_build(self.db, ["Мэг Томас"], fx={"drop": ["item"]})

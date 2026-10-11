@@ -1121,7 +1121,8 @@ def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
         "power_is_item": False,
         "addons": addons,
         "perks": perks[:4],
-        "skin": pick_skin(name, owned_skins) if skin_enabled else None,
+        "skin": pick_skin(name, owned_skins)
+        if skin_enabled and "skin" not in set(fx.get("drop") or ()) else None,
     }
 
 
@@ -1171,7 +1172,8 @@ def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False,
         "power_is_item": True,
         "addons": addons,
         "perks": perks[:4],
-        "skin": pick_skin(name, owned_skins) if skin_enabled else None,
+        "skin": pick_skin(name, owned_skins)
+        if skin_enabled and "skin" not in set(fx.get("drop") or ()) else None,
     }
 
 
