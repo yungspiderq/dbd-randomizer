@@ -1002,17 +1002,24 @@ CLASS_SIDES = (("SURVIVOR", "Выживший"), ("KILLER", "Убийца"))
 CHALLENGE_DIFFS = (("any", "any"), ("easy", 1), ("medium", 2), ("hard", 3))
 
 
-def pick_challenge(side, diff="any"):
+def pick_challenge(side, diff="any", avoid=None):
     """Случайный челендж для стороны и сложности (None, если пул пуст).
 
     `side` — SURVIVOR/KILLER: берутся челенджи этой стороны и общие (ANY).
     `diff` — "any" или 1/2/3 (лёгкий/средний/тяжёлый).
+    `avoid` — имя или коллекция имён, которые не нужно предлагать (история
+    последних выпадений): при непустом остатке пула они исключаются.
     """
     if side not in ("SURVIVOR", "KILLER"):
         return None
     pool = [c for c in (getattr(DATA, "CHALLENGES", []) or [])
             if c.get("side") in (side, "ANY")
             and (diff == "any" or c.get("diff") == diff)]
+    if avoid:
+        bad = {avoid} if isinstance(avoid, str) else set(avoid)
+        fresh = [c for c in pool if c.get("ru") not in bad]
+        if fresh:
+            pool = fresh
     return random.choice(pool) if pool else None
 
 
@@ -1032,7 +1039,8 @@ def reroll_challenge(side, diff="any", avoid=None):
     pool = [c for c in (getattr(DATA, "CHALLENGES", []) or [])
             if c.get("side") in (side, "ANY")
             and (diff == "any" or c.get("diff") == diff)
-            and (avoid is None or c.get("ru") != avoid)]
+            and (avoid is None or c.get("ru") not in
+                 ({avoid} if isinstance(avoid, str) else set(avoid)))]
     if not pool:
         return pick_challenge(side, diff)
     return random.choice(pool)
@@ -3470,7 +3478,11 @@ class App:
         # челлендж выбираем ДО билда: его эффекты (fx) влияют на генерацию
         ch = preset_challenge
         if ch is None and self.challenge_var.get():
-            ch = pick_challenge(side, self.challenge_diff_value())
+            history = self.cfg.get("challenge_history") or []
+            ch = pick_challenge(side, self.challenge_diff_value(), avoid=history)
+            if ch:
+                history = [ch["ru"]] + [h for h in history if h != ch["ru"]]
+                self.cfg["challenge_history"] = history[:12]
         fx = challenge_fx(ch, side, self.cfg) if ch else {}
         kwargs = dict(perk_mode=self.perk_mode_var.get(),
                       respect_owned=bool(self.owned_var.get()),
@@ -3541,7 +3553,10 @@ class App:
         side = self.build["side"]
         diff = self.challenge_diff_value()
         old = (self.build.get("challenge") or {}).get("ru")
-        ch = reroll_challenge(side, diff, avoid=old)
+        avoid = set(self.cfg.get("challenge_history") or [])
+        if old:
+            avoid.add(old)
+        ch = reroll_challenge(side, diff, avoid=avoid)
         if not ch:
             messagebox.showwarning("Челендж", "Для этой стороны и сложности больше нет вариантов.")
             return

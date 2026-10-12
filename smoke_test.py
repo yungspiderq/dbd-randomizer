@@ -2241,6 +2241,37 @@ class TestChallenges(unittest.TestCase):
         app.build = None
         app.reroll_challenge()                              # предупреждение, не краш
 
+    def test_no_duplicate_texts(self):
+        """Один и тот же текст правила не лежит под двумя именами
+        (кейс v2.24: «Без аддонов» и «Без аддонов у убийцы»)."""
+        from collections import Counter
+        dup = [t[:40] for t, k in Counter(c["text"] for c in R.DATA.CHALLENGES).items() if k > 1]
+        self.assertEqual(dup, [])
+
+    def test_pick_challenge_avoids_history(self):
+        names = {c["ru"] for c in R.DATA.CHALLENGES if c["side"] in ("KILLER", "ANY")}
+        almost = set(list(names)[:-1])
+        ch = R.pick_challenge("KILLER", "any", avoid=almost)
+        self.assertIn(ch["ru"], names - almost, "история не исключила повторы")
+        ch2 = R.pick_challenge("KILLER", "any", avoid=set(names))
+        self.assertIn(ch2["ru"], names, "при полном avoid пул не должен пустеть")
+
+    def test_consecutive_builds_do_not_repeat_challenge(self):
+        app = make_app()
+        app.mode_var = ST_VAR(app, "KILLER")
+        app.db = self.db
+        app._char_widgets = {}
+        app.log = lambda msg: None
+        app.set_status = lambda *a, **kw: None
+        app._render_build = lambda: None
+        app.challenge_var.set(True)
+        seen = []
+        for _ in range(8):
+            app.generate_build()
+            seen.append(app.build["challenge"]["ru"])
+        self.assertEqual(len(seen), len(set(seen)), f"челендж повторился в истории: {seen}")
+        self.assertEqual(app.cfg["challenge_history"][0], seen[-1])
+
     def test_challenge_log_shows_description(self):
         """В журнале — название, сложность, описание и условие целиком."""
         app = make_app()
