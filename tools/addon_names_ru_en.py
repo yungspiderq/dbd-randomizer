@@ -391,7 +391,7 @@ ADDON_RU_EN = {
         "Самодельная маска": "Homemade Mask", "Часы гипнотизера": "Hypnotist's Watch",
         "Пустой пакет из-под молока": "Discarded Milk Carton", "Склянка с сывороткой": "Serum Vial",
         "Карта жертвы": "Victim's Map", "Афиша второсортного фильма": "B-Movie Poster",
-        "Блокнот с предложениями": "Notebook of Theories", "Последние звуки": "Last Known Recording",
+        "Блокнот с предположениями": "Notebook of Theories", "Последние звуки": "Last Known Recording",
         "Размытое фото": "Blurry Photo", "Кроличья лапка": "Rabbit's Foot", "Передовица": "Front-Page Article",
         "Слепок следа": "Footprint Cast", "Устройство неизвестного назначения": "Device of Undisclosed Origin",
         "Неаккуратный набросок": "Sketch Attempt",

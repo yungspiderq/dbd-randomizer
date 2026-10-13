@@ -299,19 +299,29 @@ class TestGeneration(unittest.TestCase):
 
 class TestAddonRenameMigration(unittest.TestCase):
     """Переименования RU-локализации (ADDON_RENAMES): пулы и «только открытое у
-    меня» лечатся даже из файла совпадающей ревизии («Последний Каваны»)."""
+    меня» лечатся даже из файла совпадающей ревизии («Последний Каваны»,
+    «Блокнот с предложениями»)."""
 
-    def _db_with_stale_name(self, target, stale):
+    @staticmethod
+    def _killer_of(official):
+        import dbd_data as D
+        for name, info in D.KILLERS.items():
+            if official in info.get("addons", []):
+                return name
+        raise AssertionError(f"официальное имя не найдено в базе: {official}")
+
+    def _db_with_stale_name(self, target, stale, killer, official):
         fresh = R.db_defaults()
-        nurs = fresh["killers"]["Медсестра"]["addons"]
-        nurs[:] = [stale if a == "Последний вздох Кавана" else a for a in nurs]
+        addons = fresh["killers"][killer]["addons"]
+        addons[:] = [stale if a == official else a for a in addons]
         fresh["owned"]["killer_addons"] = [stale]
         with open(target, "w", encoding="utf-8") as fh:
             json.dump(fresh, fh, ensure_ascii=False)
 
-    def test_builtin_db_has_official_name(self):
-        """В игре: «Последний вздох Кавана» (тултип и Steam-гид); старых
-        написаний не остаётся ни в базе, ни в иконах, ни в RU->EN маппинге."""
+    def test_builtin_db_has_official_names(self):
+        """В игре: «Последний вздох Кавана» (тултип и Steam-гид) и «Блокнот с
+        предположениями» (тултип UVX); старых написаний не остаётся ни в базе,
+        ни в иконах, ни в RU->EN маппинге."""
         import dbd_data as D
         import dbd_icons as I
         import sys
@@ -320,15 +330,19 @@ class TestAddonRenameMigration(unittest.TestCase):
             import addon_names_ru_en as NE
         finally:
             sys.path.pop(0)
-        nurs = D.KILLERS["Медсестра"]["addons"]
-        self.assertIn("Последний вздох Кавана", nurs)
-        for stale in D.ADDON_RENAMES:
-            self.assertNotIn(stale, nurs)
+        for stale, official in D.ADDON_RENAMES.items():
+            killer = self._killer_of(official)
+            addons = D.KILLERS[killer]["addons"]
+            self.assertIn(official, addons, f"{official} нет в пуле {killer}")
+            self.assertNotIn(stale, addons)
             self.assertNotIn(stale, I.ADDON_ICONS)
-            self.assertNotIn(stale, NE.ADDON_RU_EN["Медсестра"])
-        self.assertIn("Последний вздох Кавана", I.ADDON_ICONS)
+            self.assertNotIn(stale, NE.ADDON_RU_EN[killer])
+            self.assertIn(official, I.ADDON_ICONS, f"нет иконки для {official}")
+            self.assertIn(official, NE.ADDON_RU_EN[killer])
         self.assertEqual(NE.ADDON_RU_EN["Медсестра"]["Последний вздох Кавана"],
                          "Kavanagh's Last Breath")
+        self.assertEqual(NE.ADDON_RU_EN["Неведомое"]["Блокнот с предположениями"],
+                         "Notebook of Theories")
 
     def test_stale_local_db_heals_without_revision_bump(self):
         """Ревизия совпадает, но в файле старая строка: после load_db пул и
@@ -336,7 +350,8 @@ class TestAddonRenameMigration(unittest.TestCase):
         import dbd_data as D
         with tempfile.TemporaryDirectory() as td:
             target = os.path.join(td, "dbd_database.json")
-            self._db_with_stale_name(target, "Последний Каваны")
+            self._db_with_stale_name(target, "Последний Каваны",
+                                     "Медсестра", "Последний вздох Кавана")
             with mock.patch.object(R, "DB_FILE", target):
                 db = R.load_db()
             nurs = db["killers"]["Медсестра"]["addons"]
@@ -352,11 +367,31 @@ class TestAddonRenameMigration(unittest.TestCase):
                           on_disk["killers"]["Медсестра"]["addons"])
             self.assertEqual(on_disk["db_revision"], D.DB_REVISION)
 
+    def test_uvx_notebook_heals(self):
+        """«Блокнот с предложениями» из локального json лечится до
+        «Блокнот с предположениями» и в пуле UVX, и в owned; файл перезаписан."""
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "dbd_database.json")
+            self._db_with_stale_name(target, "Блокнот с предложениями",
+                                     "Неведомое", "Блокнот с предположениями")
+            with mock.patch.object(R, "DB_FILE", target):
+                db = R.load_db()
+            addons = db["killers"]["Неведомое"]["addons"]
+            self.assertIn("Блокнот с предположениями", addons)
+            self.assertNotIn("Блокнот с предложениями", addons)
+            self.assertEqual(db["owned"]["killer_addons"],
+                             ["Блокнот с предположениями"])
+            with open(target, encoding="utf-8") as fh:
+                on_disk = json.load(fh)
+            self.assertIn("Блокнот с предположениями",
+                          on_disk["killers"]["Неведомое"]["addons"])
+
     def test_both_variants_deduplicated(self):
         """Если файл держал оба варианта сразу, дубликат не проскакивает."""
         with tempfile.TemporaryDirectory() as td:
             target = os.path.join(td, "dbd_database.json")
-            self._db_with_stale_name(target, "Последний вздох Каваны")
+            self._db_with_stale_name(target, "Последний вздох Каваны",
+                                     "Медсестра", "Последний вздох Кавана")
             with open(target, encoding="utf-8") as fh:
                 raw = json.load(fh)
             raw["killers"]["Медсестра"]["addons"].append("Последний вздох Кавана")

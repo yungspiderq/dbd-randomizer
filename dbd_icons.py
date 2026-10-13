@@ -379,7 +379,7 @@ ADDON_ICONS = {
     'Бисерный лабиринт': 'IconAddon_BeadMaze.png',
     'Благовонная мазь': 'IconAddon_incensedOintment.png',
     'Блестящий маэдатэ': 'IconAddon_polishedMaedate.png',
-    'Блокнот с предложениями': 'IconAddon_notebookOfTheories.png',
+    'Блокнот с предположениями': 'IconAddon_notebookOfTheories.png',
     'Бодрые сверчки': 'IconAddon_livelyCrickets.png',
     'Болт самоуничтожения': 'IconAddon_selfDestructBolt.png',
     'Ботинки с железными мысками': 'IconAddon_steelToeBoots.png',
