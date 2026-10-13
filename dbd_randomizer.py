@@ -3029,26 +3029,6 @@ class App:
             ent.pack(side="right")
             self._timing_widgets[key] = ent
 
-        df = ttk.LabelFrame(rightf, text=" DISCORD: СТАТУС С БИЛДОМ ")
-        df.grid(row=3, column=0, sticky="ew", pady=(6, 0))
-        dcfg = self.cfg.get("discord") or {}
-        self.discord_var = tk.BooleanVar(value=bool(dcfg.get("enabled", False)))
-        ttk.Checkbutton(df, text="Показывать статус в Discord (Rich Presence)",
-                        variable=self.discord_var,
-                        command=self._discord_apply).pack(anchor="w", padx=6, pady=(4, 0))
-        drow = ttk.Frame(df)
-        drow.pack(fill="x", padx=6, pady=2)
-        ttk.Label(drow, text="Client ID приложения Discord:").pack(side="left")
-        self.discord_id_var = tk.StringVar(value=str(dcfg.get("client_id", "")))
-        ttk.Entry(drow, textvariable=self.discord_id_var, width=22).pack(side="right", padx=(4, 0))
-        ttk.Button(drow, text="Применить", width=10,
-                   command=self._discord_apply).pack(side="right")
-        ttk.Label(df, text="Как получить Client ID: discord.com/developers/applications -> "
-                           "New Application -> скопировать Client ID. Нужен запущенный "
-                           "Discord-клиент и библиотека pypresence.",
-                  foreground="#8d99a6", font=("Segoe UI", 8), justify="left",
-                  wraplength=430).pack(anchor="w", padx=6, pady=(0, 4))
-
         of = ttk.LabelFrame(rightf, text=" ПАРАМЕТРЫ КЛИКОВ ")
         of.grid(row=1, column=0, sticky="ew", pady=6)
         self._add_option(of, "use_clear_button", "Кликать «×» очистки перед поиском")
@@ -3077,6 +3057,25 @@ class App:
                           ("🖱 Тест наведения на слот (без клика)", self.test_hover_slot),
                           ("🧪 Тестовый клик по «first_result»", self.test_click_result)):
             ttk.Button(sf, text=text, command=cmd).pack(fill="x", padx=6, pady=2)
+        # Discord Rich Presence: компактно в «СЕРВИСЕ», чтобы секция не терялась
+        dcfg = self.cfg.get("discord") or {}
+        ttk.Separator(sf, orient="horizontal").pack(fill="x", padx=6, pady=(6, 4))
+        self.discord_var = tk.BooleanVar(value=bool(dcfg.get("enabled", False)))
+        ttk.Checkbutton(sf, text="Статус в Discord (Rich Presence): билд под ником",
+                        variable=self.discord_var,
+                        command=self._discord_apply).pack(anchor="w", padx=8)
+        drow = ttk.Frame(sf)
+        drow.pack(fill="x", padx=8, pady=(0, 2))
+        ttk.Label(drow, text="Client ID:").pack(side="left")
+        self.discord_id_var = tk.StringVar(value=str(dcfg.get("client_id", "")))
+        ttk.Entry(drow, textvariable=self.discord_id_var, width=22).pack(side="left", padx=(4, 4))
+        ttk.Button(drow, text="Применить", width=10,
+                   command=self._discord_apply).pack(side="left")
+        ttk.Label(sf, text="Client ID: discord.com/developers/applications -> New Application "
+                           "-> скопировать Client ID. Нужны запущенный Discord-клиент "
+                           "и pypresence (в EXE уже внутри).",
+                  foreground="#8d99a6", font=("Segoe UI", 8), justify="left",
+                  wraplength=430).pack(anchor="w", padx=8, pady=(0, 6))
 
         upf = ttk.LabelFrame(rightf, text=" 🔄 АВТООБНОВЛЕНИЕ ")
         upf.grid(row=3, column=0, sticky="ew", pady=(6, 0))
