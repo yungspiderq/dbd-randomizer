@@ -2656,7 +2656,8 @@ class TestUiQueueAndSkinsCombo(unittest.TestCase):
 
 
 class TestDiscordPresence(unittest.TestCase):
-    """Rich Presence: статус билда в Discord (pypresence опционален)."""
+    """Rich Presence: статус билда в Discord. pypresence опционален,
+    соединение живёт в фоновом потоке и не имеет права вешать UI."""
 
     def _build(self):
         return {
@@ -2666,6 +2667,31 @@ class TestDiscordPresence(unittest.TestCase):
             "challenge": {"ru": "Без силы в первую погоню", "diff": 1},
             "skin": {"display": "Моровая дева", "name": "Plague Maiden", "id": 1},
         }
+
+    class StubD:
+        """Заглушка соединения: интерфейс DiscordRPC без потоков."""
+
+        def __init__(self, ready=True):
+            self.client_id = "7"
+            self.error = ""
+            self.dead = not ready
+            self.sent = []
+            self.starts = 0
+
+        def is_ready(self):
+            return not self.dead
+
+        def start(self, wait=2.0):
+            self.starts += 1
+            self.dead = False
+            return True
+
+        def update(self, **kw):
+            self.sent.append(kw)
+            return True
+
+        def close(self):
+            self.dead = True
 
     def test_payload_contains_full_build(self):
         pl = R.discord_payload(self._build(), 12345)
@@ -2689,26 +2715,32 @@ class TestDiscordPresence(unittest.TestCase):
         self.assertIsNone(R.discord_payload(None, 1))
         self.assertIsNone(R.discord_payload({}, 1))
 
+    def test_payload_has_images(self):
+        pl = R.discord_payload(self._build(), 1)
+        self.assertTrue(pl.get("large_image", "").startswith("https://"), pl.get("large_image"))
+        self.assertIn("Очищение от мерзости", pl["large_text"])
+        self.assertTrue(pl.get("small_image", "").startswith("https://"))
+        self.assertEqual(pl.get("small_text"), "Темная преданность")
+
     def test_rpc_without_pypresence_is_silent(self):
         self.assertNotIn("pypresence", sys.modules)
         d = R.DiscordRPC("123")
-        self.assertFalse(d.start())
+        self.assertFalse(d.start(wait=0.2))
         self.assertIn("pypresence", d.error)
         self.assertFalse(d.update(details="x"))       # не падает без соединения
         d.close()
 
-    def test_rpc_with_fake_pypresence(self):
+    def test_rpc_with_fake_pypresence_is_async(self):
         fake = types.ModuleType("pypresence")
 
         class Presence:
             def __init__(self, cid):
                 self.cid = cid
                 self.updates = []
-                self.connected = False
                 self.closed = False
 
             def connect(self):
-                self.connected = True
+                pass
 
             def update(self, **kw):
                 self.updates.append(kw)
@@ -2718,92 +2750,47 @@ class TestDiscordPresence(unittest.TestCase):
         fake.Presence = Presence
         with mock.patch.dict(sys.modules, {"pypresence": fake}):
             d = R.DiscordRPC("42")
-            self.assertTrue(d.start())
+            self.assertTrue(d.start(wait=2))
+            self.assertTrue(d.is_ready())
             self.assertTrue(d.update(details="Убийца: Чума", state="Перки: X"))
+            for _ in range(50):
+                if d.rpc and d.rpc.updates:
+                    break
+                time.sleep(0.02)
             self.assertEqual(d.rpc.updates[-1]["details"], "Убийца: Чума")
             rpc_obj = d.rpc
             d.close()
+            for _ in range(50):
+                if rpc_obj.closed:
+                    break
+                time.sleep(0.02)
             self.assertTrue(rpc_obj.closed)
-            self.assertIsNone(d.rpc)
 
-    def test_payload_has_images(self):
-        pl = R.discord_payload(self._build(), 1)
-        self.assertTrue(pl.get("large_image", "").startswith("https://"), pl.get("large_image"))
-        self.assertIn("Очищение от мерзости", pl["large_text"])
-        self.assertTrue(pl.get("small_image", "").startswith("https://"))
-        self.assertEqual(pl.get("small_text"), "Темная преданность")
-
-    def test_tick_repushes_and_reschedules(self):
-        app = make_app()
-        sent = []
-
-        class D:
-            rpc = object()
-            client_id = "7"
-            error = ""
-
-            def update(self, **kw):
-                sent.append(kw)
-                return True
-        app.discord = D()
-        app.build = self._build()
-        jobs = []
-        app.root.after = lambda ms, fn=None: (jobs.append((ms, fn)), len(jobs))[1]
-        app.root.after_cancel = lambda j: None
-        app._discord_tick()
-        self.assertTrue(sent, "тик не повторил статус")
-        self.assertTrue(any(ms == 15000 for ms, _ in jobs), "тик не запланировал следующий")
-
-    def test_push_reconnects_when_all_variants_fail(self):
+    def test_push_sends_when_ready(self):
         app = make_app()
         app.log = lambda msg: None
-        state = {"calls": 0}
-
-        class D:
-            rpc = object()
-            client_id = "7"
-            error = ""
-            started = 0
-
-            def start(self):
-                self.started += 1
-                self.rpc = object()
-                return True
-
-            def update(self, **kw):
-                state["calls"] += 1
-                return state["calls"] > 2      # первые две попытки неудачны,
-        app.discord = D()                       # после реконнекта третья успешна
+        d = self.StubD()
+        app.discord = d
         app.build = self._build()
         app._discord_push()
-        self.assertEqual(app.discord.started, 1, "после неудач всех вариантов не было переподключения")
-        self.assertIsNotNone(app.discord.rpc)
+        self.assertTrue(d.sent)
+        self.assertIn("Чума", d.sent[-1]["details"])
+        self.assertFalse(app._discord_no_images)
 
-    def test_push_falls_back_to_text_without_images(self):
-        """Discord рвёт сокет на внешних URL картинок — статус уходит текстом."""
+    def test_dead_connection_switches_to_text_and_reconnects(self):
         app = make_app()
         app.log = lambda msg: None
-        sent = []
-
-        class D:
-            rpc = object()
-            client_id = "7"
-            error = ""
-
-            def update(self, **kw):
-                if "large_image" in kw or "small_image" in kw:
-                    return False            # DiscordRPC.update вернул бы False
-                sent.append(kw)
-                return True
-        app.discord = D()
+        app.cfg["discord"] = {"enabled": True, "client_id": "7"}
+        d = self.StubD()
+        app.discord = d
         app.build = self._build()
-        app._discord_push()
-        self.assertTrue(sent, "текстовый фолбэк не отправился")
-        self.assertTrue(app._discord_no_images)
-        self.assertNotIn("large_image", sent[-1])
-        n = len(sent)
-        app._discord_push()
-        self.assertEqual(len(sent), n + 1, "после фолбэка каждый пуш шлёт текст")
+        app._discord_had_images = True
+        d.dead = True                                  # соединение умерло после картинок
+        with mock.patch.object(R, "DiscordRPC", lambda cid: self.StubD()):
+            app._discord_push()
+        self.assertTrue(app._discord_no_images, "после смерти на картинках не включен текстовый режим")
+        self.assertTrue(app.discord.sent)
+        self.assertNotIn("large_image", app.discord.sent[-1])
 
     def test_apply_revives_dead_connection(self):
         app = make_app()
@@ -2811,29 +2798,38 @@ class TestDiscordPresence(unittest.TestCase):
         app.cfg["discord"] = {"enabled": True, "client_id": "7"}
         app.discord_var = mock.MagicMock(get=lambda: True)
         app.discord_id_var = mock.MagicMock(get=lambda: "7")
+        app.discord = self.StubD(ready=False)
+        app.build = self._build()
+        fresh = self.StubD()
+        with mock.patch.object(R, "DiscordRPC", lambda cid: fresh):
+            app._discord_apply()
+        self.assertIs(app.discord, fresh)
+        self.assertTrue(fresh.sent, "после «Применить» статус не ушёл")
 
-        class D:
-            rpc = None                     # соединение умерло
-            client_id = "7"
-            error = ""
-            started = 0
-            pushed = 0
+    def test_apply_does_not_block_on_dead_discord(self):
+        """Главное: «Применить» не может повесить UI — старт соединения
+        неблокирующий (воркер-поток, ожидание рукопожатия ограничено)."""
+        app = make_app()
+        app.log = lambda msg: None
+        app.cfg["discord"] = {"enabled": True, "client_id": "7"}
+        app.discord_var = mock.MagicMock(get=lambda: True)
+        app.discord_id_var = mock.MagicMock(get=lambda: "7")
+        started = time.time()
+        app._discord_apply()          # pypresence нет: воркер умрёт, старт подождёт ≤2 c
+        self.assertLess(time.time() - started, 4.0, "«Применить» заблокировала главный поток")
+        self.assertIsNone(app.discord)
 
-            def start(self):
-                self.started += 1
-                self.rpc = object()
-                return True
-
-            def update(self, **kw):
-                self.pushed += 1
-                return True
-        d = D()
+    def test_tick_repushes_and_reschedules(self):
+        app = make_app()
+        d = self.StubD()
         app.discord = d
         app.build = self._build()
-        app._discord_apply()
-        self.assertEqual(d.started, 1, "«Применить» не поднял мёртвое соединение")
-        self.assertGreaterEqual(d.pushed, 1, "после реконнекта статус не ушёл")
-
+        jobs = []
+        app.root.after = lambda ms, fn=None: (jobs.append((ms, fn)), len(jobs))[1]
+        app.root.after_cancel = lambda j: None
+        app._discord_tick()
+        self.assertTrue(d.sent, "тик не повторил статус")
+        self.assertTrue(any(ms == 15000 for ms, _ in jobs), "тик не запланировал следующий")
 
     def test_generate_build_pushes_presence(self):
         app = make_app()
@@ -2842,20 +2838,12 @@ class TestDiscordPresence(unittest.TestCase):
         app._char_widgets = {}
         app.log = lambda msg: None
         app.set_status = lambda *a, **kw: None
-        sent = []
-
-        class D:
-            rpc = object()
-            client_id = "7"
-            error = ""
-
-            def update(self, **kw):
-                sent.append(kw)
-                return True
-        app.discord = D()
+        d = self.StubD()
+        app.discord = d
         app.generate_build()
-        self.assertTrue(sent, "генерация не отправила статус в Discord")
-        self.assertIn(app.build["char"], sent[-1]["details"])
+        self.assertTrue(d.sent, "генерация не отправила статус в Discord")
+        self.assertIn(app.build["char"], d.sent[-1]["details"])
+
 
 
 

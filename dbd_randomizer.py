@@ -1519,48 +1519,75 @@ def bind_scroll_width(canvas, inner, win, pad=0, delay=120):
 
 
 class DiscordRPC:
-    """Тонкая обёртка над pypresence (Rich Presence в Discord).
+    """Rich Presence в Discord БЕЗ блокировок главного потока.
 
-    Без библиотеки pypresence или без запущенного Discord-клиента молча
-    не включается: статус — удобство, а не обязанность приложения.
+    pypresence.connect() читает RPC-трубу без таймаута: на полумёртвом
+    Discord он может висеть вечно и вешать UI (кейс «нажал Применить —
+    приложение умерло»). Поэтому соединение и отправки живут в фоновом
+    потоке: главный поток только кладёт payload в очередь и спрашивает
+    is_ready(); соединиться пробуем с ограниченным ожиданием.
     """
 
     def __init__(self, client_id):
         self.client_id = str(client_id or "")
         self.rpc = None
         self.error = ""
+        self.dead = False
+        self.connected = threading.Event()
+        self._q = queue.Queue()
+        self._thread = None
 
-    def start(self):
+    def start(self, wait=2.0):
+        """Неблокирующе поднимает соединение; wait — сколько секунд главный
+        поток готов подождать рукопожатия (дальше — просто ещё не готово)."""
+        if self._thread is not None and self._thread.is_alive():
+            return self.connected.wait(wait) if not self.connected.is_set() else True
+        if self.dead:
+            return False
+        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._thread.start()
+        return self.connected.wait(wait)
+
+    def _worker(self):
         try:
             from pypresence import Presence
-        except Exception:
-            self.error = "не установлен pypresence (pip install pypresence)"
-            return False
-        try:
-            self.rpc = Presence(self.client_id)
-            self.rpc.connect()
-            return True
+            rpc = Presence(self.client_id)
+            rpc.connect()
         except Exception as exc:
             self.error = f"Discord не отвечает: {exc}"
-            self.rpc = None
-            return False
+            self.dead = True
+            return
+        self.rpc = rpc
+        self.connected.set()
+        while True:
+            item = self._q.get()
+            if item is None:
+                try:
+                    rpc.close()
+                except Exception:
+                    pass
+                return
+            try:
+                rpc.update(**item)
+            except Exception:
+                self.dead = True
+                self.rpc = None
+                return
+
+    def is_ready(self):
+        return not self.dead and self.connected.is_set() and self.rpc is not None
 
     def update(self, **payload):
-        if self.rpc is None:
+        """Класть в очередь безопасно: блокировки главного потока нет."""
+        if not self.is_ready():
             return False
-        try:
-            self.rpc.update(**payload)
-            return True
-        except Exception:
-            self.rpc = None
-            return False
+        self._q.put(payload)
+        return True
 
     def close(self):
-        try:
-            if self.rpc is not None:
-                self.rpc.close()
-        except Exception:
-            pass
+        self.dead = True
+        if self._thread is not None and self._thread.is_alive():
+            self._q.put(None)
         self.rpc = None
 
 
@@ -1670,6 +1697,8 @@ class App:
         self._discord_start_ts = int(time.time())
         self._discord_job = None
         self._discord_last_details = None
+        self._discord_no_images = False
+        self._discord_had_images = False
         self.root.bind("<Configure>", self._on_root_configure)
         # страховка: раскрытие окна (после сворачивания/восстановления) всегда
         # возвращает контент, даже если таймер раззаморозки потерялся
@@ -4436,76 +4465,73 @@ class App:
         if not want:
             self._discord_stop()
             return
-        if self.discord is None or self.discord.client_id != str(dcfg["client_id"]):
+        if self.discord is None or self.discord.client_id != str(dcfg["client_id"]) \
+                or self.discord.dead:
             self._discord_stop()
             self.discord = DiscordRPC(dcfg["client_id"])
+            # старт НЕ блокирует UI: соединение поднимается в фоновом потоке,
+            # главный поток ждёт рукопожатие не больше пары секунд
             if not self.discord.start():
-                self.log(f"⚠ Discord-статус не включился: {self.discord.error}.")
+                self.log(f"⚠ Discord-статус не включился: "
+                         f"{self.discord.error or 'клиент не ответил за 2 c'}.")
                 self.discord = None
                 return
             self._discord_start_ts = int(time.time())
             self._discord_last_details = None
             self.log("✓ Discord-статус включён: билд будет виден под твоим ником.")
-        elif self.discord.rpc is None:
-            # соединение умерло (например, из-за отклонённого апдейта): «Применить»
-            # обязан поднять его заново, а не молчать
-            if not self.discord.start():
-                self.log(f"⚠ Discord не переподключился: {self.discord.error}.")
-                return
-            self._discord_start_ts = int(time.time())
-            self._discord_last_details = None
-            self.log("✓ Discord переподключился вручную.")
         if self._discord_job is None:
             self._discord_job = self.root.after(15000, self._discord_tick)
         self._discord_push()
 
     def _discord_push(self):
         d = getattr(self, "discord", None)
-        if d is None or d.rpc is None:
+        if d is not None and not d.is_ready():
+            if d.dead:
+                # соединение умерло (например, клиент отклонил активность):
+                # один реконнект, при подозрении на картинки — сразу текстом
+                if not getattr(self, "_discord_no_images", False) and \
+                        getattr(self, "_discord_had_images", False):
+                    self._discord_no_images = True
+                    self.log("⚠ Discord не принимает картинки в статусе — "
+                             "переключаюсь на текстовый статус.")
+                self._discord_reconnect()
+                d = self.discord
+            if d is None or not d.is_ready():
+                return
+        if d is None:
             return
         payload = discord_payload(self.build, getattr(self, "_discord_start_ts", int(time.time())))
         if not payload:
             return
-        # Discord некоторых клиентов рвёт сокет из-за внешних URL картинок:
-        # держим текстовый вариант как фолбэк и запоминаем, что картинки не идут
-        variants = [payload]
-        if "large_image" in payload or "small_image" in payload:
-            variants.append({k: v for k, v in payload.items()
-                             if k not in ("large_image", "small_image", "small_text")})
-        if getattr(self, "_discord_no_images", False):
-            variants.reverse()
-        for pl in variants:
-            if d.rpc is not None and d.update(**pl):
-                if pl is not payload:
-                    self._discord_no_images = True
-                if getattr(self, "_discord_last_details", None) != pl["details"]:
-                    self._discord_last_details = pl["details"]
-                    self.log(f"→ Discord-статус: {pl['details']}")
-                return
-        # апдейт не ушёл: разовый реконнект и повтор (Discord мог мигнуть)
-        self.log("⚠ Discord не принял обновление статуса — переподключаюсь…")
-        if d.start():
-            self._discord_start_ts = int(time.time())
-            for pl in reversed(variants):
-                if d.update(**pl):
-                    if pl is not payload:
-                        self._discord_no_images = True
-                        self.log("⚠ Discord не принимает картинки в статусе — "
-                                 "показываю текстом без иконок.")
-                    self._discord_last_details = pl["details"]
-                    self.log("✓ Discord переподключился, статус обновлён.")
-                    return
-        self.log("⚠ Discord отвалился — статус выключен до следующего «Применить».")
-        d.rpc = None
+        if self._discord_no_images:
+            payload = {k: v for k, v in payload.items()
+                       if k not in ("large_image", "small_image", "small_text")}
+        else:
+            self._discord_had_images = bool("large_image" in payload or "small_image" in payload)
+        if d.update(**payload):
+            if getattr(self, "_discord_last_details", None) != payload["details"]:
+                self._discord_last_details = payload["details"]
+                self.log(f"→ Discord-статус: {payload['details']}")
+
+    def _discord_reconnect(self):
+        dcfg = self.cfg.get("discord") or {}
+        self._discord_stop()
+        d = DiscordRPC(dcfg.get("client_id", ""))
+        self.discord = d
+        if not d.start():
+            self.log(f"⚠ Discord не переподключился: {d.error or 'нет ответа клиента'}.")
+            return
+        self._discord_start_ts = int(time.time())
+        self._discord_last_details = None
+        self.log("✓ Discord переподключился.")
 
     def _discord_tick(self):
         """Раз в 15 секунд повторяем текущий статус: лечим залипание, если
         Discord проглотил одиночный апдейт или клиент перерисовался."""
         self._discord_job = None
-        d = getattr(self, "discord", None)
-        if d is not None and d.rpc is not None:
+        if getattr(self, "discord", None) is not None:
             self._discord_push()
-        if d is not None:
+        if getattr(self, "discord", None) is not None:
             self._discord_job = self.root.after(15000, self._discord_tick)
 
     def _discord_stop(self):
