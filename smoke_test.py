@@ -2654,5 +2654,101 @@ class TestUiQueueAndSkinsCombo(unittest.TestCase):
         self.assertEqual(app.sk_char.text, "Гуль")
 
 
+
+class TestDiscordPresence(unittest.TestCase):
+    """Rich Presence: статус билда в Discord (pypresence опционален)."""
+
+    def _build(self):
+        return {
+            "side": "KILLER", "char": "Чума", "power_or_item": "Очищение от мерзости",
+            "addons": ["Яблоко праха", "Черный фимиам"],
+            "perks": ["Темная преданность", "Вмешательство скверны", "Заразительный ужас", "Шепоты"],
+            "challenge": {"ru": "Без силы в первую погоню", "diff": 1},
+            "skin": {"display": "Моровая дева", "name": "Plague Maiden", "id": 1},
+        }
+
+    def test_payload_contains_full_build(self):
+        pl = R.discord_payload(self._build(), 12345)
+        self.assertEqual(pl["details"], "Убийца: Чума")
+        self.assertIn("Темная преданность", pl["state"])
+        for frag in ("Очищение от мерзости", "Яблоко праха", "Без силы в первую погоню",
+                     "Моровая дева", "Шепоты"):
+            self.assertIn(frag, pl["large_text"], f"в тултипе нет: {frag}")
+        self.assertEqual(pl["start"], 12345)
+        self.assertTrue(pl["buttons"][0]["url"].endswith("dbd-randomizer"))
+        self.assertLessEqual(len(pl["details"]), 128)
+        self.assertLessEqual(len(pl["state"]), 128)
+
+    def test_payload_truncates_long_state(self):
+        b = self._build()
+        b["perks"] = ["Очень длинное название навыка номер %d" % i for i in range(4)]
+        pl = R.discord_payload(b, 1)
+        self.assertLessEqual(len(pl["state"]), 128)
+
+    def test_payload_none_without_build(self):
+        self.assertIsNone(R.discord_payload(None, 1))
+        self.assertIsNone(R.discord_payload({}, 1))
+
+    def test_rpc_without_pypresence_is_silent(self):
+        self.assertNotIn("pypresence", sys.modules)
+        d = R.DiscordRPC("123")
+        self.assertFalse(d.start())
+        self.assertIn("pypresence", d.error)
+        self.assertFalse(d.update(details="x"))       # не падает без соединения
+        d.close()
+
+    def test_rpc_with_fake_pypresence(self):
+        fake = types.ModuleType("pypresence")
+
+        class Presence:
+            def __init__(self, cid):
+                self.cid = cid
+                self.updates = []
+                self.connected = False
+                self.closed = False
+
+            def connect(self):
+                self.connected = True
+
+            def update(self, **kw):
+                self.updates.append(kw)
+
+            def close(self):
+                self.closed = True
+        fake.Presence = Presence
+        with mock.patch.dict(sys.modules, {"pypresence": fake}):
+            d = R.DiscordRPC("42")
+            self.assertTrue(d.start())
+            self.assertTrue(d.update(details="Убийца: Чума", state="Перки: X"))
+            self.assertEqual(d.rpc.updates[-1]["details"], "Убийца: Чума")
+            rpc_obj = d.rpc
+            d.close()
+            self.assertTrue(rpc_obj.closed)
+            self.assertIsNone(d.rpc)
+
+    def test_generate_build_pushes_presence(self):
+        app = make_app()
+        app.mode_var = ST_VAR(app, "KILLER")
+        app.db = R.db_defaults()
+        app._char_widgets = {}
+        app.log = lambda msg: None
+        app.set_status = lambda *a, **kw: None
+        sent = []
+
+        class D:
+            rpc = object()
+            client_id = "7"
+            error = ""
+
+            def update(self, **kw):
+                sent.append(kw)
+                return True
+        app.discord = D()
+        app.generate_build()
+        self.assertTrue(sent, "генерация не отправила статус в Discord")
+        self.assertIn(app.build["char"], sent[-1]["details"])
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

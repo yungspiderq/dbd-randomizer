@@ -1518,6 +1518,85 @@ def bind_scroll_width(canvas, inner, win, pad=0, delay=120):
     return on_canvas
 
 
+class DiscordRPC:
+    """Тонкая обёртка над pypresence (Rich Presence в Discord).
+
+    Без библиотеки pypresence или без запущенного Discord-клиента молча
+    не включается: статус — удобство, а не обязанность приложения.
+    """
+
+    def __init__(self, client_id):
+        self.client_id = str(client_id or "")
+        self.rpc = None
+        self.error = ""
+
+    def start(self):
+        try:
+            from pypresence import Presence
+        except Exception:
+            self.error = "не установлен pypresence (pip install pypresence)"
+            return False
+        try:
+            self.rpc = Presence(self.client_id)
+            self.rpc.connect()
+            return True
+        except Exception as exc:
+            self.error = f"Discord не отвечает: {exc}"
+            self.rpc = None
+            return False
+
+    def update(self, **payload):
+        if self.rpc is None:
+            return False
+        try:
+            self.rpc.update(**payload)
+            return True
+        except Exception:
+            self.rpc = None
+            return False
+
+    def close(self):
+        try:
+            if self.rpc is not None:
+                self.rpc.close()
+        except Exception:
+            pass
+        self.rpc = None
+
+
+def discord_payload(b, start_ts):
+    """Поля Rich Presence из билда: две строки статуса + полный билд в тултип."""
+    if not isinstance(b, dict) or not b.get("char"):
+        return None
+    side = "Убийца" if b.get("side") == "KILLER" else "Выживший"
+    details = f"{side}: {b['char']}"
+    perks = ", ".join(p for p in (b.get("perks") or []) if p and p != EMPTY)
+    state = f"Перки: {perks}" if perks else "Билд без навыков"
+    lines = [details]
+    pio = "Сила" if b.get("side") == "KILLER" else "Предмет"
+    if b.get("power_or_item") and b["power_or_item"] != EMPTY:
+        lines.append(f"{pio}: {b['power_or_item']}")
+    adds = [a for a in (b.get("addons") or []) if a and a not in (EMPTY, NO_ADDONS)]
+    if adds:
+        lines.append("Аддоны: " + ", ".join(adds))
+    if perks:
+        lines.append(f"Перки: {perks}")
+    ch = b.get("challenge")
+    if isinstance(ch, dict) and ch:
+        lines.append(f"Челендж: {ch.get('ru', '?')}")
+    skin = b.get("skin")
+    if isinstance(skin, dict) and skin:
+        lines.append(f"Внешность: {skin.get('display') or skin.get('name')}")
+    return {
+        "details": details[:128],
+        "state": state[:128],
+        "large_text": "\n".join(lines)[:512],
+        "start": start_ts,
+        "buttons": [{"label": "DBD Randomizer",
+                     "url": "https://github.com/yungspiderq/dbd-randomizer"}],
+    }
+
+
 # ----------------------------------------------------------------------------
 # Приложение
 # ----------------------------------------------------------------------------
@@ -1564,12 +1643,16 @@ class App:
         self._last_root_size = None
         self._icons_pending = False
         self._icon_refresh_job = None
+        self.discord = None
+        self._discord_start_ts = int(time.time())
         self.root.bind("<Configure>", self._on_root_configure)
         # страховка: раскрытие окна (после сворачивания/восстановления) всегда
         # возвращает контент, даже если таймер раззаморозки потерялся
         self.root.bind("<Visibility>", lambda e: self._unfreeze_resize())
         self.root.bind("<Map>", lambda e: self._unfreeze_resize())
         self._build_ui()
+        if (self.cfg.get("discord") or {}).get("enabled"):
+            self._discord_apply()
         self._poll_ui_queue()
         self._register_abort_hotkey()
 
@@ -2946,6 +3029,26 @@ class App:
             ent.pack(side="right")
             self._timing_widgets[key] = ent
 
+        df = ttk.LabelFrame(rightf, text=" DISCORD: СТАТУС С БИЛДОМ ")
+        df.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        dcfg = self.cfg.get("discord") or {}
+        self.discord_var = tk.BooleanVar(value=bool(dcfg.get("enabled", False)))
+        ttk.Checkbutton(df, text="Показывать статус в Discord (Rich Presence)",
+                        variable=self.discord_var,
+                        command=self._discord_apply).pack(anchor="w", padx=6, pady=(4, 0))
+        drow = ttk.Frame(df)
+        drow.pack(fill="x", padx=6, pady=2)
+        ttk.Label(drow, text="Client ID приложения Discord:").pack(side="left")
+        self.discord_id_var = tk.StringVar(value=str(dcfg.get("client_id", "")))
+        ttk.Entry(drow, textvariable=self.discord_id_var, width=22).pack(side="right", padx=(4, 0))
+        ttk.Button(drow, text="Применить", width=10,
+                   command=self._discord_apply).pack(side="right")
+        ttk.Label(df, text="Как получить Client ID: discord.com/developers/applications -> "
+                           "New Application -> скопировать Client ID. Нужен запущенный "
+                           "Discord-клиент и библиотека pypresence.",
+                  foreground="#8d99a6", font=("Segoe UI", 8), justify="left",
+                  wraplength=430).pack(anchor="w", padx=6, pady=(0, 4))
+
         of = ttk.LabelFrame(rightf, text=" ПАРАМЕТРЫ КЛИКОВ ")
         of.grid(row=1, column=0, sticky="ew", pady=6)
         self._add_option(of, "use_clear_button", "Кликать «×» очистки перед поиском")
@@ -3254,6 +3357,7 @@ class App:
                 self._set_strike(lbl, False, 9)
             want.append(perk)
         self._request_icons(want + want_addons + want_extra + want_skin)
+        self._discord_push()
 
     def get_coord(self, key):
         ent = self._coord_widgets.get(key)
@@ -3308,6 +3412,10 @@ class App:
                 self.cfg["timings"][key] = int(float(raw)) if key == "retries" else float(raw)
             except ValueError:
                 pass
+        if getattr(self, "discord_var", None) is not None:
+            dcfg = self.cfg.setdefault("discord", {})
+            dcfg["enabled"] = bool(self.discord_var.get())
+            dcfg["client_id"] = (self.discord_id_var.get() or "").strip()
         for key, var in self._option_vars.items():
             val = var.get()
             if key == "result_index":
@@ -4274,6 +4382,42 @@ class App:
         addons = (st.get("addons") or [])[:2] + [None] * 2
         return perks[:4], addons[:2]
 
+    # --------------------------------------------------- discord presence --
+    def _discord_apply(self):
+        dcfg = self.cfg.setdefault("discord", {})
+        if getattr(self, "discord_var", None) is not None:
+            dcfg["enabled"] = bool(self.discord_var.get())
+            dcfg["client_id"] = (self.discord_id_var.get() or "").strip()
+        want = dcfg.get("enabled") and dcfg.get("client_id")
+        if not want:
+            self._discord_stop()
+            return
+        if self.discord is None or self.discord.client_id != str(dcfg["client_id"]):
+            self._discord_stop()
+            self.discord = DiscordRPC(dcfg["client_id"])
+            if not self.discord.start():
+                self.log(f"⚠ Discord-статус не включился: {self.discord.error}.")
+                self.discord = None
+                return
+            self._discord_start_ts = int(time.time())
+            self.log("✓ Discord-статус включён: билд будет виден под твоим ником.")
+        self._discord_push()
+
+    def _discord_push(self):
+        d = getattr(self, "discord", None)
+        if d is None or d.rpc is None:
+            return
+        payload = discord_payload(self.build, getattr(self, "_discord_start_ts", int(time.time())))
+        if payload and not d.update(**payload):
+            self.log("⚠ Discord отвалился — статус выключен до следующего «Применить».")
+            d.rpc = None
+
+    def _discord_stop(self):
+        d = getattr(self, "discord", None)
+        if d is not None:
+            d.close()
+        self.discord = None
+
     # ------------------------------------------------ заморозка на ресайз --
     def _on_root_configure(self, e):
         """Тик ресайза окна: снимаем с геометрии ВЕСЬ контейнер вкладок.
@@ -4548,6 +4692,7 @@ class App:
 
     def _on_close(self):
         self.abort.set()
+        self._discord_stop()
         try:
             self.collect_settings()          # координаты, тайминги, ник, токен, автообновление
             self.save_owned_characters_silent()
