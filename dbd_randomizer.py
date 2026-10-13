@@ -1587,7 +1587,7 @@ def discord_payload(b, start_ts):
     skin = b.get("skin")
     if isinstance(skin, dict) and skin:
         lines.append(f"Внешность: {skin.get('display') or skin.get('name')}")
-    return {
+    payload = {
         "details": details[:128],
         "state": state[:128],
         "large_text": "\n".join(lines)[:512],
@@ -1595,6 +1595,29 @@ def discord_payload(b, start_ts):
         "buttons": [{"label": "DBD Randomizer",
                      "url": "https://github.com/yungspiderq/dbd-randomizer"}],
     }
+    # картинки: иконка силы/предмета крупно + иконка первого перка мелко;
+    # Discord принимает прямые https-URL картинок в ассетах активности
+    try:
+        import dbd_icons as IC
+        base = getattr(IC, "ICON_BASE", "")
+        if base:
+            if b.get("side") == "KILLER":
+                big = getattr(IC, "POWER_ICONS", {}).get(b.get("power_or_item"))
+                big_text = b.get("power_or_item") or side
+            else:
+                big = getattr(IC, "ITEM_ICONS", {}).get(b.get("power_or_item"))
+                big_text = b.get("power_or_item") or side
+            if big:
+                payload["large_image"] = base + big
+                payload["large_text"] = (big_text + "\n" + payload["large_text"])[:512]
+            first_perk = next((p for p in (b.get("perks") or []) if p and p != EMPTY), None)
+            small = getattr(IC, "PERK_ICONS", {}).get(first_perk) if first_perk else None
+            if small:
+                payload["small_image"] = base + small
+                payload["small_text"] = (first_perk or "")[:128]
+    except Exception:
+        pass
+    return payload
 
 
 # ----------------------------------------------------------------------------
@@ -1645,6 +1668,8 @@ class App:
         self._icon_refresh_job = None
         self.discord = None
         self._discord_start_ts = int(time.time())
+        self._discord_job = None
+        self._discord_last_details = None
         self.root.bind("<Configure>", self._on_root_configure)
         # страховка: раскрытие окна (после сворачивания/восстановления) всегда
         # возвращает контент, даже если таймер раззаморозки потерялся
@@ -4419,7 +4444,10 @@ class App:
                 self.discord = None
                 return
             self._discord_start_ts = int(time.time())
+            self._discord_last_details = None
             self.log("✓ Discord-статус включён: билд будет виден под твоим ником.")
+        if self._discord_job is None:
+            self._discord_job = self.root.after(15000, self._discord_tick)
         self._discord_push()
 
     def _discord_push(self):
@@ -4427,11 +4455,41 @@ class App:
         if d is None or d.rpc is None:
             return
         payload = discord_payload(self.build, getattr(self, "_discord_start_ts", int(time.time())))
-        if payload and not d.update(**payload):
-            self.log("⚠ Discord отвалился — статус выключен до следующего «Применить».")
-            d.rpc = None
+        if not payload:
+            return
+        if d.update(**payload):
+            if getattr(self, "_discord_last_details", None) != payload["details"]:
+                self._discord_last_details = payload["details"]
+                self.log(f"→ Discord-статус: {payload['details']}")
+            return
+        # апдейт не ушёл: разовый реконнект и повтор (Discord мог мигнуть)
+        self.log("⚠ Discord не принял обновление статуса — переподключаюсь…")
+        if d.start():
+            self._discord_start_ts = int(time.time())
+            if d.update(**payload):
+                self._discord_last_details = payload["details"]
+                self.log("✓ Discord переподключился, статус обновлён.")
+                return
+        self.log("⚠ Discord отвалился — статус выключен до следующего «Применить».")
+        d.rpc = None
+
+    def _discord_tick(self):
+        """Раз в 15 секунд повторяем текущий статус: лечим залипание, если
+        Discord проглотил одиночный апдейт или клиент перерисовался."""
+        self._discord_job = None
+        d = getattr(self, "discord", None)
+        if d is not None and d.rpc is not None:
+            self._discord_push()
+        if d is not None:
+            self._discord_job = self.root.after(15000, self._discord_tick)
 
     def _discord_stop(self):
+        if getattr(self, "_discord_job", None) is not None:
+            try:
+                self.root.after_cancel(self._discord_job)
+            except Exception:
+                pass
+            self._discord_job = None
         d = getattr(self, "discord", None)
         if d is not None:
             d.close()

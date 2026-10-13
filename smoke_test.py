@@ -2726,6 +2726,60 @@ class TestDiscordPresence(unittest.TestCase):
             self.assertTrue(rpc_obj.closed)
             self.assertIsNone(d.rpc)
 
+    def test_payload_has_images(self):
+        pl = R.discord_payload(self._build(), 1)
+        self.assertTrue(pl.get("large_image", "").startswith("https://"), pl.get("large_image"))
+        self.assertIn("Очищение от мерзости", pl["large_text"])
+        self.assertTrue(pl.get("small_image", "").startswith("https://"))
+        self.assertEqual(pl.get("small_text"), "Темная преданность")
+
+    def test_tick_repushes_and_reschedules(self):
+        app = make_app()
+        sent = []
+
+        class D:
+            rpc = object()
+            client_id = "7"
+            error = ""
+
+            def update(self, **kw):
+                sent.append(kw)
+                return True
+        app.discord = D()
+        app.build = self._build()
+        jobs = []
+        app.root.after = lambda ms, fn=None: (jobs.append((ms, fn)), len(jobs))[1]
+        app.root.after_cancel = lambda j: None
+        app._discord_tick()
+        self.assertTrue(sent, "тик не повторил статус")
+        self.assertTrue(any(ms == 15000 for ms, _ in jobs), "тик не запланировал следующий")
+
+    def test_push_reconnects_once(self):
+        app = make_app()
+        app.log = lambda msg: None
+        state = {"fails": 1}
+
+        class D:
+            rpc = object()
+            client_id = "7"
+            error = ""
+            started = 0
+
+            def start(self):
+                self.started += 1
+                return True
+
+            def update(self, **kw):
+                if state["fails"]:
+                    state["fails"] -= 1
+                    return False
+                return True
+        app.discord = D()
+        app.build = self._build()
+        app._discord_push()
+        self.assertEqual(app.discord.started, 1, "после неудачи не было переподключения")
+        self.assertIsNotNone(app.discord.rpc)
+
     def test_generate_build_pushes_presence(self):
         app = make_app()
         app.mode_var = ST_VAR(app, "KILLER")
