@@ -3012,13 +3012,52 @@ class App:
                            command=lambda: self.grab_ocr_region()).pack(side="left", padx=2)
 
         # тайминги + опции
-        rightf = ttk.Frame(self.tab_coords)
-        rightf.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=8)
-        rightf.rowconfigure(2, weight=1)
+        # правая колонка выше окна целиком не влезает — делаем её прокручиваемой,
+        # иначе нижние рамки («СЕРВИС», «АВТООБНОВЛЕНИЕ», Discord) обрезаются
+        rcanvas = tk.Canvas(self.tab_coords, bg="#0e1116", highlightthickness=0)
+        rsb = ttk.Scrollbar(self.tab_coords, orient="vertical", command=rcanvas.yview)
+        rightf = ttk.Frame(rcanvas)
+        rwin = rcanvas.create_window((0, 0), window=rightf, anchor="nw")
+        bind_scroll_width(rcanvas, rightf, rwin)
+        rcanvas.configure(yscrollcommand=rsb.set)
+        rcanvas.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=8)
+        rsb.grid(row=0, column=2, sticky="ns", pady=8)
+        self.tab_coords.columnconfigure(1, weight=1)
+        self.tab_coords.rowconfigure(0, weight=1)
+
+        def _rwheel(event, target=None):
+            delta = -1 if getattr(event, "num", 0) == 4 or getattr(event, "delta", 0) > 0 else 1
+            rcanvas.yview_scroll(delta, "units")
+            return "break"
+        rcanvas.bind("<MouseWheel>", _rwheel)
+        rcanvas.bind("<Button-4>", _rwheel)
+        rcanvas.bind("<Button-5>", _rwheel)
+        for child in (rightf, rcanvas):
+            child.bind("<Enter>", lambda e, c=rcanvas: c.focus_set())
         rightf.columnconfigure(0, weight=1)
 
+        dcfg = self.cfg.get("discord") or {}
+        df = ttk.LabelFrame(rightf, text=" DISCORD: СТАТУС С БИЛДОМ ")
+        df.grid(row=0, column=0, sticky="ew")
+        self.discord_var = tk.BooleanVar(value=bool(dcfg.get("enabled", False)))
+        ttk.Checkbutton(df, text="Статус в Discord (Rich Presence): билд под ником",
+                        variable=self.discord_var,
+                        command=self._discord_apply).pack(anchor="w", padx=8, pady=(4, 0))
+        drow = ttk.Frame(df)
+        drow.pack(fill="x", padx=8, pady=(0, 2))
+        ttk.Label(drow, text="Client ID:").pack(side="left")
+        self.discord_id_var = tk.StringVar(value=str(dcfg.get("client_id", "")))
+        ttk.Entry(drow, textvariable=self.discord_id_var, width=22).pack(side="left", padx=(4, 4))
+        ttk.Button(drow, text="Применить", width=10,
+                   command=self._discord_apply).pack(side="left")
+        ttk.Label(df, text="Client ID: discord.com/developers/applications -> New Application "
+                           "-> скопировать Client ID. Нужны запущенный Discord-клиент "
+                           "и pypresence (в EXE уже внутри).",
+                  foreground="#8d99a6", font=("Segoe UI", 8), justify="left",
+                  wraplength=430).pack(anchor="w", padx=8, pady=(0, 6))
+
         tf = ttk.LabelFrame(rightf, text=" ТАЙМИНГИ ")
-        tf.grid(row=0, column=0, sticky="ew")
+        tf.grid(row=1, column=0, sticky="ew", pady=(6, 0))
         for key, (default, desc) in TIMING_DEFAULTS.items():
             row = ttk.Frame(tf)
             row.pack(fill="x", padx=6, pady=2)
@@ -3030,7 +3069,7 @@ class App:
             self._timing_widgets[key] = ent
 
         of = ttk.LabelFrame(rightf, text=" ПАРАМЕТРЫ КЛИКОВ ")
-        of.grid(row=1, column=0, sticky="ew", pady=6)
+        of.grid(row=2, column=0, sticky="ew", pady=6)
         self._add_option(of, "use_clear_button", "Кликать «×» очистки перед поиском")
         self._add_option(of, "verify_clipboard", "Проверять буфер обмена перед вставкой")
         self._add_option(of, "restore_clipboard", "Восстанавливать буфер обмена после")
@@ -3049,7 +3088,7 @@ class App:
         ttk.Entry(row, textvariable=self._option_vars["abort_key"], width=8).pack(side="right")
 
         sf = ttk.LabelFrame(rightf, text=" СЕРВИС ")
-        sf.grid(row=2, column=0, sticky="nsew")
+        sf.grid(row=3, column=0, sticky="nsew")
         for text, cmd in (("💾 Сохранить все настройки", self.save_settings),
                           ("🩺 Проверить базу данных", self.run_data_check),
                           ("📝 Открыть dbd_database.json", self.open_db_file),
@@ -3057,28 +3096,9 @@ class App:
                           ("🖱 Тест наведения на слот (без клика)", self.test_hover_slot),
                           ("🧪 Тестовый клик по «first_result»", self.test_click_result)):
             ttk.Button(sf, text=text, command=cmd).pack(fill="x", padx=6, pady=2)
-        # Discord Rich Presence: компактно в «СЕРВИСЕ», чтобы секция не терялась
-        dcfg = self.cfg.get("discord") or {}
-        ttk.Separator(sf, orient="horizontal").pack(fill="x", padx=6, pady=(6, 4))
-        self.discord_var = tk.BooleanVar(value=bool(dcfg.get("enabled", False)))
-        ttk.Checkbutton(sf, text="Статус в Discord (Rich Presence): билд под ником",
-                        variable=self.discord_var,
-                        command=self._discord_apply).pack(anchor="w", padx=8)
-        drow = ttk.Frame(sf)
-        drow.pack(fill="x", padx=8, pady=(0, 2))
-        ttk.Label(drow, text="Client ID:").pack(side="left")
-        self.discord_id_var = tk.StringVar(value=str(dcfg.get("client_id", "")))
-        ttk.Entry(drow, textvariable=self.discord_id_var, width=22).pack(side="left", padx=(4, 4))
-        ttk.Button(drow, text="Применить", width=10,
-                   command=self._discord_apply).pack(side="left")
-        ttk.Label(sf, text="Client ID: discord.com/developers/applications -> New Application "
-                           "-> скопировать Client ID. Нужны запущенный Discord-клиент "
-                           "и pypresence (в EXE уже внутри).",
-                  foreground="#8d99a6", font=("Segoe UI", 8), justify="left",
-                  wraplength=430).pack(anchor="w", padx=8, pady=(0, 6))
 
         upf = ttk.LabelFrame(rightf, text=" 🔄 АВТООБНОВЛЕНИЕ ")
-        upf.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        upf.grid(row=4, column=0, sticky="ew", pady=(6, 0))
         self.auto_update_var = tk.BooleanVar(value=bool(self.cfg["update"].get("auto", True)))
         ttk.Checkbutton(upf, text="Проверять релизы GitHub (при запуске и каждые 30 мин)",
                         variable=self.auto_update_var,
