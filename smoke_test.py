@@ -297,6 +297,77 @@ class TestGeneration(unittest.TestCase):
                 self.assertFalse(set(D.REMOVED_FROM_GAME) & offered)
 
 
+class TestAddonRenameMigration(unittest.TestCase):
+    """Переименования RU-локализации (ADDON_RENAMES): пулы и «только открытое у
+    меня» лечатся даже из файла совпадающей ревизии («Последний Каваны»)."""
+
+    def _db_with_stale_name(self, target, stale):
+        fresh = R.db_defaults()
+        nurs = fresh["killers"]["Медсестра"]["addons"]
+        nurs[:] = [stale if a == "Последний вздох Кавана" else a for a in nurs]
+        fresh["owned"]["killer_addons"] = [stale]
+        with open(target, "w", encoding="utf-8") as fh:
+            json.dump(fresh, fh, ensure_ascii=False)
+
+    def test_builtin_db_has_official_name(self):
+        """В игре: «Последний вздох Кавана» (тултип и Steam-гид); старых
+        написаний не остаётся ни в базе, ни в иконах, ни в RU->EN маппинге."""
+        import dbd_data as D
+        import dbd_icons as I
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(R.__file__), "tools"))
+        try:
+            import addon_names_ru_en as NE
+        finally:
+            sys.path.pop(0)
+        nurs = D.KILLERS["Медсестра"]["addons"]
+        self.assertIn("Последний вздох Кавана", nurs)
+        for stale in D.ADDON_RENAMES:
+            self.assertNotIn(stale, nurs)
+            self.assertNotIn(stale, I.ADDON_ICONS)
+            self.assertNotIn(stale, NE.ADDON_RU_EN["Медсестра"])
+        self.assertIn("Последний вздох Кавана", I.ADDON_ICONS)
+        self.assertEqual(NE.ADDON_RU_EN["Медсестра"]["Последний вздох Кавана"],
+                         "Kavanagh's Last Breath")
+
+    def test_stale_local_db_heals_without_revision_bump(self):
+        """Ревизия совпадает, но в файле старая строка: после load_db пул и
+        owned носят официальное имя, вылеченный файл перезаписан на диске."""
+        import dbd_data as D
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "dbd_database.json")
+            self._db_with_stale_name(target, "Последний Каваны")
+            with mock.patch.object(R, "DB_FILE", target):
+                db = R.load_db()
+            nurs = db["killers"]["Медсестра"]["addons"]
+            self.assertIn("Последний вздох Кавана", nurs)
+            self.assertNotIn("Последний Каваны", nurs)
+            self.assertEqual(nurs.count("Последний вздох Кавана"), 1)
+            self.assertEqual(db["owned"]["killer_addons"],
+                             ["Последний вздох Кавана"])
+            self.assertTrue(db.get("_db_renamed"))
+            with open(target, encoding="utf-8") as fh:
+                on_disk = json.load(fh)
+            self.assertIn("Последний вздох Кавана",
+                          on_disk["killers"]["Медсестра"]["addons"])
+            self.assertEqual(on_disk["db_revision"], D.DB_REVISION)
+
+    def test_both_variants_deduplicated(self):
+        """Если файл держал оба варианта сразу, дубликат не проскакивает."""
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "dbd_database.json")
+            self._db_with_stale_name(target, "Последний вздох Каваны")
+            with open(target, encoding="utf-8") as fh:
+                raw = json.load(fh)
+            raw["killers"]["Медсестра"]["addons"].append("Последний вздох Кавана")
+            with open(target, "w", encoding="utf-8") as fh:
+                json.dump(raw, fh, ensure_ascii=False)
+            with mock.patch.object(R, "DB_FILE", target):
+                db = R.load_db()
+            nurs = db["killers"]["Медсестра"]["addons"]
+            self.assertEqual(nurs.count("Последний вздох Кавана"), 1)
+
+
 class TestIcons(unittest.TestCase):
     """Карта иконок обязана покрывать все навыки из базы — иначе в UI будут дырки."""
 
@@ -2409,73 +2480,6 @@ class TestResizeDebounce(unittest.TestCase):
         self.assertEqual(content.shown, 1, "после паузы контейнер возвращается")
         app._on_root_configure(ev(1030))
         self.assertEqual(content.hidden, 1, "тот же размер игнорируется")
-
-    def test_inner_configure_updates_scrollregion(self):
-        c, inner = self.FakeCanvas(), self.FakeInner()
-        R.bind_scroll_width(c, inner, "win")
-        inner.bound["<Configure>"](self._ev(100))
-        self.assertEqual(c.regions, [(0, 0, 10, 10)])
-
-
-class TestResizeDebounce(unittest.TestCase):
-    """Расширение окна не должно перекладывать содержимое на каждый пиксель:
-    ширина вкладыша применяется один раз после всплеска <Configure>."""
-
-    class FakeCanvas:
-        def __init__(self):
-            self.widths = []
-            self.jobs = []
-            self.regions = []
-            self.bound = {}
-            self._n = 0
-
-        def bind(self, seq, fn):
-            self.bound[seq] = fn
-
-        def itemconfigure(self, win, width=None):
-            self.widths.append(width)
-
-        def after(self, ms, fn):
-            self._n += 1
-            self.jobs.append((self._n, fn))
-            return self._n
-
-        def after_cancel(self, job):
-            self.jobs = [(i, f) for i, f in self.jobs if i != job]
-
-        def configure(self, **kw):
-            if "scrollregion" in kw:
-                self.regions.append(kw["scrollregion"])
-
-        def bbox(self, *a):
-            return (0, 0, 10, 10)
-
-    class FakeInner:
-        def __init__(self):
-            self.bound = {}
-
-        def bind(self, seq, fn):
-            self.bound[seq] = fn
-
-    def _ev(self, w):
-        e = mock.MagicMock()
-        e.width = w
-        return e
-
-    def test_burst_collapses_to_single_relayout(self):
-        c, inner = self.FakeCanvas(), self.FakeInner()
-        on_canvas = R.bind_scroll_width(c, inner, "win", pad=2, delay=100)
-        for w in (800, 820, 840, 900):
-            on_canvas(self._ev(w))
-        self.assertEqual(len(c.jobs), 1, "всплеск не схлопнут в один таймер")
-        self.assertEqual(c.widths, [], "во время_drag содержимое не трогаем")
-        c.jobs[0][1]()
-        self.assertEqual(c.widths, [898])
-        # та же ширина повторно — ни новых таймеров, ни перекладываний
-        before = len(c.jobs)
-        on_canvas(self._ev(900))
-        self.assertEqual(len(c.jobs), before)
-        self.assertEqual(c.widths, [898])
 
     def test_inner_configure_updates_scrollregion(self):
         c, inner = self.FakeCanvas(), self.FakeInner()

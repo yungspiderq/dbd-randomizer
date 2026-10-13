@@ -56,7 +56,7 @@ ADDON_RU_EN = {
         "Последний вздох «Плохиша»": "\"Bad Man's\" Last Breath",
         "Последний вздох Кэмпбелла": "Campbell's Last Breath",
         "Последний вздох Дженнер": "Jenner's Last Breath",
-        "Последний вздох Каваны": "Kavanagh's Last Breath",
+        "Последний вздох Кавана": "Kavanagh's Last Breath",
         "Судорожный вздох": "Spasmodic Breath",
         "Карманные часы": "Pocket Watch (Spencer's Last Breath)",
         "Деревянная лошадка": "Wooden Horse",

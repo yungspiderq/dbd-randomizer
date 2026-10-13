@@ -808,7 +808,7 @@ ADDON_ICONS = {
     'Последние звуки': 'IconAddon_lastKnownRecording.png',
     'Последний вздох «Плохиша»': 'IconAddon_badMansLastBreath.png',
     'Последний вздох Дженнер': 'IconAddon_jennersLastBreath.png',
-    'Последний вздох Каваны': 'IconAddon_kavanaghsLastBreath.png',
+    'Последний вздох Кавана': 'IconAddon_kavanaghsLastBreath.png',
     'Последний вздох Кэмпбелла': 'IconAddon_campbellsLastBreath.png',
     'Посох увядания': 'IconAddon_StaffOfWithering.png',
     'Потрепанная лента': 'IconAddon_batteredTape.png',

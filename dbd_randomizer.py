@@ -846,6 +846,48 @@ def load_db():
             dropped += 1
     if dropped:
         db["_db_dropped_removed"] = dropped
+    # Третий контур: переименованные в игре (RU-локализация) строки заменяются
+    # актуальными даже из файла совпадающей ревизии — ревизия не меняется при
+    # исправлении написания, а старая строка не должна оставаться ни в пулах,
+    # ни в белых списках «только открытое у меня» (кейс «Последний Каваны»).
+    renames = getattr(DATA, "ADDON_RENAMES", {}) or {}
+    if renames:
+        def _renamed(seq):
+            new = [renames.get(x, x) for x in seq]
+            if new == seq:
+                return seq, False
+            seen, dedup = set(), []
+            for x in new:  # файл мог держать оба варианта сразу
+                if x not in seen:
+                    seen.add(x)
+                    dedup.append(x)
+            return dedup, True
+
+        renamed = 0
+        for info in db["killers"].values():
+            if isinstance(info, dict) and info.get("addons"):
+                new, changed = _renamed(info["addons"])
+                if changed:
+                    info["addons"] = new
+                    renamed += 1
+        for entry in db["survivor_items"].values():
+            if isinstance(entry, dict) and entry.get("addons"):
+                new, changed = _renamed(entry["addons"])
+                if changed:
+                    entry["addons"] = new
+                    renamed += 1
+        for group in db["owned"].values():
+            if isinstance(group, list) and group:
+                new, changed = _renamed(group)
+                if changed:
+                    group[:] = new
+                    renamed += 1
+        if renamed:
+            db["_db_renamed"] = renamed
+            try:
+                dump_db(db)
+            except Exception:
+                pass
     return db
 
 
