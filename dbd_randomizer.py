@@ -4446,6 +4446,15 @@ class App:
             self._discord_start_ts = int(time.time())
             self._discord_last_details = None
             self.log("✓ Discord-статус включён: билд будет виден под твоим ником.")
+        elif self.discord.rpc is None:
+            # соединение умерло (например, из-за отклонённого апдейта): «Применить»
+            # обязан поднять его заново, а не молчать
+            if not self.discord.start():
+                self.log(f"⚠ Discord не переподключился: {self.discord.error}.")
+                return
+            self._discord_start_ts = int(time.time())
+            self._discord_last_details = None
+            self.log("✓ Discord переподключился вручную.")
         if self._discord_job is None:
             self._discord_job = self.root.after(15000, self._discord_tick)
         self._discord_push()
@@ -4457,19 +4466,35 @@ class App:
         payload = discord_payload(self.build, getattr(self, "_discord_start_ts", int(time.time())))
         if not payload:
             return
-        if d.update(**payload):
-            if getattr(self, "_discord_last_details", None) != payload["details"]:
-                self._discord_last_details = payload["details"]
-                self.log(f"→ Discord-статус: {payload['details']}")
-            return
+        # Discord некоторых клиентов рвёт сокет из-за внешних URL картинок:
+        # держим текстовый вариант как фолбэк и запоминаем, что картинки не идут
+        variants = [payload]
+        if "large_image" in payload or "small_image" in payload:
+            variants.append({k: v for k, v in payload.items()
+                             if k not in ("large_image", "small_image", "small_text")})
+        if getattr(self, "_discord_no_images", False):
+            variants.reverse()
+        for pl in variants:
+            if d.rpc is not None and d.update(**pl):
+                if pl is not payload:
+                    self._discord_no_images = True
+                if getattr(self, "_discord_last_details", None) != pl["details"]:
+                    self._discord_last_details = pl["details"]
+                    self.log(f"→ Discord-статус: {pl['details']}")
+                return
         # апдейт не ушёл: разовый реконнект и повтор (Discord мог мигнуть)
         self.log("⚠ Discord не принял обновление статуса — переподключаюсь…")
         if d.start():
             self._discord_start_ts = int(time.time())
-            if d.update(**payload):
-                self._discord_last_details = payload["details"]
-                self.log("✓ Discord переподключился, статус обновлён.")
-                return
+            for pl in reversed(variants):
+                if d.update(**pl):
+                    if pl is not payload:
+                        self._discord_no_images = True
+                        self.log("⚠ Discord не принимает картинки в статусе — "
+                                 "показываю текстом без иконок.")
+                    self._discord_last_details = pl["details"]
+                    self.log("✓ Discord переподключился, статус обновлён.")
+                    return
         self.log("⚠ Discord отвалился — статус выключен до следующего «Применить».")
         d.rpc = None
 
