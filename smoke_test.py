@@ -403,6 +403,83 @@ class TestAddonRenameMigration(unittest.TestCase):
             self.assertEqual(nurs.count("Последний вздох Кавана"), 1)
 
 
+class TestJudgmentAddons(unittest.TestCase):
+    """Патч 10.1.0 «Хор греха»: у «Правосудия» полный пул аддонов (20),
+    каждый с иконкой и RU->EN парой — иначе генерация выдаёт «аддон не
+    подобран», а автоэкипировка пропускает шаг (кейс пользователя)."""
+
+    def test_pool_complete(self):
+        import dbd_data as D
+        info = D.KILLERS["Правосудие"]
+        addons = info["addons"]
+        self.assertEqual(len(addons), 20)
+        self.assertEqual(len(set(addons)), 20, "дубликаты в пуле")
+        self.assertNotIn("_todo", info)
+        self.assertEqual(info["power"], "Воля богов")
+        self.assertEqual(info["perks"], ["Небесный свидетель",
+                                          "Порча: в твоей власти",
+                                          "Опустошение"])
+
+    def test_every_addon_has_icon(self):
+        import dbd_data as D
+        import dbd_icons as I
+        for a in D.KILLERS["Правосудие"]["addons"]:
+            self.assertIn(a, I.ADDON_ICONS, f"нет иконки для {a}")
+            self.assertTrue(I.ADDON_ICONS[a].startswith("T_UI_iconAddon_"))
+
+    def test_ru_en_mapping_complete(self):
+        import dbd_data as D
+        sys.path.insert(0, os.path.join(HERE, "tools"))
+        try:
+            import addon_names_ru_en as NE
+        finally:
+            sys.path.pop(0)
+        mapping = NE.ADDON_RU_EN["Правосудие"]
+        for a in D.KILLERS["Правосудие"]["addons"]:
+            self.assertIn(a, mapping, f"нет RU->EN для {a}")
+        # имена из datatable игры (K044), а не из сносок RU-вики
+        self.assertEqual(mapping["Перчатка Конрада"], "Koenrad's Gauntlet")
+        self.assertEqual(mapping["Магнитные кандалы"], "Magnetised Manacles")
+        self.assertEqual(mapping["Зеркало создателей"], "Mirror of the Creators")
+
+
+class TestEmptyPoolRefill(unittest.TestCase):
+    """Четвёртый контур load_db: пустой пул аддонов в локальном файле
+    добирается из встроенной базы и перезаписывается на диск; непустой
+    (в т. ч. урезанный вручную) список не трогает."""
+
+    def _write(self, target, mutate):
+        fresh = R.db_defaults()
+        mutate(fresh)
+        with open(target, "w", encoding="utf-8") as fh:
+            json.dump(fresh, fh, ensure_ascii=False)
+
+    def test_empty_local_pool_refilled_and_rewritten(self):
+        import dbd_data as D
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "dbd_database.json")
+            self._write(target, lambda db: db["killers"]["Правосудие"].__setitem__("addons", []))
+            with mock.patch.object(R, "DB_FILE", target):
+                db = R.load_db()
+            addons = db["killers"]["Правосудие"]["addons"]
+            self.assertEqual(addons, list(D.KILLERS["Правосудие"]["addons"]))
+            self.assertTrue(db.get("_db_refilled"))
+            with open(target, encoding="utf-8") as fh:
+                on_disk = json.load(fh)
+            self.assertEqual(on_disk["killers"]["Правосудие"]["addons"], addons)
+
+    def test_manual_short_pool_untouched(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "dbd_database.json")
+            self._write(target, lambda db: db["killers"]["Правосудие"].__setitem__(
+                "addons", ["Череп искателя"]))
+            with mock.patch.object(R, "DB_FILE", target):
+                db = R.load_db()
+            self.assertEqual(db["killers"]["Правосудие"]["addons"],
+                             ["Череп искателя"])
+            self.assertNotIn("_db_refilled", db)
+
+
 class TestIcons(unittest.TestCase):
     """Карта иконок обязана покрывать все навыки из базы — иначе в UI будут дырки."""
 

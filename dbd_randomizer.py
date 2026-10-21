@@ -888,6 +888,31 @@ def load_db():
                 dump_db(db)
             except Exception:
                 pass
+    # Четвёртый контур: пустой пул аддонов в файле добирается из встроенной
+    # базы. Кейс «Правосудия»: убийца добавлен релизом без аддонов (RU-имена
+    # ещё не были опубликованы), локальный файл ревизии 2 так и держит
+    # "addons": [] и при совпадающей ревизии перетирает встроенную базу —
+    # генерация и автоэкипировка не находят ни одного аддона. Срабатывает
+    # только когда локальный пул пуст совсем: непустой ручной список
+    # оставляем как есть.
+    refilled = 0
+    for section, built_in in (("killers", DATA.KILLERS),
+                              ("survivor_items", DATA.SURVIVOR_ITEMS)):
+        for key, entry in db[section].items():
+            built = built_in.get(key)
+            if not isinstance(entry, dict) or not isinstance(built, dict):
+                continue
+            built_pool = [a for a in built.get("addons", []) if a not in removed]
+            cur_pool = [a for a in entry.get("addons", []) if a not in removed]
+            if built_pool and not cur_pool:
+                entry["addons"] = list(built_pool)
+                refilled += 1
+    if refilled:
+        db["_db_refilled"] = refilled
+        try:
+            dump_db(db)
+        except Exception:
+            pass
     return db
 
 

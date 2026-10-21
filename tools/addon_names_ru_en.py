@@ -483,6 +483,31 @@ ADDON_RU_EN = {
         "Погнутое колесо": "Bent Wheel", "Ручной культиватор": "Garden Claw",
         "Туфля санитарки": "Orderly's Shoe",
     },
+    # Патч 10.1.0 «Хор греха»: RU-имена — официальная Steam-локализация
+    # (dead-by-daylight.fandom.com/ru, «Воля богов (улучшения)»),
+    # EN-имена — Module:Datatable/Loadout и Module:Datatable/Icons (K044).
+    "Правосудие": {
+        "Зеркало создателей": "Mirror of the Creators",
+        "Обсидиановое перо": "Obsidian Feather",
+        "Глаза Герхардта": "Eyes of Gerhardt",
+        "Корона разрушителя": "Crown of the Destroyer",
+        "Самодельные детонаторы": "Improvised Detonators",
+        "Цепи еретика": "Chains of the Heretic",
+        "Перегретое стекло": "Superheated Glass",
+        "Повязка преданной": "Blindfold of the Devoted",
+        "Приказ инквизиции": "Order of Inquisition",
+        "Священная крылатая икона": "Holy Winged Icon",
+        "Электрофакел": "Electric Torch",
+        "Бессмертное пламя": "Undying Flame",
+        "Боевой рог исповедника": "Confessor's War Horn",
+        "Магнитные кандалы": "Magnetised Manacles",
+        "Метка единоверца": "Mark of the Adherent",
+        "Телерецептор Авроры": "Aurora's Telereceptor",
+        "Метка еретика": "Heretic's Mark",
+        "Перчатка Конрада": "Koenrad's Gauntlet",
+        "Скамейка для молитвы": "Prayer Kneeler",
+        "Череп искателя": "Searcher's Skull",
+    },
 }
 
 # Аддоны предметов выживших: категория -> {RU: EN}
