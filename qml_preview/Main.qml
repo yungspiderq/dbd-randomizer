@@ -162,20 +162,12 @@ ApplicationWindow {
                 y: 25
                 width: parent.width - 36
                 spacing: 8
-                Rectangle {
-                    width: 43; height: 43; radius: 11
-                    color: "#332126"
+                Image {
+                    width: 51; height: 51
+                    source: "assets/app_icon.png"
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
                     anchors.horizontalCenter: parent.horizontalCenter
-                    Canvas {
-                        anchors.fill: parent
-                        onPaint: {
-                            let c = getContext("2d");
-                            c.strokeStyle = "#ec605b"; c.lineWidth = 2.7; c.lineCap="round";
-                            c.beginPath(); c.moveTo(12,12); c.lineTo(31,31);
-                            c.moveTo(31,12); c.lineTo(12,31);
-                            c.moveTo(20,8); c.lineTo(22,35); c.stroke();
-                        }
-                    }
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
