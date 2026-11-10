@@ -277,9 +277,10 @@ ApplicationWindow {
                             Text { text: "Создайте собственный билд"; color: win.muted; font.pixelSize: 12 }
                             Row {
                                 spacing: 8
-                                UiButton { width: 145; label: "ВЫЖИВШИЙ"; primary: makerSide === "SURVIVOR"; onClicked: makerSide = "SURVIVOR" }
-                                UiButton { width: 145; label: "МАНЬЯК"; primary: makerSide === "KILLER"; onClicked: makerSide = "KILLER" }
+                                UiButton { width: 145; label: "ВЫЖИВШИЙ"; primary: makerPage.makerSide === "SURVIVOR"; onClicked: makerPage.makerSide = "SURVIVOR" }
+                                UiButton { width: 145; label: "МАНЬЯК"; primary: makerPage.makerSide === "KILLER"; onClicked: makerPage.makerSide = "KILLER" }
                             }
+                            id: makerPage
                             property string makerSide: "SURVIVOR"
                             UiField { id: makerChar; width: parent.width; placeholderText: "Персонаж — точное имя из базы" }
                             UiField { id: makerItem; width: parent.width; placeholderText: "Предмет / сила (для маньяка заполняется автоматически)" }
@@ -293,7 +294,7 @@ ApplicationWindow {
                             UiField { id: makerPerk3; width: parent.width; placeholderText: "Навык 3 (точное название)" }
                             UiField { id: makerPerk4; width: parent.width; placeholderText: "Навык 4 (точное название)" }
                             UiButton { width: parent.width; label: "СОБРАТЬ БИЛД"; primary: true;
-                                onClicked: backend.buildCustom(makerSide, makerChar.text, makerItem.text,
+                                onClicked: backend.buildCustom(makerPage.makerSide, makerChar.text, makerItem.text,
                                     makerAddon1.text, makerAddon2.text, makerPerk1.text,
                                     makerPerk2.text, makerPerk3.text, makerPerk4.text) }
                             UiButton { width: parent.width; label: "ОТКРЫТЬ РАСШИРЕННЫЙ КОНСТРУКТОР"; onClicked: backend.returnToLegacy() }
