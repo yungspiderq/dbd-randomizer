@@ -22,6 +22,7 @@ from PySide6.QtWidgets import QWidget
 import dbd_randomizer as core
 import qt_updater
 from addon_effects import AddonEffectLibrary
+from rotation_engine import RotationState, make_rotated_build
 from dbd_icons_store import IconStore
 
 
@@ -33,6 +34,7 @@ class QtBridge(QObject):
     perksChanged = Signal()
     roleChanged = Signal()
     modeChanged = Signal()
+    rotationChanged = Signal()
     statusChanged = Signal()
     optionsChanged = Signal()
     advancedChanged = Signal()
@@ -57,6 +59,8 @@ class QtBridge(QObject):
         if self._role not in ("SURVIVOR", "KILLER"):
             self._role = "SURVIVOR"
         self._mode = self.cfg["options"].get("perk_mode", "mixed")
+        self._rotation = RotationState(self.cfg["options"].get("rotation_state"))
+        self._rotation_enabled = bool(self.cfg["options"].get("rotation_enabled", False))
         self._locks = [False] * 4
         self._history = []
         self._status = "Загружены игровые данные v" + core.APP_VERSION
@@ -145,6 +149,8 @@ class QtBridge(QObject):
     def _save(self):
         self.cfg.setdefault("options", {})["side"] = self._role
         self.cfg["options"]["perk_mode"] = self._mode
+        self.cfg["options"]["rotation_enabled"] = self._rotation_enabled
+        self.cfg["options"]["rotation_state"] = self._rotation.serialize()
         self.cfg.setdefault("owned", {})["killers"] = sorted(self._owned["K"]) or ["__none__"]
         self.cfg["owned"]["survivors"] = sorted(self._owned["S"]) or ["__none__"]
         core.save_config(self.cfg)
@@ -159,6 +165,32 @@ class QtBridge(QObject):
     @Property(str, notify=modeChanged)
     def mode(self):
         return self._mode
+
+    @Property(bool, notify=rotationChanged)
+    def rotationEnabled(self):
+        return self._rotation_enabled
+
+    @Property("QVariantMap", notify=rotationChanged)
+    def rotationStats(self):
+        return self._rotation.info(self._role, self.available_characters(self._role))
+
+    @Slot(bool)
+    def setRotationEnabled(self, enabled):
+        enabled = bool(enabled)
+        if self._rotation_enabled == enabled:
+            return
+        self._rotation_enabled = enabled
+        self._save()
+        self.rotationChanged.emit()
+        self._notify("Ротация включена: шанс повторов снижен." if enabled else
+                     "Обычный случайный режим включён.")
+
+    @Slot()
+    def resetRotation(self):
+        self._rotation.reset(self._role)
+        self._save()
+        self.rotationChanged.emit()
+        self._notify("История ротации для выбранной стороны очищена.")
 
     @Property(str, notify=statusChanged)
     def status(self):
@@ -380,6 +412,7 @@ class QtBridge(QObject):
         self._locks = [False] * 4
         self.roleChanged.emit()
         self.perksChanged.emit()
+        self.rotationChanged.emit()
         self._save()
 
     @Slot(str)
@@ -473,12 +506,18 @@ class QtBridge(QObject):
                       addons_enabled=bool(self._option("addons_enabled")),
                       skin_enabled=bool(self._option("skin_enabled")),
                       owned_skins=self.cfg.get("skins", {}), fx=fx)
-            func = core.make_killer_build if self._role == "KILLER" else core.make_survivor_build
-            self.build = func(self.db, names, **kw)
+            if self._rotation_enabled:
+                self.build = make_rotated_build(core, self.db, self._role, names, self._rotation, **kw)
+            else:
+                func = core.make_killer_build if self._role == "KILLER" else core.make_survivor_build
+                self.build = func(self.db, names, **kw)
             if ch:
                 self.build["challenge"] = ch
             if self._option("class_enabled"):
                 self.build["class"] = core.pick_class(self._role)
+            if self._rotation_enabled:
+                self._rotation.record_build(self.build, core.EMPTY, core.NO_ADDONS)
+                self.rotationChanged.emit()
             self._locks = [False] * 4
             self._sync()
             self._history.insert(0, tidy(core.build_to_clipboard_text(self.build)).replace("\n", " | "))
@@ -514,7 +553,14 @@ class QtBridge(QObject):
             if whitelist:
                 allowed = [p for p in allowed if p in whitelist]
         if allowed:
-            self.build["perks"][index] = random.choice(allowed)
+            if self._rotation_enabled:
+                chosen = self._rotation.select(self.build["side"], "perks", allowed)[0]
+                self._rotation.record(self.build["side"], "perks", [chosen])
+                self.rotationChanged.emit()
+                self._save()
+            else:
+                chosen = random.choice(allowed)
+            self.build["perks"][index] = chosen
             self._sync()
 
     @Slot()
