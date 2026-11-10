@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 
 from PySide6.QtCore import QTimer, QUrl
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 HERE = Path(__file__).resolve().parent
@@ -15,7 +15,7 @@ from qt_bridge import QtBridge
 
 
 def main():
-    app = QGuiApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setApplicationName("DBD Randomizer Qt Beta")
     backend = QtBridge()
     engine = QQmlApplicationEngine()
