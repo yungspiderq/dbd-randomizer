@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 
 from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
@@ -16,7 +17,15 @@ from native_backend import QtBridge
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("DBD Randomizer Qt Beta 2")
+    app.setApplicationName("DBD Randomizer Qt Beta 7")
+    frozen = bool(getattr(sys, "frozen", False))
+    packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
+    icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
+    if not frozen and not icon.is_file():
+        from build_icon import build
+        build()
+    if icon.is_file():
+        app.setWindowIcon(QIcon(str(icon)))
     backend = QtBridge()
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("backend", backend)
@@ -26,6 +35,10 @@ def main():
         backend.close()
         print("ERROR: cannot load Main.qml", file=sys.stderr)
         return 1
+    if icon.is_file():
+        window = engine.rootObjects()[0]
+        if hasattr(window, "setIcon"):
+            window.setIcon(QIcon(str(icon)))
     if "--smoke" in sys.argv:
         QTimer.singleShot(2800, app.quit)
     app.aboutToQuit.connect(backend.close)
