@@ -192,6 +192,48 @@ class QtBackendTests(unittest.TestCase):
         self.assertFalse(data["verified"])
         self.assertFalse(data["effect"])
 
+    def test_addon_notes_cover_other_killers_and_survivors(self):
+        examples = [
+            ("KILLER", "Свинья", "", "Видеокассета"),
+            ("KILLER", "Кошмар", "", "Садовые грабли"),
+            ("KILLER", "Хороший парень", "", "Жесткая шляпа"),
+            ("SURVIVOR", "", "Фонарики", "Батарейка"),
+            ("SURVIVOR", "", "Аптечки", "Медицинские ножницы"),
+            ("SURVIVOR", "", "Ящики с инструментами", "Катушка проволоки"),
+            ("SURVIVOR", "", "Ключи", "Уникальное обручальное кольцо"),
+        ]
+        for side, char, category, name in examples:
+            with self.subTest(name=name):
+                with patch.object(self.bridge._addon_catalog, "refresh_async"):
+                    self.bridge.selectAddonEffect(side, char, category, name)
+                effect = self.bridge.addonEffect
+                self.assertTrue(effect["verified"])
+                self.assertTrue(effect["effect"])
+                self.assertTrue(effect["english"])
+                self.assertIn("wiki.gg", effect["source"])
+
+    def test_wiki_effect_tags_render_as_broad_mechanic_not_false_specific_claim(self):
+        with patch.object(self.bridge._addon_catalog, "refresh_async"):
+            self.bridge.selectAddonEffect("SURVIVOR", "", "Фонарики", "Сверхмощная батарейка")
+        english = self.bridge.addonEffect["english"]
+        self.bridge._addon_catalog.categories[english] = ["Charges", "ActionTime"]
+        entry = self.bridge.addonEffect
+        self.assertIn("заряды", entry["summary"])
+        self.assertIn("время действия", entry["summary"])
+        self.assertFalse(entry["verified"])
+        self.assertEqual(entry["effect"], "")
+
+    def test_all_survivor_addon_groups_have_english_lookup(self):
+        from tools.addon_names_ru_en import ITEM_ADDON_RU_EN
+        self.assertGreaterEqual(len(ITEM_ADDON_RU_EN), 6)
+        for category, names in ITEM_ADDON_RU_EN.items():
+            with self.subTest(category=category):
+                self.assertTrue(names)
+                ru, english = next(iter(names.items()))
+                entry = self.bridge._addon_catalog.get("SURVIVOR", "", category, ru)
+                self.assertEqual(entry["english"], english)
+                self.assertTrue(entry["source"].startswith("https://"))
+
     def test_custom_build_validation_reports_success_to_ui(self):
         survivor = next(iter(self.bridge.db["survivors"]))
         perks = [row["name"] for row in self.bridge.searchPerks("SURVIVOR", "")[:4]]
