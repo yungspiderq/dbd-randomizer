@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QWidget
 
 import dbd_randomizer as core
 import qt_updater
+from addon_effects import AddonEffectLibrary
 from dbd_icons_store import IconStore
 
 
@@ -42,6 +43,7 @@ class QtBridge(QObject):
     settingsChanged = Signal()
     communityChanged = Signal()
     iconVersionChanged = Signal()
+    addonEffectChanged = Signal()
     runningChanged = Signal()
     updateChanged = Signal()
     _wake = Signal()
@@ -63,6 +65,8 @@ class QtBridge(QObject):
         self._icon_version = 0
         self._icons = IconStore(core.ICONS_DIR, enabled=True)
         self._icon_pending = set()
+        self._addon_catalog = AddonEffectLibrary(core.APP_DIR, on_change=self._effects_updated)
+        self._selected_addon = {"side": "", "character": "", "category": "", "name": ""}
         self._skin_character = next(iter(self.db["survivors"]), "")
         self._skin_filter = ""
         self._classes = {}
@@ -118,6 +122,8 @@ class QtBridge(QObject):
             elif kind == "icons":
                 self._icon_pending.discard(item[1])
                 needs_icons = True
+            elif kind == "effects":
+                self.addonEffectChanged.emit()
             elif kind == "update":
                 self._update_info = item[1]
                 self._update_text = item[2]
@@ -338,6 +344,33 @@ class QtBridge(QObject):
     def _icon_downloaded(self, key):
         self._messages.put(("icons", key))
         self._wake.emit()
+
+    def _effects_updated(self):
+        self._messages.put(("effects",))
+        self._wake.emit()
+
+    @Property("QVariantMap", notify=addonEffectChanged)
+    def addonEffect(self):
+        chosen = self._selected_addon
+        return self._addon_catalog.get(
+            chosen["side"], chosen["character"], chosen["category"], chosen["name"]
+        )
+
+    @Slot(str, str, str, str)
+    def selectAddonEffect(self, side, character, category, name):
+        if not name or name in (core.EMPTY, core.NO_ADDONS):
+            return
+        if side not in ("KILLER", "SURVIVOR"):
+            return
+        self._selected_addon = {"side": side, "character": character,
+                                "category": category, "name": name}
+        self.addonEffectChanged.emit()
+        self._addon_catalog.refresh_async()
+
+    @Slot()
+    def openAddonSource(self):
+        if self._selected_addon["name"]:
+            QDesktopServices.openUrl(QUrl(self.addonEffect["source"]))
 
     @Slot(str)
     def setRole(self, role):
