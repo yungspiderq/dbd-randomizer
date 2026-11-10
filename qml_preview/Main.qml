@@ -1336,14 +1336,16 @@ ApplicationWindow {
                 }
                 Rectangle { width: parent.width; height: 1; color: "#364255" }
                 Text {
-                    text: backend.addonEffect.verified ? "ПРОВЕРЕННЫЙ ИГРОВОЙ ЭФФЕКТ" : "ИГРОВОЙ ЭФФЕКТ"
+                    text: backend.addonEffect.verified ? "КРАТКОЕ ОПИСАНИЕ ЭФФЕКТА" : "КАТЕГОРИИ ЭФФЕКТА"
                     color: backend.addonEffect.verified ? "#e6a59c" : "#a0b0c2"
                     font.pixelSize: 11
                     font.bold: true
                 }
                 Text {
                     text: backend.addonEffect.effect ||
-                        "Проверенное краткое описание этого аддона пока не добавлено. Полный актуальный эффект доступен в справочнике wiki.gg."
+                        (backend.addonEffect.summary ?
+                          backend.addonEffect.summary + ". Точные значения и условия действия смотри в справочнике wiki.gg." :
+                          "Проверенное описание пока отсутствует. Открой справочник wiki.gg для актуальных механик.")
                     width: parent.width
                     font.pixelSize: 13
                     color: "#edf0f6"
