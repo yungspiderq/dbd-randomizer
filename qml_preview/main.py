@@ -20,7 +20,8 @@ def main():
     backend = QtBridge()
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("backend", backend)
-    engine.load(QUrl.fromLocalFile(str(HERE / "Main.qml")))
+    qml_path = (Path(sys._MEIPASS) / "qml_preview" / "Main.qml") if getattr(sys, "frozen", False) else HERE / "Main.qml"
+    engine.load(QUrl.fromLocalFile(str(qml_path)))
     if not engine.rootObjects():
         backend.close()
         print("ERROR: cannot load Main.qml", file=sys.stderr)
