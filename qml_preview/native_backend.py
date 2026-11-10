@@ -20,6 +20,7 @@ from PySide6.QtGui import QGuiApplication, QPainter, QColor, QCursor, QDesktopSe
 from PySide6.QtWidgets import QWidget
 
 import dbd_randomizer as core
+import qt_updater
 from dbd_icons_store import IconStore
 
 
@@ -120,6 +121,15 @@ class QtBridge(QObject):
                 self._update_text = item[2]
                 self._update_busy = False
                 self.updateChanged.emit()
+            elif kind == "install":
+                try:
+                    qt_updater.install_staged(item[1])
+                    self._notify("Обновление проверено. Завершаю приложение для установки.")
+                    QGuiApplication.instance().quit()
+                except Exception as e:
+                    self._notify("Не удалось запустить установку: " + str(e))
+                    self._update_busy = False
+                    self.updateChanged.emit()
         if needs_icons:
             self._icon_version += 1
             self.iconVersionChanged.emit()
@@ -826,6 +836,58 @@ class QtBridge(QObject):
             self.equip()
         else:
             self._notify("Действие пока недоступно: "+action)
+
+    @Property(str, notify=updateChanged)
+    def updateText(self):
+        return self._update_text
+
+    @Property(bool, notify=updateChanged)
+    def updateAvailable(self):
+        return self._update_info is not None
+
+    @Property(bool, notify=updateChanged)
+    def updateBusy(self):
+        return self._update_busy
+
+    @Slot()
+    def checkUpdate(self):
+        if self._update_busy:
+            return
+        self._update_busy = True
+        self.updateChanged.emit()
+        self._notify("Проверяю релизы Qt на GitHub…")
+        def work():
+            try:
+                info = qt_updater.check()
+                msg = ("Найдено обновление " + info["tag"]) if info else (
+                    "Установлена актуальная версия " + qt_updater.CURRENT_TAG)
+                self._messages.put(("update", info, msg))
+                self._wake.emit()
+            except Exception as e:
+                self._messages.put(("update", None, "Проверка не удалась: " + str(e)))
+                self._wake.emit()
+        threading.Thread(target=work, daemon=True).start()
+
+    @Slot()
+    def installUpdate(self):
+        if not self._update_info or self._update_busy:
+            return
+        info = dict(self._update_info)
+        if not getattr(sys, "frozen", False):
+            QDesktopServices.openUrl(QUrl(info["url"]))
+            return
+        self._update_busy = True
+        self.updateChanged.emit()
+        self._notify("Скачиваю обновление; текущая версия продолжает работать.")
+        def work():
+            try:
+                staged = qt_updater.stage(info, os.path.dirname(sys.executable))
+                self._messages.put(("install", staged))
+                self._wake.emit()
+            except Exception as e:
+                self._messages.put(("update", info, "Не удалось скачать: " + str(e)))
+                self._wake.emit()
+        threading.Thread(target=work, daemon=True).start()
 
     @Slot()
     def returnToLegacy(self):
