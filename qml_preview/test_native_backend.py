@@ -152,6 +152,22 @@ class QtBackendTests(unittest.TestCase):
         self.assertTrue(all(x["name"] in playable for x in result))
         self.assertFalse(self.bridge.searchPerks("UNKNOWN", ""))
 
+    def test_item_picker_and_addon_compatibility(self):
+        items = self.bridge.searchItems("")
+        self.assertTrue(items)
+        item = items[0]
+        category = self.bridge.db["survivor_items"][item["category"]]
+        self.assertIn(item["name"], category["items"])
+        suggestions = self.bridge.searchAddons("SURVIVOR", "", item["name"], "")
+        expected = set(core._playable_addons(category.get("addons", [])))
+        self.assertTrue(all(row["name"] in expected for row in suggestions))
+        self.assertEqual(self.bridge.searchAddons("SURVIVOR", "", "", ""), [])
+        self.bridge.buildCustom("SURVIVOR",
+                                next(iter(self.bridge.db["survivors"])),
+                                "", "Несуществующий аддон", "",
+                                *[x["name"] for x in self.bridge.searchPerks("SURVIVOR", "")[:4]])
+        self.assertIsNone(self.bridge.build)
+
     def test_invalid_custom_build_rejected(self):
         self.bridge.buildCustom("SURVIVOR", "nonexistent", "", "", "", "x", "x", "x", "x")
         self.assertIsNone(self.bridge.build)
