@@ -207,6 +207,15 @@ ApplicationWindow {
                                 UiButton { width: (parent.width - 10) / 2; label: "МАНЬЯК"; primary: backend.role === "killer"; onClicked: backend.setRole("killer") }
                             }
                             Text { text: "ВАШ БИЛД"; color: win.muted; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                            Rectangle {
+                                width: parent.width; height: 112; radius: 11; color: win.surface; border.color: win.stroke
+                                Column { anchors.fill: parent; anchors.margins: 12; spacing: 5
+                                    Text { text: backend.detail.char || "Персонаж ещё не выбран"; color: "#f3f4f7"; font.pixelSize: 15; font.bold: true }
+                                    Text { text: "Предмет / сила: " + (backend.detail.power || "—"); elide: Text.ElideRight; width: parent.width; color: "#aab8c8"; font.pixelSize: 11 }
+                                    Text { text: "Аддоны: " + (backend.detail.addons || []).join(" · "); elide: Text.ElideRight; width: parent.width; color: "#aab8c8"; font.pixelSize: 11 }
+                                    Text { text: [backend.detail.skin, backend.detail.challenge, backend.detail["class"]].filter(Boolean).join(" · "); elide: Text.ElideRight; width: parent.width; color: "#d4a39a"; font.pixelSize: 10 }
+                                }
+                            }
                             GridLayout {
                                 width: parent.width
                                 columns: 2
@@ -225,7 +234,19 @@ ApplicationWindow {
                                         property var perkInfo: backend.perks[index]
                                         Rectangle { width: 6; height: 6; radius: 3; x: 18; y: 20; color: card.perkInfo.filled ? win.accent : "#606d7b" }
                                         Text { text: "НАВЫК " + ("0" + (index + 1)); x: 33; y: 16; color: "#a4b1c2"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
+                                        Image {
+                                            id: perkIcon
+                                            width: 76
+                                            height: 76
+                                            y: 41
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            fillMode: Image.PreserveAspectFit
+                                            source: backend.iconVersion >= 0 ? backend.iconPath(card.perkInfo.raw) : ""
+                                            asynchronous: true
+                                            smooth: true
+                                        }
                                         Canvas {
+                                            visible: perkIcon.status !== Image.Ready
                                             width: 67; height: 67
                                             anchors.horizontalCenter: parent.horizontalCenter
                                             y: 46
@@ -427,8 +448,15 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     color: "#11161e"
                     border.color: "#222b37"
-                    Column {
-                        x: 19; y: 26; width: parent.width - 38; spacing: 13
+                    Flickable {
+                        anchors.fill: parent
+                        contentWidth: width
+                        contentHeight: settingsColumn.implicitHeight + 48
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        Column {
+                            id: settingsColumn
+                            x: 19; y: 26; width: parent.width - 38; spacing: 13
                         Text { text: "НАСТРОЙКИ"; color: "#edf1f5"; font.pixelSize: 16; font.bold: true }
                         Text { text: "Тип генерации"; color: win.muted; font.pixelSize: 11 }
                         Repeater {
@@ -464,6 +492,7 @@ ApplicationWindow {
                             width: parent.width; height: 83; color: "#251f24"; radius: 10; border.color: "#49353e"
                             Text { anchors.fill: parent; anchors.margins: 13; wrapMode: Text.WordWrap; text: "Qt оболочка с оригинальным движком. Перед автоэкипировкой проверьте координаты, сухой прогон и стоп-клавишу F9."; color: "#dec0bf"; font.pixelSize: 11 }
                         }
+                    }
                     }
                 }
             }
