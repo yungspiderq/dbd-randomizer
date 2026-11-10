@@ -520,33 +520,168 @@ ApplicationWindow {
                             }
                         }
                         Column {
+                            id: makerPage
                             visible: win.page === "Конструктор"
                             width: parent.width
-                            spacing: 12
-                            Text { text: "Создайте собственный билд"; color: win.muted; font.pixelSize: 12 }
-                            Row {
-                                spacing: 8
-                                UiButton { width: 145; label: "ВЫЖИВШИЙ"; primary: makerPage.makerSide === "SURVIVOR"; onClicked: makerPage.makerSide = "SURVIVOR" }
-                                UiButton { width: 145; label: "МАНЬЯК"; primary: makerPage.makerSide === "KILLER"; onClicked: makerPage.makerSide = "KILLER" }
-                            }
-                            id: makerPage
+                            spacing: 14
                             property string makerSide: "SURVIVOR"
-                            UiField { id: makerChar; width: parent.width; placeholderText: "Персонаж — точное имя из базы" }
-                            UiField { id: makerItem; width: parent.width; placeholderText: "Предмет / сила (для маньяка заполняется автоматически)" }
-                            Row {
-                                width: parent.width; spacing: 10
-                                UiField { id: makerAddon1; width: (parent.width - 10) / 2; placeholderText: "Аддон 1" }
-                                UiField { id: makerAddon2; width: (parent.width - 10) / 2; placeholderText: "Аддон 2" }
+                            property int perkSlot: 0
+                            property int addonSlot: 0
+                            function changeSide(side) {
+                                if (makerSide === side) return;
+                                makerSide = side;
+                                makerChar.text = "";
+                                makerItem.text = "";
+                                makerAddon1.text = "";
+                                makerAddon2.text = "";
+                                makerPerk1.text = "";
+                                makerPerk2.text = "";
+                                makerPerk3.text = "";
+                                makerPerk4.text = "";
                             }
-                            UiField { id: makerPerk1; width: parent.width; placeholderText: "Навык 1 (точное название)" }
-                            UiField { id: makerPerk2; width: parent.width; placeholderText: "Навык 2 (точное название)" }
-                            UiField { id: makerPerk3; width: parent.width; placeholderText: "Навык 3 (точное название)" }
-                            UiField { id: makerPerk4; width: parent.width; placeholderText: "Навык 4 (точное название)" }
-                            UiButton { width: parent.width; label: "СОБРАТЬ БИЛД"; primary: true;
-                                onClicked: backend.buildCustom(makerPage.makerSide, makerChar.text, makerItem.text,
-                                    makerAddon1.text, makerAddon2.text, makerPerk1.text,
-                                    makerPerk2.text, makerPerk3.text, makerPerk4.text) }
-                            UiButton { width: parent.width; label: "ОТКРЫТЬ РАСШИРЕННЫЙ КОНСТРУКТОР"; onClicked: backend.returnToLegacy() }
+                            function pickPerk(name) {
+                                var fields = [makerPerk1, makerPerk2, makerPerk3, makerPerk4];
+                                fields[perkSlot].text = name;
+                                perkSlot = (perkSlot + 1) % 4;
+                            }
+                            function pickAddon(name) {
+                                if (addonSlot === 0) makerAddon1.text = name;
+                                else makerAddon2.text = name;
+                                addonSlot = 1 - addonSlot;
+                            }
+                            Text { text: "Визуальный конструктор билдов"; color: "#f0f3f8"; font.pixelSize: 18; font.bold: true }
+                            Text {
+                                text: "Выбирай настоящие навыки, аддоны и персонажей из базы — больше не нужно вводить названия вручную."
+                                width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 11; color: win.muted
+                            }
+                            Row {
+                                width: parent.width; spacing: 9
+                                UiButton {
+                                    width: (parent.width - 9) / 2
+                                    label: "ВЫЖИВШИЙ"
+                                    primary: makerPage.makerSide === "SURVIVOR"
+                                    onClicked: makerPage.changeSide("SURVIVOR")
+                                }
+                                UiButton {
+                                    width: (parent.width - 9) / 2
+                                    label: "МАНЬЯК"
+                                    primary: makerPage.makerSide === "KILLER"
+                                    onClicked: makerPage.changeSide("KILLER")
+                                }
+                            }
+                            Rectangle {
+                                width: parent.width; height: 244; radius: 13; color: win.surface; border.color: win.stroke
+                                Column {
+                                    anchors.fill: parent; anchors.margins: 13; spacing: 8
+                                    Text { text: "01 · ПЕРСОНАЖ"; font.pixelSize: 11; font.bold: true; color: "#adbccd" }
+                                    UiField { id: makerChar; width: parent.width; placeholderText: "Найти персонажа..." }
+                                    ListView {
+                                        id: makerCharacters
+                                        width: parent.width
+                                        height: 151
+                                        spacing: 5
+                                        clip: true
+                                        model: backend.searchCharacters(makerPage.makerSide, makerChar.text)
+                                        delegate: Rectangle {
+                                            width: makerCharacters.width; height: 49; radius: 8
+                                            color: makerCharHover.containsMouse ? "#313d4b" : "#202934"
+                                            border.color: makerChar.text === modelData.name ? win.accent : "#344152"
+                                            ArtThumb { x: 5; y: 4; pixels: 41; iconKey: modelData.name; placeholder: "DBD" }
+                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; color: "#f1f4f8"; font.pixelSize: 12; width: parent.width - 66; elide: Text.ElideRight }
+                                            MouseArea { id: makerCharHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: makerChar.text = modelData.name }
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                width: parent.width; height: 337; radius: 13; color: win.surface; border.color: win.stroke
+                                Column {
+                                    anchors.fill: parent; anchors.margins: 13; spacing: 9
+                                    Text { text: "02 · ПРЕДМЕТ И АДДОНЫ"; font.pixelSize: 11; font.bold: true; color: "#adbccd" }
+                                    UiField { id: makerItem; width: parent.width; placeholderText: "Предмет выжившего (для маньяка сила определяется сама)" }
+                                    Row {
+                                        width: parent.width; spacing: 8
+                                        UiField { id: makerAddon1; width: (parent.width - 8) / 2; placeholderText: "Аддон 1" }
+                                        UiField { id: makerAddon2; width: (parent.width - 8) / 2; placeholderText: "Аддон 2" }
+                                    }
+                                    Row {
+                                        spacing: 8
+                                        UiButton { width: 116; height: 34; label: "СЛОТ АДДОНА 1"; primary: makerPage.addonSlot === 0; onClicked: makerPage.addonSlot = 0 }
+                                        UiButton { width: 116; height: 34; label: "СЛОТ АДДОНА 2"; primary: makerPage.addonSlot === 1; onClicked: makerPage.addonSlot = 1 }
+                                    }
+                                    UiField { id: addonSearch; width: parent.width; placeholderText: "Поиск доступных аддонов по названию..." }
+                                    ListView {
+                                        id: makerAddons
+                                        width: parent.width; height: 136; spacing: 5; clip: true
+                                        model: backend.searchAddons(makerPage.makerSide, makerChar.text, makerItem.text, addonSearch.text)
+                                        delegate: Rectangle {
+                                            width: makerAddons.width; height: 49; radius: 8
+                                            color: addonPickHover.containsMouse ? "#313d4b" : "#202934"
+                                            border.color: "#344152"
+                                            ArtThumb { x: 5; y: 4; pixels: 41; iconKey: modelData.name; placeholder: "ADD" }
+                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 65; elide: Text.ElideRight; font.pixelSize: 12; color: "#ecf1f6" }
+                                            MouseArea { id: addonPickHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: makerPage.pickAddon(modelData.name) }
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                width: parent.width; height: 433; radius: 13; color: win.surface; border.color: win.stroke
+                                Column {
+                                    anchors.fill: parent; anchors.margins: 13; spacing: 8
+                                    Text { text: "03 · ЧЕТЫРЕ НАВЫКА"; font.pixelSize: 11; font.bold: true; color: "#adbccd" }
+                                    Row {
+                                        width: parent.width; spacing: 8
+                                        UiField { id: makerPerk1; width: (parent.width - 8) / 2; placeholderText: "Навык 1" }
+                                        UiField { id: makerPerk2; width: (parent.width - 8) / 2; placeholderText: "Навык 2" }
+                                    }
+                                    Row {
+                                        width: parent.width; spacing: 8
+                                        UiField { id: makerPerk3; width: (parent.width - 8) / 2; placeholderText: "Навык 3" }
+                                        UiField { id: makerPerk4; width: (parent.width - 8) / 2; placeholderText: "Навык 4" }
+                                    }
+                                    Row {
+                                        width: parent.width; spacing: 6
+                                        Repeater {
+                                            model: 4
+                                            UiButton {
+                                                width: (parent.width - 18) / 4
+                                                height: 32
+                                                label: "СЛОТ " + (index + 1)
+                                                primary: makerPage.perkSlot === index
+                                                onClicked: makerPage.perkSlot = index
+                                            }
+                                        }
+                                    }
+                                    UiField { id: perkSearch; width: parent.width; placeholderText: "Поиск навыков по названию..." }
+                                    ListView {
+                                        id: makerPerks
+                                        width: parent.width; height: 205
+                                        spacing: 5; clip: true
+                                        model: backend.searchPerks(makerPage.makerSide, perkSearch.text)
+                                        delegate: Rectangle {
+                                            width: makerPerks.width; height: 48; radius: 8
+                                            color: perkPickHover.containsMouse ? "#303b49" : "#202934"
+                                            border.color: "#344152"
+                                            ArtThumb { x: 5; y: 4; pixels: 40; iconKey: modelData.name; placeholder: "PERK" }
+                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 65; font.pixelSize: 12; elide: Text.ElideRight; color: "#eef2f8" }
+                                            MouseArea { id: perkPickHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: makerPage.pickPerk(modelData.name) }
+                                        }
+                                    }
+                                }
+                            }
+                            UiButton {
+                                width: parent.width
+                                label: "СОБРАТЬ БИЛД И ОТКРЫТЬ КАРТОЧКУ"
+                                primary: true
+                                onClicked: {
+                                    backend.buildCustom(makerPage.makerSide, makerChar.text, makerItem.text,
+                                        makerAddon1.text, makerAddon2.text, makerPerk1.text,
+                                        makerPerk2.text, makerPerk3.text, makerPerk4.text);
+                                    if (backend.detail.hasBuild && backend.detail.char === makerChar.text)
+                                        win.page = "Билд";
+                                }
+                            }
                         }
                         Column {
                             visible: win.page === "Билды сообщества"
