@@ -594,11 +594,38 @@ ApplicationWindow {
                                 }
                             }
                             Rectangle {
-                                width: parent.width; height: 337; radius: 13; color: win.surface; border.color: win.stroke
+                                width: parent.width; height: makerPage.makerSide === "SURVIVOR" ? 477 : 367; radius: 13; color: win.surface; border.color: win.stroke
                                 Column {
                                     anchors.fill: parent; anchors.margins: 13; spacing: 9
                                     Text { text: "02 · ПРЕДМЕТ И АДДОНЫ"; font.pixelSize: 11; font.bold: true; color: "#adbccd" }
-                                    UiField { id: makerItem; width: parent.width; placeholderText: "Предмет выжившего (для маньяка сила определяется сама)" }
+                                    UiField {
+                                        id: makerItem
+                                        width: parent.width
+                                        enabled: makerPage.makerSide === "SURVIVOR"
+                                        placeholderText: makerPage.makerSide === "KILLER" ? "Сила маньяка подбирается автоматически" : "Найти предмет выжившего..."
+                                    }
+                                    ListView {
+                                        id: makerItems
+                                        visible: makerPage.makerSide === "SURVIVOR"
+                                        width: parent.width
+                                        height: visible ? 100 : 0
+                                        spacing: 5
+                                        clip: true
+                                        model: backend.searchItems(makerItem.text)
+                                        delegate: Rectangle {
+                                            width: makerItems.width; height: 48; radius: 8
+                                            color: makerItemHover.containsMouse ? "#313d4b" : "#202934"
+                                            border.color: makerItem.text === modelData.name ? win.accent : "#344152"
+                                            ArtThumb { x: 5; y: 4; pixels: 40; iconKey: modelData.name; placeholder: "ITEM" }
+                                            Text { text: modelData.name; x: 55; y: 7; width: parent.width-65; elide: Text.ElideRight; font.pixelSize: 12; color: "#eff3f8" }
+                                            Text { text: modelData.category; x: 55; y: 28; width: parent.width-65; elide: Text.ElideRight; font.pixelSize: 10; color: "#91a5b6" }
+                                            MouseArea {
+                                                id: makerItemHover; anchors.fill: parent; hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: { makerItem.text = modelData.name; makerAddon1.text = ""; makerAddon2.text = "" }
+                                            }
+                                        }
+                                    }
                                     Row {
                                         width: parent.width; spacing: 8
                                         UiField { id: makerAddon1; width: (parent.width - 8) / 2; placeholderText: "Аддон 1" }
@@ -606,8 +633,8 @@ ApplicationWindow {
                                     }
                                     Row {
                                         spacing: 8
-                                        UiButton { width: 116; height: 34; label: "СЛОТ АДДОНА 1"; primary: makerPage.addonSlot === 0; onClicked: makerPage.addonSlot = 0 }
-                                        UiButton { width: 116; height: 34; label: "СЛОТ АДДОНА 2"; primary: makerPage.addonSlot === 1; onClicked: makerPage.addonSlot = 1 }
+                                        UiButton { width: 116; height: 34; label: "АДДОН 1"; primary: makerPage.addonSlot === 0; onClicked: makerPage.addonSlot = 0 }
+                                        UiButton { width: 116; height: 34; label: "АДДОН 2"; primary: makerPage.addonSlot === 1; onClicked: makerPage.addonSlot = 1 }
                                     }
                                     UiField { id: addonSearch; width: parent.width; placeholderText: "Поиск доступных аддонов по названию..." }
                                     ListView {
