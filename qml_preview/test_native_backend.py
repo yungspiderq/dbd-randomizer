@@ -81,6 +81,43 @@ class QtBackendTests(unittest.TestCase):
         self.assertFalse(self.bridge._worker.is_alive())
         self.assertEqual(self.bridge.cfg.get("last_equipped", {}), {})
 
+    def test_character_panels_and_filtered_bulk_actions(self):
+        entries = self.bridge.characters
+        self.assertTrue(any(c["side"] == "K" for c in entries))
+        self.assertTrue(any(c["side"] == "S" for c in entries))
+        self.bridge.setCharactersBulk("K", "none", "")
+        self.assertFalse(self.bridge.available_characters("KILLER"))
+        self.assertEqual(self.cfg["owned"]["killers"], ["__none__"])
+        self.bridge.setCharactersBulk("K", "all", "")
+        self.assertTrue(self.bridge.available_characters("KILLER"))
+        target = next(c["name"] for c in self.bridge.characters if c["side"] == "S")
+        self.bridge.setCharactersBulk("S", "none", target)
+        match = next(c for c in self.bridge.characters if c["side"] == "S" and c["name"] == target)
+        self.assertFalse(match["owned"])
+
+    def test_skin_gallery_default_and_bulk_ownership(self):
+        if not core.SKINS:
+            self.skipTest("No skins database")
+        names = self.bridge.skinCharacters
+        self.assertTrue(names)
+        first = next((x for x in names if x["side"] == "S" and x["count"] > 0), None)
+        self.assertIsNotNone(first)
+        self.bridge.setSkinCharacter(first["name"])
+        stats = self.bridge.skinStats
+        self.assertEqual(stats["owned"], stats["total"])
+        first_skin = self.bridge.skins[0]
+        self.assertIn("rarity", first_skin)
+        self.assertIn("date", first_skin)
+        self.assertIn("type", first_skin)
+        self.bridge.toggleSkin(first_skin["id"])
+        self.assertEqual(self.bridge.skinStats["owned"], stats["total"]-1)
+        self.bridge.setSkinsOwned("none")
+        self.assertEqual(self.bridge.skinStats["owned"], 0)
+        self.assertEqual(self.bridge.randomSkinId(), -1)
+        self.bridge.setSkinsOwned("all")
+        self.assertEqual(self.bridge.skinStats["owned"], stats["total"])
+        self.assertIn(self.bridge.randomSkinId(), [x["id"] for x in self.bridge.skins])
+
     def test_invalid_custom_build_rejected(self):
         self.bridge.buildCustom("SURVIVOR", "nonexistent", "", "", "", "x", "x", "x", "x")
         self.assertIsNone(self.bridge.build)
