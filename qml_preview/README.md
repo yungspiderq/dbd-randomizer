@@ -1,33 +1,30 @@
-# DBD Ultimate Search Randomizer — Qt Beta 3
+# DBD Randomizer — PySide6 / Qt Quick Beta 4
 
-PySide6 / Qt Quick frontend for the original DBD Randomizer game database and generation logic. Unlike the first preview, the application no longer creates a hidden Tkinter window.
+Qt-версия использует оригинальную базу DBD, игровую генерацию и собственный native Qt backend. Скрытое окно Tkinter не запускается.
 
-## What's included
+## Что нового в Beta 4
 
-- Custom dark interface and vector UI controls, without emoji navigation.
-- Original perk and character data, available DLC filters, killer/survivor roles, rerolls, addons, items, challenges and 2v8 classes.
-- **Characters:** two independent lists (Killers / Survivors), actual portraits downloaded from wiki.gg using the existing icon cache, live search, individual checkboxes and per-side All / None / Invert commands.
-- **Cosmetics:** character selector with portraits and separate killer/survivor switch; 256px cosmetic previews, a large preview pane, rarity/type/date, searchable catalog, ownership selection, random owned outfit and bulk select tools.
-- Main build artwork: character portrait, power/item image, addon thumbnails and perk icons.
-- Custom builds, community builds, Firebase publishing, compatible settings, coordinate capture, timings, OCR support, DirectInput game equip and hotkey stop.
-- Opt-in update checks and verified Windows EXE updates from future Qt Releases.
+- У каждого аддона на карточке билда теперь видны **изображение, номер слота и название**. Длинные названия отображаются в tooltip.
+- Полные условия челленджей: название, сложность, подробный текст, пояснение и запреты предметов/аддонов/перков.
+- Визуальный конструктор билдов: поисковые списки персонажей, навыков, предметов и аддонов с иконками. Проверка совместимости аддонов с выбранной силой/предметом.
+- Двухколоночная галерея персонажей (маньяки / выжившие) и галерея внешности с миниатюрами из Beta 3.
 
-Portraits and cosmetic thumbnails are **not bundled** in the EXE. They are downloaded on demand into `icons_cache` using the URLs already present in `dbd_icons.py` and `dbd_skins.py`. Requires an internet connection for first-time images; cached images work offline. Missing wiki images show a custom text placeholder.
+## Запуск
 
-## Installation / usage
+Windows 11: `DBDRandomizerQtBeta.exe` из официального GitHub Release. Сохраните резервную копию папки и скопируйте EXE рядом с прежним `dbd_randomizer_config.json`.
 
-Windows 11: download `DBDRandomizerQtBeta.exe` from the GitHub Release and put it next to your old `dbd_randomizer_config.json` to preserve coordinates and preferences. Keep a backup and retain your old EXE until you have tested the new version.
-
-From source (Python 3.12+):
+Из Python 3.12+:
 ```powershell
 py -m pip install -r qml_preview/requirements.txt
 py qml_preview/main.py
 ```
 
-F5 generate, F6 copy, F9 stop automation (also globally registered by `keyboard` on Windows if permitted).
+F5 — генерация, F6 — копирование, F9 — остановка автоматизации (системная клавиша доступна при разрешениях Windows).
 
-## Beta limitations
+## Источники изображений
 
-The interface and packaged EXE are checked in Windows CI, but automatic equipment has **not** been tested with a real Dead by Daylight match and varying screen resolutions. Test in dry-run first. The previous Tkinter EXE cannot automatically migrate itself; one manual installation is required. The executable is a prerelease and does not replace the stable v2.28.0 in `main`.
+Портреты, миниатюры скинов, навыков и аддонов загружаются по необходимости из wiki.gg через сохранённую карту имён в оригинальном проекте и затем кешируются. При недоступности сети показывается стилизованная заглушка.
 
-Do not provide GitHub tokens in messages; no GitHub credentials are needed to run the application.
+## Что ещё не проверено
+
+Реальная автоэкипировка в игре на разных конфигурациях экрана требует ручного тестирования. Сначала используйте сухой прогон. Подробного эффекта каждого аддона в оригинальной базе данных нет; интерфейс выводит полные **названия**, не придумывая свойства. Прежний Tkinter EXE не может сам переходить на Qt — первая установка вручную.
