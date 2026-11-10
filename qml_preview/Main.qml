@@ -17,6 +17,7 @@ ApplicationWindow {
     property color muted: "#8995a5"
     property color accent: "#ea5753"
     font.family: "Segoe UI"
+    onClosing: backend.close()
 
     component UiButton: Rectangle {
         id: button
@@ -43,6 +44,22 @@ ApplicationWindow {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: button.clicked()
+        }
+    }
+
+    component UiField: TextField {
+        color: "#e6ebf3"
+        font.pixelSize: 12
+        height: 39
+        padding: 9
+        selectByMouse: true
+        placeholderTextColor: "#657385"
+        selectionColor: "#87413f"
+        background: Rectangle {
+            radius: 8
+            color: "#1e2631"
+            border.color: parent.activeFocus ? "#dd5956" : "#374251"
+            border.width: 1
         }
     }
 
@@ -130,7 +147,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • PREVIEW"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 24 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -138,6 +155,7 @@ ApplicationWindow {
                 NavItem { ordinal: 4; label: "Персонажи"; onClicked: win.page = label }
                 NavItem { ordinal: 5; label: "Внешность"; onClicked: win.page = label }
                 NavItem { ordinal: 6; label: "Клики и тайминги"; onClicked: win.page = label }
+                NavItem { ordinal: 7; label: "Классы 2v8"; onClicked: win.page = label }
                 Item { height: 23 }
                 Rectangle { width: parent.width; height: 1; color: "#26303d" }
                 Item { height: 10 }
@@ -149,7 +167,7 @@ ApplicationWindow {
                     border.color: "#534046"
                     Column {
                         anchors.centerIn: parent; spacing: 8
-                        Text { text: "ЭКСПЕРИМЕНТАЛЬНЫЙ UI"; color: "#f2b2a7"; font.pixelSize: 10; font.weight: Font.Bold }
+                        Text { text: "QT ИНТЕРФЕЙС"; color: "#f2b2a7"; font.pixelSize: 10; font.weight: Font.Bold }
                         Text { text: "Пока без автоэкипировки\nи игровых данных"; color: "#c1b9bc"; font.pixelSize: 11 }
                     }
                 }
@@ -177,7 +195,7 @@ ApplicationWindow {
                         width: work.width - 52
                         spacing: 18
                         Text { text: win.page === "Билд" ? "Генератор билда" : win.page; font.pixelSize: 27; font.weight: Font.Bold; color: "#f3f5f8" }
-                        Text { text: "Новый интерфейс DBD Randomizer · без эмодзи и стандартных рамок"; font.pixelSize: 12; color: win.muted }
+                        Text { text: "Новый интерфейс с оригинальной базой DBD и автоматизацией"; font.pixelSize: 12; color: win.muted }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Column {
                             visible: win.page === "Билд"
@@ -226,7 +244,7 @@ ApplicationWindow {
                                             }
                                         }
                                         Text { x: 18; y: 125; width: parent.width - 36; text: card.perkInfo.name; elide: Text.ElideRight; color: "#f3f5f6"; font.pixelSize: 15; font.weight: Font.DemiBold }
-                                        Text { x: 18; y: 151; text: card.perkInfo.locked ? "ЗАКРЕПЛЕНО" : "ДЕМОНСТРАЦИОННЫЙ НАВЫК"; color: card.perkInfo.locked ? "#edb979" : "#8d99a8"; font.pixelSize: 10; font.letterSpacing: .5 }
+                                        Text { x: 18; y: 151; text: card.perkInfo.locked ? "ЗАКРЕПЛЕНО" : "НАВЫК"; color: card.perkInfo.locked ? "#edb979" : "#8d99a8"; font.pixelSize: 10; font.letterSpacing: .5 }
                                         Row {
                                             anchors.right: parent.right
                                             anchors.top: parent.top
@@ -253,18 +271,154 @@ ApplicationWindow {
                             }
                         }
                         Column {
-                            visible: win.page !== "Билд"
+                            visible: win.page === "Конструктор"
                             width: parent.width
-                            spacing: 15
-                            Rectangle {
-                                width: parent.width; height: 210; radius: 14; color: win.surface; border.color: win.stroke
-                                Column { anchors.centerIn: parent; spacing: 15
-                                    Text { text: "Раздел готовится к переносу"; anchors.horizontalCenter: parent.horizontalCenter; color: "#e4e8f0"; font.pixelSize: 19; font.bold: true }
-                                    Text { text: "Оригинальные функции работают в Tkinter-версии, но ещё не подключены к Qt."; anchors.horizontalCenter: parent.horizontalCenter; color: win.muted; font.pixelSize: 12 }
+                            spacing: 12
+                            Text { text: "Создайте собственный билд"; color: win.muted; font.pixelSize: 12 }
+                            Row {
+                                spacing: 8
+                                UiButton { width: 145; label: "ВЫЖИВШИЙ"; primary: makerSide === "SURVIVOR"; onClicked: makerSide = "SURVIVOR" }
+                                UiButton { width: 145; label: "МАНЬЯК"; primary: makerSide === "KILLER"; onClicked: makerSide = "KILLER" }
+                            }
+                            property string makerSide: "SURVIVOR"
+                            UiField { id: makerChar; width: parent.width; placeholderText: "Персонаж — точное имя из базы" }
+                            UiField { id: makerItem; width: parent.width; placeholderText: "Предмет / сила (для маньяка заполняется автоматически)" }
+                            Row {
+                                width: parent.width; spacing: 10
+                                UiField { id: makerAddon1; width: (parent.width - 10) / 2; placeholderText: "Аддон 1" }
+                                UiField { id: makerAddon2; width: (parent.width - 10) / 2; placeholderText: "Аддон 2" }
+                            }
+                            UiField { id: makerPerk1; width: parent.width; placeholderText: "Навык 1 (точное название)" }
+                            UiField { id: makerPerk2; width: parent.width; placeholderText: "Навык 2 (точное название)" }
+                            UiField { id: makerPerk3; width: parent.width; placeholderText: "Навык 3 (точное название)" }
+                            UiField { id: makerPerk4; width: parent.width; placeholderText: "Навык 4 (точное название)" }
+                            UiButton { width: parent.width; label: "СОБРАТЬ БИЛД"; primary: true;
+                                onClicked: backend.buildCustom(makerSide, makerChar.text, makerItem.text,
+                                    makerAddon1.text, makerAddon2.text, makerPerk1.text,
+                                    makerPerk2.text, makerPerk3.text, makerPerk4.text) }
+                            UiButton { width: parent.width; label: "ОТКРЫТЬ РАСШИРЕННЫЙ КОНСТРУКТОР"; onClicked: backend.returnToLegacy() }
+                        }
+                        Column {
+                            visible: win.page === "Билды сообщества"
+                            width: parent.width; spacing: 14
+                            Text { text: "Билды, опубликованные игроками"; color: win.muted; font.pixelSize: 12 }
+                            Row { spacing: 9
+                                UiButton { width: 172; label: "ОБНОВИТЬ СПИСОК"; primary: true; onClicked: backend.refreshCommunity() }
+                                UiButton { width: 188; label: "РАСШИРЕННАЯ ПУБЛИКАЦИЯ"; onClicked: backend.returnToLegacy() }
+                            }
+                            Text { text: "Найдено билдов: " + backend.community.length; color: "#b1becc"; font.pixelSize: 12 }
+                            ListView {
+                                id: buildsList
+                                width: parent.width; height: 430; clip: true; spacing: 7
+                                model: backend.community
+                                delegate: Rectangle {
+                                    width: buildsList.width; height: 90
+                                    color: "#1b232d"; radius: 9; border.color: win.stroke
+                                    Text { text: modelData.title; x: 14; y: 11; width: parent.width - 174; elide: Text.ElideRight; font.bold: true; color: "#f2f4f7"; font.pixelSize: 13 }
+                                    Text { text: modelData.character + " · " + modelData.author; x: 14; y: 34; width: parent.width - 174; elide: Text.ElideRight; color: "#9ca9b8"; font.pixelSize: 11 }
+                                    Text { text: modelData.date; x: 14; y: 57; color: "#69798a"; font.pixelSize: 10 }
+                                    UiButton { x: parent.width - 153; y: 8; width: 140; height: 34; label: "В КАРТОЧКУ"; onClicked: { backend.useCommunity(modelData.index); win.page = "Билд" } }
+                                    UiButton { x: parent.width - 153; y: 47; width: 140; height: 33; label: "СКОПИРОВАТЬ"; onClicked: backend.copyCommunity(modelData.index) }
                                 }
                             }
-                            UiButton { width: parent.width; label: "Вернуться к генератору"; primary: true; onClicked: win.page = "Билд" }
                         }
+                        Column {
+                            visible: win.page === "Персонажи"
+                            width: parent.width; spacing: 12
+                            Text { text: "Белый список доступных персонажей"; color: win.muted; font.pixelSize: 12 }
+                            UiField { id: charSearch; width: parent.width; placeholderText: "Поиск по имени" }
+                            ListView {
+                                id: charList
+                                width: parent.width; height: 450; clip: true; spacing: 4
+                                model: backend.characters.filter(function(c) {
+                                    return c.name.toLowerCase().indexOf(charSearch.text.toLowerCase()) >= 0
+                                })
+                                delegate: Rectangle {
+                                    width: charList.width; height: 43; color: "#1b222c"; radius: 8
+                                    border.color: modelData.owned ? "#744947" : win.stroke
+                                    Rectangle { x: 10; y: 11; width: 19; height: 19; radius: 5
+                                        color: modelData.owned ? win.accent : "#283241"; border.color: "#536072"
+                                        Text { anchors.centerIn: parent; text: modelData.owned ? "✓" : ""; color: "white"; font.pixelSize: 13 } }
+                                    Text { x: 41; y: 12; width: parent.width - 136; text: modelData.name; elide: Text.ElideRight; color: "#e6edf6"; font.pixelSize: 12 }
+                                    Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 14; text: modelData.side === "K" ? "МАНЬЯК" : "ВЫЖИВШИЙ"; font.pixelSize: 10; color: win.muted }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: backend.setCharacter(modelData.name, modelData.side) }
+                                }
+                            }
+                        }
+                        Column {
+                            visible: win.page === "Внешность"
+                            width: parent.width; spacing: 12
+                            Text { text: "Отмечайте наборы внешности, которые у вас открыты"; color: win.muted; font.pixelSize: 12 }
+                            Row {
+                                width: parent.width; spacing: 8
+                                UiButton { width: 172; label: "СЛЕДУЮЩИЙ ГЕРОЙ"; onClicked: backend.nextSkinCharacter() }
+                                Text { width: parent.width - 180; anchors.verticalCenter: parent.verticalCenter; text: backend.skinCharacter; color: "#f1f3f7"; font.bold: true; font.pixelSize: 12; elide: Text.ElideRight }
+                            }
+                            UiField { id: skinSearch; width: parent.width; placeholderText: "Поиск набора"; onTextChanged: backend.filterSkins(text) }
+                            Text { text: "Найдено вариантов: " + backend.skins.length; color: win.muted; font.pixelSize: 11 }
+                            ListView {
+                                id: skinsList
+                                width: parent.width; height: 438; clip: true; spacing: 5
+                                model: backend.skins
+                                delegate: Rectangle {
+                                    width: skinsList.width; height: 49; radius: 8
+                                    color: "#1b232d"; border.color: modelData.owned ? win.accent : win.stroke
+                                    Rectangle { x: 12; y: 13; width: 18; height: 18; radius: 5; color: modelData.owned ? win.accent : "#283342"; border.color: "#526075" }
+                                    Text { text: modelData.name; x: 42; y: 8; width: parent.width - 54; elide: Text.ElideRight; color: "#ebf0f5"; font.pixelSize: 12 }
+                                    Text { text: modelData.rarity; x: 42; y: 29; color: "#8995a7"; font.pixelSize: 10 }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: backend.toggleSkin(modelData.id) }
+                                }
+                            }
+                        }
+                        Column {
+                            visible: win.page === "Клики и тайминги"
+                            width: parent.width; spacing: 11
+                            Text { text: "Калибровка ввода для меню снаряжения"; color: win.muted; font.pixelSize: 12 }
+                            Text { text: "Заполните координаты под ваше разрешение и масштаб Windows."; wrapMode: Text.WordWrap; width: parent.width; color: "#d4a59b"; font.pixelSize: 12 }
+                            Repeater {
+                                model: backend.coordinates
+                                delegate: Rectangle {
+                                    width: parent.width; height: 45; radius: 8; color: win.surface; border.color: win.stroke
+                                    Row {
+                                        x: 9; y: 5; spacing: 5
+                                        Text { text: modelData.title; width: 180; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; color: "#aeb9c7"; font.pixelSize: 11 }
+                                        UiField { width: 54; text: modelData.x; placeholderText: "X"; onEditingFinished: backend.editCoord(modelData.key, "x", text) }
+                                        UiField { width: 54; text: modelData.y; placeholderText: "Y"; onEditingFinished: backend.editCoord(modelData.key, "y", text) }
+                                        UiButton { width: 82; height: 34; label: "ЗАХВАТ"; onClicked: backend.captureCoord(modelData.key) }
+                                    }
+                                }
+                            }
+                            Text { text: "ТАЙМИНГИ"; color: "#d8dfe8"; font.bold: true; font.pixelSize: 12; font.letterSpacing: 1 }
+                            Repeater {
+                                model: backend.timings
+                                delegate: Row {
+                                    width: parent.width; height: 38; spacing: 10
+                                    Text { text: modelData.title; width: parent.width - 113; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter; color: "#c2cad4"; font.pixelSize: 11 }
+                                    UiField { text: modelData.value; width: 103; onEditingFinished: backend.editTiming(modelData.key, text) }
+                                }
+                            }
+                            UiButton { width: parent.width; label: "СОХРАНИТЬ КООРДИНАТЫ И ТАЙМИНГИ"; primary: true; onClicked: backend.saveSettings() }
+                            UiButton { width: parent.width; label: "ОРИГИНАЛЬНЫЕ РАСШИРЕННЫЕ НАСТРОЙКИ"; onClicked: backend.returnToLegacy() }
+                        }
+                        Column {
+                            visible: win.page === "Классы 2v8"
+                            width: parent.width; spacing: 12
+                            Text { text: "Случайные классы режима 2 против 8"; color: win.muted; font.pixelSize: 12 }
+                            UiButton { width: parent.width; label: "СГЕНЕРИРОВАТЬ КЛАССЫ"; primary: true; onClicked: backend.rollClasses() }
+                            Repeater {
+                                model: backend.classDetails
+                                delegate: Rectangle {
+                                    width: parent.width; height: 126; radius: 13; color: win.surface; border.color: win.stroke
+                                    Column { x: 17; y: 14; width: parent.width - 34; spacing: 10
+                                        Text { text: modelData.side === "KILLER" ? "МАНЬЯК" : "ВЫЖИВШИЙ"; color: win.accent; font.bold: true; font.pixelSize: 10 }
+                                        Text { text: modelData.title; color: "#f3f5f8"; font.bold: true; font.pixelSize: 17 }
+                                        Text { text: modelData.skills; width: parent.width; height: 57; wrapMode: Text.Wrap; color: "#b2c0d0"; font.pixelSize: 11 }
+                                    }
+                                }
+                            }
+                            UiButton { width: parent.width; label: "СКОПИРОВАТЬ КЛАССЫ"; onClicked: backend.copyClass() }
+                        }
+
                     }
                 }
                 Rectangle {
@@ -280,7 +434,7 @@ ApplicationWindow {
                             model: [
                                 { key: "mixed", label: "Смешанные" },
                                 { key: "unique", label: "Уникальные" },
-                                { key: "random", label: "Случайные" },
+                                { key: "any", label: "Случайные" },
                                 { key: "general", label: "Общие" }
                             ]
                             Rectangle {
@@ -298,11 +452,16 @@ ApplicationWindow {
                         OptionRow { title: "Случайная внешность"; keyName: "appearance" }
                         OptionRow { title: "Случайный челлендж"; keyName: "challenge" }
                         OptionRow { title: "Только открытые навыки"; keyName: "owned" }
+                        OptionRow { title: "Класс режима 2v8"; keyName: "classes" }
+                        OptionRow { title: "Сухой прогон (без кликов)"; keyName: "dry" }
+                        OptionRow { title: "Проверка OCR"; keyName: "ocr" }
+                        OptionRow { title: "Выбирать персонажа в игре"; keyName: "select_char" }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
-                        UiButton { width: parent.width; label: "ЭКИПИРОВАТЬ В ИГРЕ"; onClicked: backend.placeholder("Автоэкипировка") }
+                        UiButton { width: parent.width; label: "ЭКИПИРОВАТЬ В ИГРЕ"; onClicked: backend.equip() }
+                        UiButton { width: parent.width; label: "СТОП АВТОМАТИЗАЦИИ (F9)"; onClicked: backend.stop() }
                         Rectangle {
                             width: parent.width; height: 83; color: "#251f24"; radius: 10; border.color: "#49353e"
-                            Text { anchors.fill: parent; anchors.margins: 13; wrapMode: Text.WordWrap; text: "Режим предпросмотра: используются вымышленные навыки. Автоклики, OCR, классы 2v8 и отправка билдов не реализованы."; color: "#dec0bf"; font.pixelSize: 11 }
+                            Text { anchors.fill: parent; anchors.margins: 13; wrapMode: Text.WordWrap; text: "Qt оболочка с оригинальным движком. Перед автоэкипировкой проверьте координаты, сухой прогон и стоп-клавишу F9."; color: "#dec0bf"; font.pixelSize: 11 }
                         }
                     }
                 }
