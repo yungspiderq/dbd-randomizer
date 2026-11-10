@@ -80,7 +80,8 @@ class QtBridge(QObject):
         for side, key in (("K", "killers"), ("S", "survivors")):
             all_chars = list(self.db["killers" if side == "K" else "survivors"])
             stored = self.cfg.get("owned", {}).get(key) or []
-            self._owned[side] = set(stored) if stored else set(all_chars)
+            # Legacy empty list means all; "__none__" is an explicit empty selection.
+            self._owned[side] = (set(stored) & set(all_chars)) if stored else set(all_chars)
         self._wake.connect(self._drain)
         self._tick = QTimer(self)
         self._tick.timeout.connect(self._drain)
@@ -138,8 +139,8 @@ class QtBridge(QObject):
     def _save(self):
         self.cfg.setdefault("options", {})["side"] = self._role
         self.cfg["options"]["perk_mode"] = self._mode
-        self.cfg.setdefault("owned", {})["killers"] = sorted(self._owned["K"])
-        self.cfg["owned"]["survivors"] = sorted(self._owned["S"])
+        self.cfg.setdefault("owned", {})["killers"] = sorted(self._owned["K"]) or ["__none__"]
+        self.cfg["owned"]["survivors"] = sorted(self._owned["S"]) or ["__none__"]
         core.save_config(self.cfg)
 
     def _option(self, key):
@@ -225,18 +226,46 @@ class QtBridge(QObject):
                 for name in sorted(pool)]
 
     @Property("QVariantList", notify=skinsChanged)
+    def skinCharacters(self):
+        if not core.SKINS:
+            return []
+        return [{"name": name, "side": "K" if name in self.db["killers"] else "S",
+                 "count": len(ids)}
+                for name, ids in sorted(core.SKINS.CHAR_SKINS.items())
+                if name in self.db["killers"] or name in self.db["survivors"]]
+
+    def _skin_ids(self):
+        return list(core.SKINS.CHAR_SKINS.get(self._skin_character, [])) if core.SKINS else []
+
+    def _owned_skin_ids(self):
+        ids = self._skin_ids()
+        saved = self.cfg.get("skins", {}).get(self._skin_character)
+        return set(ids) if saved is None else set(saved)
+
+    @Property("QVariantMap", notify=skinsChanged)
+    def skinStats(self):
+        ids = self._skin_ids()
+        owned = self._owned_skin_ids()
+        return {"total": len(ids), "owned": sum(sid in owned for sid in ids)}
+
+    @Property("QVariantList", notify=skinsChanged)
     def skins(self):
         if not core.SKINS:
             return []
         result = []
-        allowed = set(self.cfg.get("skins", {}).get(self._skin_character, []))
-        for sid in core.SKINS.CHAR_SKINS.get(self._skin_character, []):
+        owned = self._owned_skin_ids()
+        for sid in self._skin_ids():
             info = core.SKINS.SKINS_BY_ID.get(sid) or {}
             name = tidy(info.get("name_ru") or info.get("name") or sid)
-            if self._skin_filter and self._skin_filter.lower() not in name.lower():
+            english = tidy(info.get("name", ""))
+            rarity = tidy(info.get("rarity_ru") or core.SKINS.RARITY_RU.get(info.get("rarity"), ""))
+            typ = "Скин персонажа" if info.get("kind") == "coschar" else "Набор одежды"
+            date = str(info.get("date") or "")
+            search = core._norm(" ".join((str(sid), name, english, rarity, typ, date, self._skin_character)))
+            if self._skin_filter and core._norm(self._skin_filter) not in search:
                 continue
-            result.append({"id": int(sid), "name": name, "owned": sid in allowed,
-                           "rarity": tidy(info.get("rarity_ru", ""))})
+            result.append({"id": int(sid), "name": name, "english": english,
+                           "owned": sid in owned, "rarity": rarity, "type": typ, "date": date})
         return result
 
     @Property(str, notify=skinsChanged)
@@ -473,6 +502,29 @@ class QtBridge(QObject):
         self.charactersChanged.emit()
         self._save()
 
+    @Slot(str, str, str)
+    def setCharactersBulk(self, side, action, search):
+        """All, none, invert, scoped to the visible search for the selected side."""
+        side = side.upper()
+        if side not in ("K", "S") or action not in ("all", "none", "invert"):
+            return
+        pool = self.db["killers"] if side == "K" else self.db["survivors"]
+        term = core._norm(search)
+        matching = [name for name in pool if term in core._norm(name)]
+        selected = self._owned[side]
+        for name in matching:
+            if action == "all":
+                selected.add(name)
+            elif action == "none":
+                selected.discard(name)
+            elif name in selected:
+                selected.remove(name)
+            else:
+                selected.add(name)
+        self._save()
+        self.charactersChanged.emit()
+        self._notify("Выбор сохранён: " + ("маньяки" if side == "K" else "выжившие") + ", " + str(len(selected)) + " из " + str(len(pool)))
+
     @Slot(str)
     def setSkinCharacter(self, name):
         if core.SKINS and name in core.SKINS.CHAR_SKINS:
@@ -493,13 +545,42 @@ class QtBridge(QObject):
 
     @Slot(int)
     def toggleSkin(self, sid):
-        p = self.cfg.setdefault("skins", {}).setdefault(self._skin_character, [])
-        if sid in p:
-            p.remove(sid)
+        if sid not in self._skin_ids():
+            return
+        owned = self._owned_skin_ids()
+        if sid in owned:
+            owned.remove(sid)
         else:
-            p.append(sid)
+            owned.add(sid)
+        self.cfg.setdefault("skins", {})[self._skin_character] = sorted(owned)
         self._save()
         self.skinsChanged.emit()
+
+    @Slot(str)
+    def setSkinsOwned(self, action):
+        if action not in ("all", "none", "invert"):
+            return
+        ids = self._skin_ids()
+        owned = self._owned_skin_ids()
+        if action == "all":
+            owned = set(ids)
+        elif action == "none":
+            owned.clear()
+        else:
+            owned = set(ids) - owned
+        self.cfg.setdefault("skins", {})[self._skin_character] = sorted(owned)
+        self._save()
+        self.skinsChanged.emit()
+        self._notify("Внешность: выбрано " + str(len(owned)) + " из " + str(len(ids)))
+
+    @Slot(result=int)
+    def randomSkinId(self):
+        owned = self._owned_skin_ids()
+        candidates = [sid for sid in self._skin_ids() if sid in owned]
+        if not candidates:
+            self._notify("Нет выбранных наборов для этого персонажа.")
+            return -1
+        return int(random.choice(candidates))
 
     @Slot()
     def rollClasses(self):
