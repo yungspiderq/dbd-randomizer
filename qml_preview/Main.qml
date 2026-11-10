@@ -241,7 +241,7 @@ ApplicationWindow {
                             Rectangle {
                                 id: rotationPanel
                                 width: parent.width
-                                height: 148
+                                height: 168
                                 radius: 13
                                 color: "#1c2430"
                                 border.width: 1
