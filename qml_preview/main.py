@@ -11,12 +11,12 @@ REPO = HERE.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from qt_bridge import QtBridge
+from native_backend import QtBridge
 
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("DBD Randomizer Qt Beta")
+    app.setApplicationName("DBD Randomizer Qt Beta 2")
     backend = QtBridge()
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("backend", backend)
