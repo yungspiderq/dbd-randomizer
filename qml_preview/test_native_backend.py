@@ -104,6 +104,51 @@ class QtBackendTests(unittest.TestCase):
         self.assertNotEqual(after[0], before[0])
         self.assertEqual(len(set(after)), 4)
 
+    def test_perk_details_owner_common_and_safe_reference(self):
+        self.bridge.setRole("killer")
+        self.bridge.generate()
+        info = self.bridge.perkInfo(0)
+        self.assertTrue(info["filled"])
+        self.assertEqual(info["name"], self.bridge.perks[0]["name"])
+        self.assertIn(info["kind"], ("Уникальный навык", "Общий навык"))
+        self.assertTrue(info["found"])
+        self.assertEqual(info["slot"], 1)
+
+    def test_pinned_perks_survive_full_generate_and_have_no_duplicates(self):
+        self.bridge.setRole("killer")
+        self.bridge.generate()
+        selected = self.bridge.perks[0]["name"]
+        revision = self.bridge.buildRevision
+        self.bridge.toggleLock(0)
+        self.assertEqual(revision, self.bridge.buildRevision)
+        self.bridge.generate()
+        self.assertGreater(self.bridge.buildRevision, revision)
+        self.assertEqual(self.bridge.perks[0]["name"], selected)
+        self.assertTrue(self.bridge.perks[0]["locked"])
+        names = [p["name"] for p in self.bridge.perks if p["filled"]]
+        self.assertEqual(len(names), len(set(names)))
+
+    def test_bulk_lock_and_unlock_affects_only_filled_slots(self):
+        self.bridge.generate()
+        self.bridge.setAllPerkLocks(True)
+        self.assertEqual(self.bridge.lockedCount, 4)
+        original = [p["name"] for p in self.bridge.perks]
+        self.bridge.rerollPerks()
+        self.assertEqual(original, [p["name"] for p in self.bridge.perks])
+        self.bridge.setAllPerkLocks(False)
+        self.assertEqual(self.bridge.lockedCount, 0)
+
+    def test_new_challenge_can_release_incompatible_pinned_perks(self):
+        self.bridge.setRole("killer")
+        self.bridge.generate()
+        self.bridge.setAllPerkLocks(True)
+        dropping = next(ch for ch in core.DATA.CHALLENGES
+                        if ch["side"] in ("KILLER", "ANY")
+                        and "perks" in ch.get("fx", {}).get("drop", ()))
+        self.bridge._generate(preset_challenge=dropping)
+        self.assertEqual(self.bridge.lockedCount, 0)
+        self.assertTrue(self.bridge.build["forbidden"]["perks"])
+
     def test_lock_and_reroll(self):
         self.bridge.generate()
         self.bridge.toggleLock(0)
