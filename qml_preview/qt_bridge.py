@@ -14,7 +14,9 @@ import re
 import time
 
 from PySide6.QtCore import QObject, Property, QTimer, Signal, Slot, QUrl
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QPainter, QColor, QCursor
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget
 
 import dbd_randomizer as core
 
@@ -352,6 +354,7 @@ class QtBridge(QObject):
     def rollClasses(self):
         self._classes = {side: core.pick_class(side) for side in ("SURVIVOR", "KILLER")}
         self._set_error("Классы: " + " | ".join(clean((v or {}).get("ru", "—")) for v in self._classes.values()))
+        self.detailChanged.emit()
 
     @Slot()
     def copyBuild(self):
@@ -493,6 +496,105 @@ class QtBridge(QObject):
             return clean(self.app.txt_log.get("1.0", "end"))[-3000:]
         except Exception:
             return ""
+
+    @Slot()
+    def nextSkinCharacter(self):
+        chars = list((getattr(core.SKINS, "CHAR_SKINS", {}) if core.SKINS else {}).keys())
+        if not chars:
+            return
+        i = chars.index(self._skin_character) if self._skin_character in chars else -1
+        self.setSkinCharacter(chars[(i + 1) % len(chars)])
+
+    @Slot(str)
+    def captureCoord(self, key):
+        if key not in self.app._coord_widgets:
+            self._set_error("Неизвестное поле координат.")
+            return
+        bridge = self
+
+        class Overlay(QWidget):
+            def __init__(self):
+                super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+                self.setAttribute(Qt.WA_TranslucentBackground)
+                self.setMouseTracking(True)
+                self.setCursor(Qt.CrossCursor)
+
+            def paintEvent(self, _event):
+                p = QPainter(self)
+                p.fillRect(self.rect(), QColor(10, 16, 24, 70))
+                p.setPen(QColor(234, 87, 83))
+                p.drawText(25, 45, "Нажмите на нужное место в игре · Esc — отмена")
+
+            def keyPressEvent(self, event):
+                if event.key() == Qt.Key_Escape:
+                    self.close()
+
+            def mousePressEvent(self, _event):
+                pos = QCursor.pos()
+                # Original input backend uses the same global desktop coordinates.
+                bridge.editCoord(key, "x", str(pos.x()))
+                bridge.editCoord(key, "y", str(pos.y()))
+                bridge.saveSettings()
+                bridge._set_error("Координата сохранена: " + key)
+                self.close()
+
+        self._overlay = Overlay()
+        self._overlay.showFullScreen()
+        self._overlay.activateWindow()
+        self._overlay.setFocus()
+
+    @Slot()
+    def dataCheck(self):
+        errors, warnings = core.validate_db(self.app.db)
+        self._set_error("База: ошибок " + str(len(errors)) + ", предупреждений " + str(len(warnings)))
+
+    @Slot()
+    def copyClass(self):
+        classes = [(side, info) for side, info in self._classes.items()]
+        QGuiApplication.clipboard().setText(core.classes_to_text(classes))
+        self._set_error("Классы скопированы.")
+
+    @Property("QVariantList", notify=detailChanged)
+    def classDetails(self):
+        return [
+            {"side": side, "title": clean(info.get("ru", "")) if info else "—",
+             "skills": clean("; ".join(x.get("text", "") for x in info.get("skills", []))) if info else ""}
+            for side, info in self._classes.items()
+        ]
+
+    @Slot(str, str, str, str, str, str, str, str, str)
+    def buildCustom(self, side, char, item, a1, a2, p1, p2, p3, p4):
+        source = self.app.db["killers"] if side == "KILLER" else self.app.db["survivors"]
+        if char not in source:
+            self._set_error("Персонаж не найден в базе. Укажите точное имя.")
+            return
+        perks = [p1, p2, p3, p4]
+        if any(not p.strip() for p in perks) or len(set(perks)) < 4:
+            self._set_error("Нужно выбрать четыре разных навыка.")
+            return
+        pool = set(core.all_unique_perks(self.app.db, side))
+        pool.update(self.app.db["killer_common_perks"] if side == "KILLER" else self.app.db["surv_common_perks"])
+        if any(p not in pool for p in perks):
+            self._set_error("Навык не найден в базе. Проверьте точность названия.")
+            return
+        b = {"side": side, "char": char, "power_or_item": item or (source[char].get("power", core.EMPTY)
+                                                                 if side == "KILLER" else core.EMPTY),
+             "power_is_item": side == "SURVIVOR", "addons": [a1 or core.EMPTY, a2 or core.EMPTY],
+             "perks": perks, "forbidden": {}, "skin": None}
+        self.app.build = b
+        self.app.mode_var.set(side)
+        self._locks = [False] * 4
+        self.app._render_build()
+        self._sync_build()
+        self.roleChanged.emit()
+        self._set_error("Пользовательский билд собран.")
+
+    @Slot()
+    def returnToLegacy(self):
+        # Compatibility escape hatch while the Qt UI is being migrated.
+        self.root.deiconify()
+        self.root.lift()
+        self._set_error("Оригинальные расширенные настройки открыты в старом окне.")
 
     @Slot()
     def close(self):
