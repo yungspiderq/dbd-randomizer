@@ -23,6 +23,7 @@ import dbd_randomizer as core
 import qt_updater
 from addon_effects import AddonEffectLibrary
 from rotation_engine import RotationState, make_rotated_build
+from perk_cards import perk_info, reconcile_pins
 from dbd_icons_store import IconStore
 
 
@@ -32,6 +33,7 @@ def tidy(s):
 
 class QtBridge(QObject):
     perksChanged = Signal()
+    buildRevisionChanged = Signal()
     roleChanged = Signal()
     modeChanged = Signal()
     rotationChanged = Signal()
@@ -62,6 +64,7 @@ class QtBridge(QObject):
         self._rotation = RotationState(self.cfg["options"].get("rotation_state"))
         self._rotation_enabled = bool(self.cfg["options"].get("rotation_enabled", False))
         self._locks = [False] * 4
+        self._build_revision = 0
         self._history = []
         self._status = "Загружены игровые данные v" + core.APP_VERSION
         self._log = []
@@ -239,6 +242,46 @@ class QtBridge(QObject):
                  "locked": self._locks[i],
                  "filled": i < len(names) and names[i] not in ("", core.EMPTY)}
                 for i in range(4)]
+
+    @Property(int, notify=buildRevisionChanged)
+    def buildRevision(self):
+        return self._build_revision
+
+    @Property(int, notify=perksChanged)
+    def lockedCount(self):
+        if not self.build:
+            return 0
+        return sum(bool(p["locked"]) for p in self.perks if p["filled"])
+
+    @Slot(int, result="QVariantMap")
+    def perkInfo(self, index):
+        if not self.build or not 0 <= index < 4:
+            return {"slot": index + 1, "name": "Не выбран", "owner": "",
+                    "kind": "Пустой слот", "locked": False, "filled": False}
+        raw = self.perks[index]
+        info = perk_info(self.db, self.build["side"], raw["raw"], empty=core.EMPTY)
+        return {**info, "slot": index + 1, "locked": raw["locked"],
+                "filled": raw["filled"], "side": self.build["side"]}
+
+    @Slot()
+    def openPerkReference(self):
+        # The current database stores perk names and ownership, but no verified
+        # in-game perk effects. Open the real reference page rather than guessing.
+        QDesktopServices.openUrl(QUrl("https://deadbydaylight.wiki.gg/wiki/Perks"))
+
+    @Slot(bool)
+    def setAllPerkLocks(self, locked):
+        if not self.build:
+            return
+        filled = self.perks
+        changed = False
+        for i in range(4):
+            target = bool(locked) and filled[i]["filled"]
+            if self._locks[i] != target:
+                self._locks[i] = target
+                changed = True
+        if changed:
+            self.perksChanged.emit()
 
     @Property("QVariantList", notify=historyChanged)
     def history(self):
@@ -506,6 +549,7 @@ class QtBridge(QObject):
                       addons_enabled=bool(self._option("addons_enabled")),
                       skin_enabled=bool(self._option("skin_enabled")),
                       owned_skins=self.cfg.get("skins", {}), fx=fx)
+            self.build_before_generation = self.build
             if self._rotation_enabled:
                 self.build = make_rotated_build(core, self.db, self._role, names, self._rotation, **kw)
             else:
@@ -515,16 +559,20 @@ class QtBridge(QObject):
                 self.build["challenge"] = ch
             if self._option("class_enabled"):
                 self.build["class"] = core.pick_class(self._role)
+            self._locks, dropped_pins = reconcile_pins(
+                self.db, self.build_before_generation, self._locks, self.build,
+                respect_owned=bool(self._option("respect_owned")), empty=core.EMPTY)
             if self._rotation_enabled:
                 self._rotation.record_build(self.build, core.EMPTY, core.NO_ADDONS)
                 self.rotationChanged.emit()
-            self._locks = [False] * 4
             self._sync()
             self._history.insert(0, tidy(core.build_to_clipboard_text(self.build)).replace("\n", " | "))
             self._history = self._history[:12]
             self.historyChanged.emit()
             self._save()
-            self._notify("Билд готов: " + self.build["char"])
+            self._notify("Билд готов: " + self.build["char"] +
+                         (". Несовместимых закреплений снято: " + str(dropped_pins)
+                          if dropped_pins else ""))
         except Exception as e:
             self._notify("Генерация: " + str(e))
 
@@ -532,6 +580,8 @@ class QtBridge(QObject):
         self.perksChanged.emit()
         self.detailChanged.emit()
         self.iconVersionChanged.emit()
+        self._build_revision += 1
+        self.buildRevisionChanged.emit()
 
     @Slot(int)
     def toggleLock(self, index):
