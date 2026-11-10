@@ -356,12 +356,19 @@ ApplicationWindow {
                                                     }
                                                 }
                                                 ToolTip.visible: addonHover.containsMouse && addonCard.addonInfo.filled
-                                                ToolTip.text: addonCard.addonInfo.name
+                                                ToolTip.text: "Эффект аддона: " + addonCard.addonInfo.name
                                                 MouseArea {
                                                     id: addonHover
                                                     anchors.fill: parent
                                                     hoverEnabled: true
-                                                    acceptedButtons: Qt.NoButton
+                                                    enabled: addonCard.addonInfo.filled
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        backend.selectAddonEffect(backend.detail.side,
+                                                            backend.detail.char, backend.detail.category,
+                                                            addonCard.addonInfo.raw);
+                                                        addonPopup.open();
+                                                    }
                                                 }
                                             }
                                         }
@@ -538,13 +545,33 @@ ApplicationWindow {
                                 makerPerk2.text = "";
                                 makerPerk3.text = "";
                                 makerPerk4.text = "";
+                                perkSearch.text = "";
+                                addonSearch.text = "";
+                                perkSlot = 0;
+                                addonSlot = 0;
                             }
                             function pickPerk(name) {
                                 var fields = [makerPerk1, makerPerk2, makerPerk3, makerPerk4];
+                                for (var i = 0; i < 4; i++) {
+                                    if (fields[i].text === name) {
+                                        perkSlot = i;
+                                        return;
+                                    }
+                                }
                                 fields[perkSlot].text = name;
-                                perkSlot = (perkSlot + 1) % 4;
+                                var next = (perkSlot + 1) % 4;
+                                for (var j = 0; j < 4; j++) {
+                                    var slot = (next + j) % 4;
+                                    if (!fields[slot].text) {
+                                        perkSlot = slot;
+                                        return;
+                                    }
+                                }
+                                perkSlot = next;
                             }
                             function pickAddon(name) {
+                                if (makerAddon1.text === name) { addonSlot = 0; return; }
+                                if (makerAddon2.text === name) { addonSlot = 1; return; }
                                 if (addonSlot === 0) makerAddon1.text = name;
                                 else makerAddon2.text = name;
                                 addonSlot = 1 - addonSlot;
@@ -646,14 +673,30 @@ ApplicationWindow {
                                             color: addonPickHover.containsMouse ? "#313d4b" : "#202934"
                                             border.color: "#344152"
                                             ArtThumb { x: 5; y: 4; pixels: 41; iconKey: modelData.name; placeholder: "ADD" }
-                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 65; elide: Text.ElideRight; font.pixelSize: 12; color: "#ecf1f6" }
+                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 140; elide: Text.ElideRight; font.pixelSize: 12; color: "#ecf1f6" }
                                             MouseArea { id: addonPickHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: makerPage.pickAddon(modelData.name) }
+                                            UiButton {
+                                                x: parent.width - 81; y: 8
+                                                width: 73; height: 32
+                                                label: "ЭФФЕКТ"
+                                                onClicked: {
+                                                    var category = "";
+                                                    if (makerPage.makerSide === "SURVIVOR") {
+                                                        var items = backend.searchItems(makerItem.text);
+                                                        if (items.length && items[0].name === makerItem.text)
+                                                            category = items[0].category;
+                                                    }
+                                                    backend.selectAddonEffect(makerPage.makerSide,
+                                                        makerChar.text, category, modelData.name);
+                                                    addonPopup.open();
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                             Rectangle {
-                                width: parent.width; height: 433; radius: 13; color: win.surface; border.color: win.stroke
+                                width: parent.width; height: 455; radius: 13; color: win.surface; border.color: win.stroke
                                 Column {
                                     anchors.fill: parent; anchors.margins: 13; spacing: 8
                                     Text { text: "03 · ЧЕТЫРЕ НАВЫКА"; font.pixelSize: 11; font.bold: true; color: "#adbccd" }
@@ -680,6 +723,13 @@ ApplicationWindow {
                                             }
                                         }
                                     }
+                                    Text {
+                                        width: parent.width
+                                        text: "Навыков выбрано: " +
+                                            [makerPerk1.text, makerPerk2.text, makerPerk3.text, makerPerk4.text].filter(Boolean).length +
+                                            " / 4 · повторные навыки не добавляются"
+                                        color: "#8fa1b4"; font.pixelSize: 10
+                                    }
                                     UiField { id: perkSearch; width: parent.width; placeholderText: "Поиск навыков по названию..." }
                                     ListView {
                                         id: makerPerks
@@ -691,7 +741,17 @@ ApplicationWindow {
                                             color: perkPickHover.containsMouse ? "#303b49" : "#202934"
                                             border.color: "#344152"
                                             ArtThumb { x: 5; y: 4; pixels: 40; iconKey: modelData.name; placeholder: "PERK" }
-                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 65; font.pixelSize: 12; elide: Text.ElideRight; color: "#eef2f8" }
+                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 145; font.pixelSize: 12; elide: Text.ElideRight; color: "#eef2f8" }
+                                            Text {
+                                                text: "ВЫБРАН"
+                                                visible: [makerPerk1.text, makerPerk2.text, makerPerk3.text, makerPerk4.text].indexOf(modelData.name) >= 0
+                                                anchors.right: parent.right
+                                                anchors.rightMargin: 11
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                color: "#ed9f96"
+                                            }
                                             MouseArea { id: perkPickHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: makerPage.pickPerk(modelData.name) }
                                         }
                                     }
@@ -702,10 +762,9 @@ ApplicationWindow {
                                 label: "СОБРАТЬ БИЛД И ОТКРЫТЬ КАРТОЧКУ"
                                 primary: true
                                 onClicked: {
-                                    backend.buildCustom(makerPage.makerSide, makerChar.text, makerItem.text,
+                                    if (backend.buildCustom(makerPage.makerSide, makerChar.text, makerItem.text,
                                         makerAddon1.text, makerAddon2.text, makerPerk1.text,
-                                        makerPerk2.text, makerPerk3.text, makerPerk4.text);
-                                    if (backend.detail.hasBuild && backend.detail.char === makerChar.text)
+                                        makerPerk2.text, makerPerk3.text, makerPerk4.text))
                                         win.page = "Билд";
                                 }
                             }
@@ -1220,6 +1279,108 @@ ApplicationWindow {
         border.color: "#28323d"
         Text { anchors.left: parent.left; anchors.leftMargin: 19; anchors.verticalCenter: parent.verticalCenter; text: backend.status; color: "#9aa8ba"; font.pixelSize: 11; elide: Text.ElideRight; width: parent.width - 45 }
     }
+    Popup {
+        id: addonPopup
+        parent: Overlay.overlay
+        x: Math.max(20, (win.width - width) / 2)
+        y: Math.max(50, (win.height - height) / 2)
+        width: Math.min(480, win.width - 48)
+        height: Math.min(472, win.height - 90)
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 16
+            color: "#1a222e"
+            border.color: "#556277"
+            border.width: 1
+        }
+        contentItem: Flickable {
+            contentWidth: width
+            contentHeight: infoBody.implicitHeight + 16
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            Column {
+                id: infoBody
+                x: 10; y: 10
+                width: parent.width - 20
+                spacing: 15
+                Row {
+                    width: parent.width
+                    spacing: 11
+                    ArtThumb {
+                        pixels: 88
+                        iconKey: backend.addonEffect.name
+                        placeholder: "ADD"
+                    }
+                    Column {
+                        width: parent.width - 105
+                        spacing: 8
+                        Text { text: "СПРАВКА ПО АДДОНУ"; color: "#a7b6c8"; font.pixelSize: 10; font.bold: true }
+                        Text {
+                            text: backend.addonEffect.name
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            font.pixelSize: 17
+                            font.bold: true
+                            color: "#f6f8fb"
+                        }
+                        Text {
+                            text: backend.addonEffect.english || ""
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            font.pixelSize: 11
+                            color: "#98aaba"
+                        }
+                    }
+                }
+                Rectangle { width: parent.width; height: 1; color: "#364255" }
+                Text {
+                    text: backend.addonEffect.verified ? "ПРОВЕРЕННЫЙ ИГРОВОЙ ЭФФЕКТ" : "ИГРОВОЙ ЭФФЕКТ"
+                    color: backend.addonEffect.verified ? "#e6a59c" : "#a0b0c2"
+                    font.pixelSize: 11
+                    font.bold: true
+                }
+                Text {
+                    text: backend.addonEffect.effect ||
+                        "Проверенное краткое описание этого аддона пока не добавлено. Полный актуальный эффект доступен в справочнике wiki.gg."
+                    width: parent.width
+                    font.pixelSize: 13
+                    color: "#edf0f6"
+                    wrapMode: Text.Wrap
+                }
+                Text { text: "ОБЛАСТИ ВЛИЯНИЯ"; color: "#a0b0c2"; font.pixelSize: 11; font.bold: true }
+                Text {
+                    text: backend.addonEffect.categories.length > 0 ?
+                        backend.addonEffect.categories.join(" · ") :
+                        "Нет данных в локальном кэше. Категории wiki.gg подгружаются при наличии интернета."
+                    width: parent.width
+                    font.pixelSize: 12
+                    color: "#b8c4d3"
+                    wrapMode: Text.Wrap
+                }
+                Text {
+                    text: "Данные могут измениться после патча DBD. Категории — не замена точному описанию игрового эффекта."
+                    width: parent.width
+                    font.pixelSize: 11
+                    color: "#8497aa"
+                    wrapMode: Text.Wrap
+                }
+                UiButton {
+                    width: parent.width
+                    primary: true
+                    label: "ОТКРЫТЬ ПОДРОБНУЮ СПРАВКУ WIKI.GG"
+                    onClicked: backend.openAddonSource()
+                }
+                UiButton {
+                    width: parent.width
+                    label: "ЗАКРЫТЬ"
+                    onClicked: addonPopup.close()
+                }
+            }
+        }
+    }
+
     Shortcut { sequence: "F5"; onActivated: backend.generate() }
     Shortcut { sequence: "F6"; onActivated: backend.copyBuild() }
     Shortcut { sequence: "F9"; onActivated: backend.placeholder("STOP") }
