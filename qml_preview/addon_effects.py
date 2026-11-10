@@ -101,6 +101,7 @@ class AddonEffectLibrary:
         self.on_change = on_change
         self.categories = {}
         self.loading = False
+        self._last_attempt = 0.0
         self._lock = threading.Lock()
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -126,8 +127,9 @@ class AddonEffectLibrary:
 
     def refresh_async(self):
         with self._lock:
-            if self.loading:
+            if self.loading or (time.time() - self._last_attempt < 300):
                 return
+            self._last_attempt = time.time()
             try:
                 if self.categories and time.time() - self.path.stat().st_mtime < CACHE_TTL:
                     return
