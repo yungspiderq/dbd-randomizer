@@ -1668,7 +1668,7 @@ ApplicationWindow {
         x: Math.max(16, (win.width - width) / 2)
         y: Math.max(45, (win.height - height) / 2)
         width: Math.min(462, win.width - 40)
-        height: 395
+        height: Math.min(480, win.height - 90)
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -1678,9 +1678,17 @@ ApplicationWindow {
             border.color: "#536173"
             border.width: 1
         }
-        contentItem: Column {
-            padding: 17
-            spacing: 13
+        contentItem: Flickable {
+            contentWidth: width
+            contentHeight: perkInfoBody.implicitHeight + 34
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            Column {
+                id: perkInfoBody
+                x: 17
+                y: 17
+                width: parent.width - 34
+                spacing: 13
             Row {
                 spacing: 14
                 ArtThumb {
@@ -1714,7 +1722,7 @@ ApplicationWindow {
                 }
             }
             Rectangle {
-                width: parent.width - 34
+                width: parent.width
                 height: 1
                 color: "#354456"
             }
@@ -1727,7 +1735,7 @@ ApplicationWindow {
             Text {
                 text: perkPopup.info.owner || "Общий навык без привязки к персонажу"
                 color: "#eef1f7"
-                width: parent.width - 34
+                width: parent.width
                 wrapMode: Text.Wrap
                 font.pixelSize: 13
             }
@@ -1735,11 +1743,11 @@ ApplicationWindow {
                 text: "Описание игровых эффектов пока не хранится в базе приложения. Для актуальных значений открой справочник перков DBD."
                 color: "#8c9eaf"
                 font.pixelSize: 11
-                width: parent.width - 34
+                width: parent.width
                 wrapMode: Text.Wrap
             }
             Row {
-                width: parent.width - 34
+                width: parent.width
                 spacing: 9
                 UiButton {
                     width: (parent.width - 9) / 2
@@ -1762,16 +1770,17 @@ ApplicationWindow {
                 }
             }
             UiButton {
-                width: parent.width - 34
+                width: parent.width
                 height: 37
                 label: "СПРАВОЧНИК НАВЫКОВ DBD WIKI"
                 onClicked: backend.openPerkReference()
             }
             UiButton {
-                width: parent.width - 34
+                width: parent.width
                 height: 32
                 label: "ЗАКРЫТЬ"
                 onClicked: perkPopup.close()
+            }
             }
         }
     }
