@@ -524,6 +524,23 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                            Row {
+                                width: parent.width
+                                spacing: 8
+                                Text {
+                                    text: "НАВЫКИ · 4 СЛОТА"
+                                    color: "#b9c6d6"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    font.letterSpacing: 1
+                                }
+                                Item { width: 1; height: 1 }
+                                Text {
+                                    text: "Закреплено " + backend.lockedCount + " / 4"
+                                    color: backend.lockedCount > 0 ? "#e5bd83" : "#8594a7"
+                                    font.pixelSize: 11
+                                }
+                            }
                             GridLayout {
                                 width: parent.width
                                 columns: 2
@@ -533,63 +550,200 @@ ApplicationWindow {
                                     model: 4
                                     Rectangle {
                                         id: card
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 202
-                                        radius: 14
-                                        color: "#1b222d"
-                                        border.width: 1
-                                        border.color: backend.perks[index].locked ? "#c49b6a" : win.stroke
+                                        property int slotIndex: index
                                         property var perkInfo: backend.perks[index]
-                                        Rectangle { width: 6; height: 6; radius: 3; x: 18; y: 20; color: card.perkInfo.filled ? win.accent : "#606d7b" }
-                                        Text { text: "НАВЫК " + ("0" + (index + 1)); x: 33; y: 16; color: "#a4b1c2"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
-                                        Image {
-                                            id: perkIcon
-                                            width: 76
-                                            height: 76
-                                            y: 41
-                                            anchors.horizontalCenter: parent.horizontalCenter
-                                            fillMode: Image.PreserveAspectFit
-                                            source: backend.iconVersion >= 0 ? backend.iconPath(card.perkInfo.raw) : ""
-                                            asynchronous: true
-                                            smooth: true
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 242
+                                        radius: 14
+                                        color: "#1b2430"
+                                        border.width: 1
+                                        border.color: card.perkInfo.locked ? "#d6a667" : cardHover.containsMouse ? "#7c5f68" : "#384556"
+                                        clip: true
+
+                                        Rectangle {
+                                            width: 4; height: parent.height
+                                            color: card.perkInfo.locked ? "#efbf7e" : win.accent
                                         }
-                                        Canvas {
-                                            visible: perkIcon.status !== Image.Ready
-                                            width: 67; height: 67
-                                            anchors.horizontalCenter: parent.horizontalCenter
-                                            y: 46
-                                            onPaint: {
-                                                let ctx = getContext("2d");
-                                                ctx.lineWidth = 2.4;
-                                                ctx.strokeStyle = "#d6b6a1";
-                                                ctx.lineCap = "round"; ctx.lineJoin = "round";
-                                                ctx.beginPath();
-                                                let k = index % 4;
-                                                if (k === 0) { ctx.moveTo(36,4); ctx.lineTo(14,34); ctx.lineTo(28,35); ctx.lineTo(22,61); ctx.lineTo(54,27); ctx.lineTo(39,28); ctx.closePath(); }
-                                                else if (k === 1) { ctx.arc(34,33,25,0,Math.PI*2); ctx.moveTo(34,8); ctx.lineTo(34,58); ctx.moveTo(9,33); ctx.lineTo(59,33); }
-                                                else if (k === 2) { ctx.moveTo(34,5); ctx.lineTo(57,21); ctx.lineTo(51,47); ctx.lineTo(34,62); ctx.lineTo(17,47); ctx.lineTo(11,21); ctx.closePath(); }
-                                                else {ctx.moveTo(12,13);ctx.lineTo(55,56);ctx.moveTo(55,13);ctx.lineTo(12,56);ctx.moveTo(34,4);ctx.lineTo(34,64);}
-                                                ctx.stroke();
+                                        Rectangle {
+                                            x: 4; y: 0; width: parent.width - 4; height: 35
+                                            color: "#222d3a"
+                                        }
+                                        Text {
+                                            x: 15; y: 11
+                                            text: "СЛОТ 0" + (card.slotIndex + 1)
+                                            color: "#aab9ca"
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                            font.letterSpacing: 1
+                                        }
+                                        UiButton {
+                                            width: Math.min(126, card.width * 0.54)
+                                            height: 28
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 8
+                                            y: 4
+                                            primary: card.perkInfo.locked
+                                            label: card.perkInfo.locked ? "ЗАКРЕПЛЁН" : "ЗАКРЕПИТЬ"
+                                            onClicked: backend.toggleLock(card.slotIndex)
+                                        }
+                                        Rectangle {
+                                            x: (parent.width - 102) / 2
+                                            y: 41
+                                            width: 102; height: 93
+                                            radius: 13
+                                            color: "#28323e"
+                                            border.color: "#404e60"
+                                            Image {
+                                                id: perkIcon
+                                                anchors.fill: parent
+                                                anchors.margins: 5
+                                                fillMode: Image.PreserveAspectFit
+                                                source: backend.iconVersion >= 0 ? backend.iconPath(card.perkInfo.raw) : ""
+                                                asynchronous: true
+                                                smooth: true
+                                            }
+                                            Canvas {
+                                                anchors.centerIn: parent
+                                                width: 53; height: 53
+                                                visible: perkIcon.status !== Image.Ready
+                                                onPaint: {
+                                                    var p = getContext("2d");
+                                                    p.clearRect(0, 0, width, height);
+                                                    p.strokeStyle = "#aab8c8";
+                                                    p.lineWidth = 2.5;
+                                                    p.beginPath();
+                                                    p.moveTo(26, 3); p.lineTo(48, 25);
+                                                    p.lineTo(26, 49); p.lineTo(4, 25);
+                                                    p.closePath();
+                                                    p.moveTo(26, 12); p.lineTo(26, 40);
+                                                    p.moveTo(13, 25); p.lineTo(39, 25);
+                                                    p.stroke();
+                                                }
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: card.perkInfo.filled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                enabled: card.perkInfo.filled
+                                                onClicked: {
+                                                    perkPopup.info = backend.perkInfo(card.slotIndex);
+                                                    perkPopup.open();
+                                                }
                                             }
                                         }
-                                        Text { x: 18; y: 125; width: parent.width - 36; text: card.perkInfo.name; elide: Text.ElideRight; color: "#f3f5f6"; font.pixelSize: 15; font.weight: Font.DemiBold }
-                                        Text { x: 18; y: 151; text: card.perkInfo.locked ? "ЗАКРЕПЛЕНО" : "НАВЫК"; color: card.perkInfo.locked ? "#edb979" : "#8d99a8"; font.pixelSize: 10; font.letterSpacing: .5 }
+                                        Text {
+                                            x: 14; y: 141
+                                            width: parent.width - 28
+                                            height: 37
+                                            text: card.perkInfo.name
+                                            color: card.perkInfo.filled ? "#f4f6fa" : "#8693a3"
+                                            font.pixelSize: 14
+                                            font.weight: Font.DemiBold
+                                            horizontalAlignment: Text.AlignHCenter
+                                            wrapMode: Text.Wrap
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 2
+                                        }
                                         Row {
-                                            anchors.right: parent.right
-                                            anchors.top: parent.top
-                                            anchors.rightMargin: 10
-                                            anchors.topMargin: 10
-                                            spacing: 5
-                                            UiButton { width: 70; height: 30; label: card.perkInfo.locked ? "Откреп." : "Замок"; onClicked: backend.toggleLock(index) }
-                                            UiButton { width: 69; height: 30; label: "Переброс"; onClicked: backend.reroll(index) }
+                                            x: 12
+                                            y: 189
+                                            width: parent.width - 24
+                                            spacing: 8
+                                            UiButton {
+                                                width: (parent.width - 8) / 2
+                                                height: 36
+                                                label: "ПОДРОБНО"
+                                                onClicked: {
+                                                    perkPopup.info = backend.perkInfo(card.slotIndex);
+                                                    perkPopup.open();
+                                                }
+                                            }
+                                            UiButton {
+                                                width: (parent.width - 8) / 2
+                                                height: 36
+                                                label: "ПЕРЕБРОС"
+                                                onClicked: backend.reroll(card.slotIndex)
+                                            }
+                                        }
+                                        MouseArea {
+                                            id: cardHover
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            acceptedButtons: Qt.NoButton
+                                        }
+                                        SequentialAnimation {
+                                            id: perkReveal
+                                            running: false
+                                            PauseAnimation { duration: card.slotIndex * 85 }
+                                            ParallelAnimation {
+                                                NumberAnimation {
+                                                    target: card
+                                                    property: "opacity"
+                                                    from: 0.2
+                                                    to: 1
+                                                    duration: 260
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                                NumberAnimation {
+                                                    target: card
+                                                    property: "scale"
+                                                    from: 0.94
+                                                    to: 1
+                                                    duration: 300
+                                                    easing.type: Easing.OutBack
+                                                }
+                                            }
+                                        }
+                                        Connections {
+                                            target: backend
+                                            function onBuildRevisionChanged() {
+                                                perkReveal.restart();
+                                            }
                                         }
                                     }
                                 }
                             }
                             Row {
-                                width: parent.width; spacing: 10
-                                UiButton { width: parent.width * .6 - 5; label: "СГЕНЕРИРОВАТЬ БИЛД"; primary: true; onClicked: backend.generate() }
-                                UiButton { width: parent.width * .4 - 5; label: "КОПИРОВАТЬ"; onClicked: backend.copyBuild() }
+                                width: parent.width
+                                spacing: 8
+                                UiButton {
+                                    width: parent.width * 0.46 - 6
+                                    label: "СГЕНЕРИРОВАТЬ"
+                                    primary: true
+                                    onClicked: backend.generate()
+                                }
+                                UiButton {
+                                    width: parent.width * 0.30 - 6
+                                    label: "ПЕРЕБРОСИТЬ СВОБОДНЫЕ"
+                                    onClicked: backend.rerollPerks()
+                                }
+                                UiButton {
+                                    width: parent.width * 0.24 - 4
+                                    label: "КОПИРОВАТЬ"
+                                    onClicked: backend.copyBuild()
+                                }
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 8
+                                UiButton {
+                                    width: (parent.width - 8) / 2
+                                    height: 34
+                                    label: "ЗАКРЕПИТЬ ВСЕ НАВЫКИ"
+                                    onClicked: backend.setAllPerkLocks(true)
+                                }
+                                UiButton {
+                                    width: (parent.width - 8) / 2
+                                    height: 34
+                                    label: "СНЯТЬ ВСЕ ЗАКРЕПЛЕНИЯ"
+                                    onClicked: backend.setAllPerkLocks(false)
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                text: "Закреплённые перки сохраняются при полной генерации, если они не запрещены челленджем и настройками."
+                                wrapMode: Text.WordWrap
+                                color: "#8394a9"
+                                font.pixelSize: 11
                             }
                             Rectangle {
                                 width: parent.width; height: 86; radius: 12; color: win.surface; border.color: win.stroke
@@ -1507,6 +1661,121 @@ ApplicationWindow {
             }
         }
     }
+    Popup {
+        id: perkPopup
+        property var info: ({ slot: 0, name: "", owner: "", kind: "", filled: false, locked: false })
+        parent: Overlay.overlay
+        x: Math.max(16, (win.width - width) / 2)
+        y: Math.max(45, (win.height - height) / 2)
+        width: Math.min(462, win.width - 40)
+        height: 395
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 16
+            color: "#1a2430"
+            border.color: "#536173"
+            border.width: 1
+        }
+        contentItem: Column {
+            padding: 17
+            spacing: 13
+            Row {
+                spacing: 14
+                ArtThumb {
+                    pixels: 98
+                    iconKey: perkPopup.info.filled ? perkPopup.info.name : ""
+                    placeholder: "PERK"
+                }
+                Column {
+                    spacing: 8
+                    width: perkPopup.width - 140
+                    Text {
+                        text: "ПОДРОБНОСТИ · СЛОТ " + perkPopup.info.slot
+                        color: "#92a5b9"
+                        font.pixelSize: 10
+                        font.bold: true
+                    }
+                    Text {
+                        text: perkPopup.info.name
+                        width: parent.width
+                        color: "#f2f5f9"
+                        font.pixelSize: 18
+                        font.bold: true
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        text: perkPopup.info.kind
+                        width: parent.width
+                        color: "#e2b09b"
+                        font.pixelSize: 12
+                    }
+                }
+            }
+            Rectangle {
+                width: parent.width - 34
+                height: 1
+                color: "#354456"
+            }
+            Text {
+                text: "ПЕРСОНАЖ / ИСТОЧНИК НАВЫКА"
+                color: "#95a8bc"
+                font.pixelSize: 11
+                font.bold: true
+            }
+            Text {
+                text: perkPopup.info.owner || "Общий навык без привязки к персонажу"
+                color: "#eef1f7"
+                width: parent.width - 34
+                wrapMode: Text.Wrap
+                font.pixelSize: 13
+            }
+            Text {
+                text: "Описание игровых эффектов пока не хранится в базе приложения. Для актуальных значений открой справочник перков DBD."
+                color: "#8c9eaf"
+                font.pixelSize: 11
+                width: parent.width - 34
+                wrapMode: Text.Wrap
+            }
+            Row {
+                width: parent.width - 34
+                spacing: 9
+                UiButton {
+                    width: (parent.width - 9) / 2
+                    height: 37
+                    primary: perkPopup.info.locked
+                    label: perkPopup.info.locked ? "СНЯТЬ ФИКСАЦИЮ" : "ЗАКРЕПИТЬ"
+                    onClicked: {
+                        backend.toggleLock(perkPopup.info.slot - 1);
+                        perkPopup.info = backend.perkInfo(perkPopup.info.slot - 1);
+                    }
+                }
+                UiButton {
+                    width: (parent.width - 9) / 2
+                    height: 37
+                    label: "ПЕРЕБРОСИТЬ"
+                    onClicked: {
+                        backend.reroll(perkPopup.info.slot - 1);
+                        perkPopup.info = backend.perkInfo(perkPopup.info.slot - 1);
+                    }
+                }
+            }
+            UiButton {
+                width: parent.width - 34
+                height: 37
+                label: "СПРАВОЧНИК НАВЫКОВ DBD WIKI"
+                onClicked: backend.openPerkReference()
+            }
+            UiButton {
+                width: parent.width - 34
+                height: 32
+                label: "ЗАКРЫТЬ"
+                onClicked: perkPopup.close()
+            }
+        }
+    }
+
     Shortcut { sequence: "F5"; onActivated: backend.generate() }
     Shortcut { sequence: "F6"; onActivated: backend.copyBuild() }
     Shortcut { sequence: "F9"; onActivated: backend.placeholder("STOP") }
