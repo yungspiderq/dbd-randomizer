@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#181d29"/><stop offset="1" stop-color="#090c13"/></linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff8179"/><stop offset="1" stop-color="#b62136"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="512" height="512" rx="105" fill="url(#bg)"/>
+  <path d="M116 58 H396 Q445 58 454 113 V399 Q454 455 397 455 H116 Q58 455 58 399 V116 Q58 58 116 58 Z" fill="none" stroke="#702532" stroke-width="9"/>
+  <path d="M118 398 L399 116 M117 116 L398 400" stroke="#5a2533" stroke-width="28" stroke-linecap="round"/>
+  <path d="M118 398 L399 116 M117 116 L398 400" stroke="#ff695d" stroke-width="12" stroke-linecap="round"/>
+  <path d="M256 114 C194 114 164 158 169 227 C170 260 183 274 195 291 L201 330 L224 346 L236 332 L247 348 L258 332 L271 348 L285 330 L308 335 L314 294 C327 272 339 258 342 222 C344 158 311 114 256 114 Z" fill="#101720" stroke="url(#red)" stroke-width="15" stroke-linejoin="round" filter="url(#glow)"/>
+  <path d="M199 224 L247 242 L231 267 L205 255 Z M313 224 L265 242 L281 267 L307 255 Z" fill="#f86663"/>
+  <path d="M239 288 L256 272 L273 288 L266 307 L246 307 Z" fill="#ff8e7e"/>
+  <path d="M218 320 L236 329 L236 310 M245 334 V312 M267 334 V312 M276 329 L294 320" stroke="#f66f6a" stroke-width="8" stroke-linecap="round"/>
+  <path d="M178 154 L213 126 M334 154 L299 126" stroke="#ef5958" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="400" cy="111" r="13" fill="#f2675b"/>
+  <circle cx="111" cy="401" r="13" fill="#f2675b"/>
+</svg>
