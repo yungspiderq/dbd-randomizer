@@ -29,7 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r qml_preview/requirements.txt pyinstaller
       - name: Python syntax check
-        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
+        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
       - name: Targeted core generation checks
         run: |
           python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
@@ -38,7 +38,7 @@ jobs:
       - name: Native Qt backend regression tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m unittest qml_preview/test_native_backend.py -v
+        run: python -m unittest qml_preview/test_rotation_engine.py qml_preview/test_native_backend.py -v
       - name: QML smoke launch with the real engine
         shell: pwsh
         env:
@@ -77,9 +77,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.6"
+          $tag = "v2.28.0-qt-beta.7"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.exe dist/DBDRandomizerQtBeta.exe.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.exe dist/DBDRandomizerQtBeta.exe.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 6" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.exe dist/DBDRandomizerQtBeta.exe.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 7" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }
