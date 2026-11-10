@@ -240,12 +240,60 @@ ApplicationWindow {
                             }
                             Text { text: "ВАШ БИЛД"; color: win.muted; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                             Rectangle {
-                                width: parent.width; height: 112; radius: 11; color: win.surface; border.color: win.stroke
-                                Column { anchors.fill: parent; anchors.margins: 12; spacing: 5
-                                    Text { text: backend.detail.char || "Персонаж ещё не выбран"; color: "#f3f4f7"; font.pixelSize: 15; font.bold: true }
-                                    Text { text: "Предмет / сила: " + (backend.detail.power || "—"); elide: Text.ElideRight; width: parent.width; color: "#aab8c8"; font.pixelSize: 11 }
-                                    Text { text: "Аддоны: " + (backend.detail.addons || []).join(" · "); elide: Text.ElideRight; width: parent.width; color: "#aab8c8"; font.pixelSize: 11 }
-                                    Text { text: [backend.detail.skin, backend.detail.challenge, backend.detail["class"]].filter(Boolean).join(" · "); elide: Text.ElideRight; width: parent.width; color: "#d4a39a"; font.pixelSize: 10 }
+                                width: parent.width
+                                height: 165
+                                radius: 13
+                                color: win.surface
+                                border.color: win.stroke
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 13
+                                    ArtThumb {
+                                        pixels: 138
+                                        iconKey: backend.detail.char
+                                        placeholder: "DBD"
+                                    }
+                                    Column {
+                                        width: parent.width - 153
+                                        spacing: 9
+                                        Text {
+                                            text: backend.detail.char || "Персонаж ещё не выбран"
+                                            width: parent.width
+                                            elide: Text.ElideRight
+                                            color: "#f4f6fa"
+                                            font.pixelSize: 16
+                                            font.bold: true
+                                        }
+                                        Row {
+                                            width: parent.width
+                                            spacing: 8
+                                            ArtThumb { pixels: 40; iconKey: backend.detail.power; placeholder: "ITEM" }
+                                            Column {
+                                                spacing: 4
+                                                Text { text: backend.role === "killer" ? "СИЛА" : "ПРЕДМЕТ"; color: "#8394a7"; font.pixelSize: 9; font.bold: true }
+                                                Text { text: backend.detail.power || "Не выбрано"; width: 245; elide: Text.ElideRight; color: "#e1e7ef"; font.pixelSize: 11 }
+                                            }
+                                        }
+                                        Row {
+                                            spacing: 8
+                                            Repeater {
+                                                model: backend.detail.addons || []
+                                                ArtThumb { pixels: 38; iconKey: modelData; placeholder: "ADD" }
+                                            }
+                                            Text {
+                                                text: "Аддоны"
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                color: "#9eacbc"; font.pixelSize: 11
+                                            }
+                                        }
+                                        Text {
+                                            text: [backend.detail.skin, backend.detail.challenge, backend.detail["class"]].filter(Boolean).join(" · ")
+                                            width: parent.width
+                                            elide: Text.ElideRight
+                                            color: "#d4a9a1"; font.pixelSize: 10
+                                        }
+                                    }
                                 }
                             }
                             GridLayout {
@@ -456,7 +504,7 @@ ApplicationWindow {
                                                         x: 7; y: 6
                                                         pixels: 52
                                                         iconKey: modelData.name
-                                                        placeholder: characterRow.ListView.view ? (sideCard.sideKey === "K" ? "K" : "S") : "DBD"
+                                                        placeholder: sideCard.sideKey
                                                     }
                                                     Text {
                                                         text: modelData.name
@@ -641,7 +689,7 @@ ApplicationWindow {
                                         ListView {
                                             id: skinsList
                                             width: parent.width
-                                            height: skinContent.height - 300
+                                            height: skinContent.height - 330
                                             clip: true
                                             spacing: 7
                                             model: backend.skins
