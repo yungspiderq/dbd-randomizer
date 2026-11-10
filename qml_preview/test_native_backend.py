@@ -148,6 +148,46 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual(self.bridge.lockedCount, 0)
         self.assertTrue(self.bridge.build["forbidden"]["perks"])
 
+    def test_statistics_tracks_both_modes_and_perk_rerolls(self):
+        self.bridge.generate()
+        overview = self.bridge.statistics["overview"]
+        self.assertEqual(overview["generated"], 1)
+        self.assertEqual(overview["classic"], 1)
+        self.bridge.setRotationEnabled(True)
+        self.bridge.generate()
+        overview = self.bridge.statistics["overview"]
+        self.assertEqual(overview["generated"], 2)
+        self.assertEqual(overview["balanced"], 1)
+        self.assertEqual(len(self.bridge.statistics["recent"]), 2)
+        self.bridge.reroll(0)
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], 2)
+        self.assertEqual(self.bridge.statistics["overview"]["rerolls"], 1)
+        self.assertIn("statistics_v1", self.cfg["options"])
+
+    def test_statistics_side_and_category_independent_from_build(self):
+        self.bridge.generate()
+        self.bridge.setStatisticsSide("KILLER")
+        self.assertEqual(self.bridge.statisticsSide, "KILLER")
+        self.assertEqual(self.bridge.role, "survivor")
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], 0)
+        self.bridge.setStatisticsGroup("perks")
+        self.assertEqual(self.bridge.statisticsGroup, "perks")
+        self.bridge.setStatisticsGroup("items")
+        self.assertEqual(self.bridge.statisticsGroup, "perks")
+        self.bridge.setStatisticsSide("SURVIVOR")
+        self.bridge.setStatisticsGroup("items")
+        self.assertEqual(self.bridge.statisticsGroup, "items")
+        self.assertTrue(self.bridge.statistics["top"])
+
+    def test_reset_statistics_does_not_reset_rotation(self):
+        self.bridge.setRotationEnabled(True)
+        self.bridge.generate()
+        assert self.bridge.rotationStats["seen"] == 1
+        self.bridge.resetStatistics()
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], 0)
+        self.assertEqual(self.bridge.rotationStats["seen"], 1)
+        self.assertTrue(self.bridge.rotationEnabled)
+
     def test_lock_and_reroll(self):
         self.bridge.generate()
         self.bridge.toggleLock(0)
