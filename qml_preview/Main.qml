@@ -494,6 +494,51 @@ ApplicationWindow {
                         OptionRow { title: "Проверка OCR"; keyName: "ocr" }
                         OptionRow { title: "Выбирать персонажа в игре"; keyName: "select_char" }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
+                        Text { text: "ПАРАМЕТРЫ ПОИСКА И КУРСОРА"; color: "#d8dfe8"; font.pixelSize: 11; font.bold: true }
+                        Repeater {
+                            model: [
+                                { key: "clear", title: "Кликать кнопку очистки" },
+                                { key: "verifyclipboard", title: "Проверять буфер обмена" },
+                                { key: "restoreclipboard", title: "Восстанавливать буфер" },
+                                { key: "focusgame", title: "Поднимать окно игры" },
+                                { key: "hoververify", title: "Проверять точность курсора" },
+                                { key: "hoverretry", title: "Повторять наведение" }
+                            ]
+                            Rectangle {
+                                width: parent.width; height: 39; radius: 8
+                                color: optionMouse.containsMouse ? "#222a36" : "#191f28"
+                                Text { x: 10; width: parent.width-53; anchors.verticalCenter: parent.verticalCenter; text: modelData.title; elide: Text.ElideRight; font.pixelSize: 11; color: "#d2dbe5" }
+                                Rectangle {
+                                    width: 32; height: 18; radius: 9; x: parent.width-43; anchors.verticalCenter: parent.verticalCenter
+                                    color: backend.advanced[modelData.key] ? win.accent : "#454e5b"
+                                    Rectangle { width: 12; height: 12; radius: 6; y: 3; x: backend.advanced[modelData.key] ? 17 : 3; color: "#ffffff" }
+                                }
+                                MouseArea { id: optionMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.toggleAdvanced(modelData.key) }
+                            }
+                        }
+                        Text { text: "Номер иконки результата (1–9)"; color: win.muted; font.pixelSize: 11 }
+                        UiField { width: parent.width; text: backend.advanced.resultIndex; onEditingFinished: backend.setAdvanced("resultIndex", text) }
+                        Text { text: "Клавиша аварийного стопа"; color: win.muted; font.pixelSize: 11 }
+                        UiField { width: parent.width; text: backend.advanced.abortKey; onEditingFinished: backend.setAdvanced("abortKey", text) }
+                        Text { text: "Сложность челленджа"; color: win.muted; font.pixelSize: 11 }
+                        Row {
+                            spacing: 5
+                            Repeater {
+                                model: [
+                                    { key: "any", text: "Любая" },
+                                    { key: "easy", text: "Лёгкая" },
+                                    { key: "medium", text: "Средняя" },
+                                    { key: "hard", text: "Тяжёлая" }
+                                ]
+                                UiButton {
+                                    width: 65; height: 34; label: modelData.text
+                                    primary: backend.advanced.challengeDiff === modelData.key
+                                    onClicked: backend.setAdvanced("challengeDiff", modelData.key)
+                                }
+                            }
+                        }
+
+                        Rectangle { width: parent.width; height: 1; color: win.stroke }
                         UiButton { width: parent.width; label: "ЭКИПИРОВАТЬ В ИГРЕ"; onClicked: backend.equip() }
                         UiButton { width: parent.width; label: "СТОП АВТОМАТИЗАЦИИ (F9)"; onClicked: backend.stop() }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
