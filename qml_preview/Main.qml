@@ -10,7 +10,7 @@ ApplicationWindow {
     minimumWidth: 1000
     minimumHeight: 650
     color: "#0c0f14"
-    title: "DBD Ultimate Search Randomizer | Qt Beta 5"
+    title: "DBD Ultimate Search Randomizer | Qt Beta 6"
     property string page: "Билд"
     property color surface: "#171d26"
     property color stroke: "#2f3947"
@@ -179,7 +179,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 5"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 6"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 24 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -1259,7 +1259,7 @@ ApplicationWindow {
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Text { text: "ОБНОВЛЕНИЯ"; color: "#d8dfe8"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
                         UiButton { width: parent.width; label: backend.updateBusy ? "ПОДОЖДИТЕ..." : "ПРОВЕРИТЬ ОБНОВЛЕНИЯ"; onClicked: backend.checkUpdate() }
-                        Text { width: parent.width; text: backend.updateText || "Версия v2.28.0-qt-beta.5"; wrapMode: Text.Wrap; color: win.muted; font.pixelSize: 11 }
+                        Text { width: parent.width; text: backend.updateText || "Версия v2.28.0-qt-beta.6"; wrapMode: Text.Wrap; color: win.muted; font.pixelSize: 11 }
                         UiButton { visible: backend.updateAvailable; width: parent.width; label: "СКАЧАТЬ И УСТАНОВИТЬ"; primary: true; onClicked: backend.installUpdate() }
 
                         Rectangle {
