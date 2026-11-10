@@ -40,6 +40,7 @@ class QtBridge(QObject):
     settingsChanged = Signal()
     communityChanged = Signal()
     iconVersionChanged = Signal()
+    _iconReady = Signal()
     runningChanged = Signal()
 
     def __init__(self):
@@ -66,6 +67,7 @@ class QtBridge(QObject):
         self._builder_addons = [""] * 2
         self._builder_item = ""
         self._classes = {}
+        self._iconReady.connect(self._refresh_icons)
         self._clock = QTimer(self)
         self._clock.timeout.connect(self._pump)
         self._clock.start(45)
@@ -233,7 +235,7 @@ class QtBridge(QObject):
         return ""
 
     def _request_icon_refresh(self):
-        QTimer.singleShot(250, self._refresh_icons)
+        self._iconReady.emit()
 
     def _refresh_icons(self):
         self._icon_version += 1
