@@ -115,6 +115,58 @@ ApplicationWindow {
         MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: nav.clicked() }
     }
 
+    component StatRow: Rectangle {
+        id: statLine
+        property var rowData: ({name:"", count:0, fraction:0, since:-1})
+        property color fillColor: "#e46b67"
+        property bool showIcon: false
+        width: parent.width
+        height: 56
+        radius: 9
+        color: "#202a36"
+        border.color: "#354252"
+        ArtThumb {
+            visible: statLine.showIcon
+            x: 7; y: 7; pixels: 42
+            iconKey: statLine.rowData.name
+            placeholder: "DBD"
+        }
+        Text {
+            x: statLine.showIcon ? 58 : 11
+            y: 7
+            width: parent.width - (statLine.showIcon ? 118 : 72)
+            text: statLine.rowData.name
+            color: "#edf2f9"
+            font.pixelSize: 11
+            font.bold: true
+            elide: Text.ElideRight
+        }
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            y: 6
+            text: statLine.rowData.count + "×"
+            color: "#f0c4ae"
+            font.pixelSize: 12
+            font.bold: true
+        }
+        Rectangle {
+            x: statLine.showIcon ? 58 : 11
+            y: 36
+            width: parent.width - (statLine.showIcon ? 72 : 25)
+            height: 7
+            radius: 4
+            color: "#374354"
+            Rectangle {
+                width: Math.max(0, parent.width * Math.min(1, statLine.rowData.fraction || 0))
+                height: parent.height
+                radius: 4
+                color: statLine.fillColor
+                Behavior on width { NumberAnimation { duration: 230; easing.type: Easing.OutCubic } }
+            }
+        }
+    }
+
     component OptionRow: Rectangle {
         id: option
         property string title: ""
@@ -178,8 +230,9 @@ ApplicationWindow {
                 NavItem { ordinal: 3; label: "Билды сообщества"; onClicked: win.page = label }
                 NavItem { ordinal: 4; label: "Персонажи"; onClicked: win.page = label }
                 NavItem { ordinal: 5; label: "Внешность"; onClicked: win.page = label }
-                NavItem { ordinal: 6; label: "Клики и тайминги"; onClicked: win.page = label }
-                NavItem { ordinal: 7; label: "Классы 2v8"; onClicked: win.page = label }
+                NavItem { ordinal: 6; label: "Статистика"; onClicked: win.page = label }
+                NavItem { ordinal: 7; label: "Клики и тайминги"; onClicked: win.page = label }
+                NavItem { ordinal: 8; label: "Классы 2v8"; onClicked: win.page = label }
                 Item { height: 23 }
                 Rectangle { width: parent.width; height: 1; color: "#26303d" }
                 Item { height: 10 }
@@ -1338,6 +1391,317 @@ ApplicationWindow {
                             }
                         }
                         Column {
+                            id: statsPage
+                            visible: win.page === "Статистика"
+                            width: parent.width
+                            spacing: 14
+                            property var stat: backend.statistics
+                            Text {
+                                text: "Аналитика генераций"
+                                color: "#eff3f9"
+                                font.pixelSize: 19
+                                font.bold: true
+                            }
+                            Text {
+                                text: "Выпадения из всех генераций с Qt Beta 9, в обоих режимах. Ранее сохранённая история ротации сюда не подмешивается."
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                font.pixelSize: 11
+                                color: "#90a3b9"
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 9
+                                UiButton {
+                                    width: (parent.width - 9) / 2
+                                    label: "ВЫЖИВАЮЩИЕ"
+                                    primary: backend.statisticsSide === "SURVIVOR"
+                                    onClicked: backend.setStatisticsSide("SURVIVOR")
+                                }
+                                UiButton {
+                                    width: (parent.width - 9) / 2
+                                    label: "МАНЬЯКИ"
+                                    primary: backend.statisticsSide === "KILLER"
+                                    onClicked: backend.setStatisticsSide("KILLER")
+                                }
+                            }
+                            GridLayout {
+                                width: parent.width
+                                columns: 2
+                                columnSpacing: 10
+                                rowSpacing: 10
+                                Repeater {
+                                    model: [
+                                        {title:"СГЕНЕРИРОВАНО БИЛДОВ", number: statsPage.stat.overview.generated, detail:"За всё время наблюдения"},
+                                        {title:"ПЕРСОНАЖИ", number: statsPage.stat.overview.seen + " / " + statsPage.stat.overview.total, detail:"Разных персонажей"},
+                                        {title:"ОБЫЧНЫЙ / РОТАЦИЯ", number: statsPage.stat.overview.classic + " / " + statsPage.stat.overview.balanced, detail:"По режимам генерации"},
+                                        {title:"ПЕРЕБРОСЫ ПЕРКОВ", number: statsPage.stat.overview.rerolls, detail:"Отдельные обновления слотов"}
+                                    ]
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 97
+                                        radius: 12
+                                        color: win.surface
+                                        border.color: win.stroke
+                                        Column {
+                                            anchors.fill: parent
+                                            anchors.margins: 11
+                                            spacing: 6
+                                            Text {
+                                                text: modelData.title
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                font.letterSpacing: 0.7
+                                                color: "#a6b5c8"
+                                            }
+                                            Text {
+                                                text: "" + modelData.number
+                                                font.pixelSize: 24
+                                                font.bold: true
+                                                color: "#f2b3a6"
+                                            }
+                                            Text { text: modelData.detail; font.pixelSize: 10; color: "#8d9daf" }
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                width: parent.width
+                                height: 75
+                                radius: 11
+                                color: "#1e2834"
+                                border.color: win.stroke
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 12
+                                    Column {
+                                        width: (parent.width - 12) / 2
+                                        spacing: 5
+                                        Text { text: "РАЗНЫХ НАВЫКОВ"; color: "#9cacbe"; font.pixelSize: 10 }
+                                        Text { text: "" + statsPage.stat.overview.uniquePerks; font.pixelSize: 19; font.bold: true; color: "#f1f5fa" }
+                                    }
+                                    Column {
+                                        width: (parent.width - 12) / 2
+                                        spacing: 5
+                                        Text { text: "РАЗНЫХ АДДОНОВ"; color: "#9cacbe"; font.pixelSize: 10 }
+                                        Text { text: "" + statsPage.stat.overview.uniqueAddons; font.pixelSize: 19; font.bold: true; color: "#f1f5fa" }
+                                    }
+                                }
+                            }
+                            Text { text: "ПОКАЗАТЬ СТАТИСТИКУ"; color: "#c9d4e0"; font.pixelSize: 11; font.bold: true }
+                            Row {
+                                width: parent.width
+                                spacing: 7
+                                Repeater {
+                                    model: [
+                                        {id:"characters", label:"ПЕРСОНАЖИ"},
+                                        {id:"perks", label:"ПЕРКИ"},
+                                        {id:"addons", label:"АДДОНЫ"},
+                                        {id:"items", label:"ПРЕДМЕТЫ"}
+                                    ]
+                                    UiButton {
+                                        width: (parent.width - 21) / 4
+                                        height: 38
+                                        label: modelData.label
+                                        enabled: modelData.id !== "items" || backend.statisticsSide === "SURVIVOR"
+                                        opacity: enabled ? 1 : 0.35
+                                        primary: backend.statisticsGroup === modelData.id
+                                        onClicked: backend.setStatisticsGroup(modelData.id)
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                width: parent.width
+                                visible: statsPage.stat.overview.generated === 0
+                                height: 94
+                                radius: 12
+                                color: win.surface
+                                border.color: win.stroke
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 7
+                                    Text { text: "ПОКА НЕТ ГЕНЕРАЦИЙ"; font.pixelSize: 13; font.bold: true; color: "#e9edf3"; anchors.horizontalCenter: parent.horizontalCenter }
+                                    Text { text: "Сгенерируй первый билд — здесь появятся графики и история."; font.pixelSize: 11; color: "#9baabb"; anchors.horizontalCenter: parent.horizontalCenter }
+                                }
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 12
+                                Repeater {
+                                    model: [
+                                        {title:"ЧАЩЕ ВСЕГО", kind:"top", color:"#de6e69"},
+                                        {title:"РЕЖЕ ВСЕГО", kind:"least", color:"#77a5e2"}
+                                    ]
+                                    Rectangle {
+                                        id: rankingCard
+                                        property var selectedRows: modelData.kind === "top" ? statsPage.stat.top : statsPage.stat.least
+                                        width: (statsPage.width - 12) / 2
+                                        height: 576
+                                        radius: 13
+                                        color: "#171f2a"
+                                        border.color: win.stroke
+                                        Column {
+                                            anchors.fill: parent
+                                            anchors.margins: 11
+                                            spacing: 9
+                                            Text {
+                                                text: modelData.title
+                                                color: "#e3ebf5"
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                                font.letterSpacing: 0.8
+                                            }
+                                            Text {
+                                                text: modelData.kind === "least" ? "Включая ни разу не выпавших" : "Самые частые выпадения"
+                                                color: "#8da0b6"; font.pixelSize: 10
+                                                elide: Text.ElideRight
+                                            }
+                                            Repeater {
+                                                model: rankingCard.selectedRows.slice(0, 8)
+                                                StatRow {
+                                                    width: rankingCard.width - 22
+                                                    rowData: modelData
+                                                    fillColor: modelData.kind === "top" ? "#e56c69" : "#7b9fde"
+                                                    showIcon: backend.statisticsGroup === "characters"
+                                                }
+                                            }
+                                            Text {
+                                                visible: rankingCard.selectedRows.length === 0
+                                                text: "Пока нет данных"
+                                                color: win.muted
+                                                font.pixelSize: 12
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                id: staleCard
+                                width: parent.width
+                                height: 350
+                                radius: 13
+                                color: "#171f2a"
+                                border.color: win.stroke
+                                Column {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 10
+                                    Text { text: "ДАВНО НЕ ВЫПАДАЛИ"; font.pixelSize: 12; font.bold: true; color: "#e5ecf6" }
+                                    Text { text: "Только ранее встречавшиеся · количество действий с последнего выпадения"; font.pixelSize: 10; color: "#94a4b9" }
+                                    Repeater {
+                                        model: statsPage.stat.stale.slice(0, 5)
+                                        Rectangle {
+                                            width: staleCard.width - 24
+                                            height: 45
+                                            radius: 8
+                                            color: "#232c38"
+                                            border.color: "#394455"
+                                            Text {
+                                                x: 10; anchors.verticalCenter: parent.verticalCenter
+                                                width: parent.width - 125
+                                                elide: Text.ElideRight
+                                                text: modelData.name
+                                                color: "#edf2f7"; font.pixelSize: 12
+                                            }
+                                            Text {
+                                                anchors.right: parent.right
+                                                anchors.rightMargin: 12
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: modelData.since + " действий назад"
+                                                color: "#ddbaa1"; font.pixelSize: 10
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        visible: statsPage.stat.stale.length === 0
+                                        text: "Пока недостаточно данных"
+                                        color: win.muted; font.pixelSize: 12
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                id: recentCard
+                                width: parent.width
+                                height: 420
+                                radius: 13
+                                color: "#171f2a"
+                                border.color: win.stroke
+                                Column {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 10
+                                    Text { text: "ИСТОРИЯ ВЫПАДЕНИЙ"; color: "#e5edf5"; font.pixelSize: 12; font.bold: true }
+                                    Text { text: "Последние 100 событий сохраняются после перезапуска"; color: "#92a4b7"; font.pixelSize: 10 }
+                                    ListView {
+                                        id: statsHistory
+                                        width: recentCard.width - 24
+                                        height: 343
+                                        clip: true
+                                        spacing: 7
+                                        boundsBehavior: Flickable.StopAtBounds
+                                        model: statsPage.stat.recent
+                                        delegate: Rectangle {
+                                            width: statsHistory.width
+                                            height: 63
+                                            radius: 9
+                                            color: "#222c38"
+                                            border.color: "#3a4657"
+                                            Column {
+                                                x: 11
+                                                y: 9
+                                                width: parent.width - 22
+                                                spacing: 7
+                                                Row {
+                                                    width: parent.width
+                                                    spacing: 8
+                                                    Text { text: modelData.kind === "reroll" ? "ПЕРЕБРОС" : "БИЛД"; color: "#ec9f98"; font.pixelSize: 10; font.bold: true }
+                                                    Text { text: modelData.mode === "balanced" ? "РОТАЦИЯ" : "ОБЫЧНЫЙ"; color: "#9fb1c5"; font.pixelSize: 10 }
+                                                    Item { width: 1; height: 1 }
+                                                    Text { text: modelData.time; color: "#7e91a5"; font.pixelSize: 10 }
+                                                }
+                                                Text {
+                                                    width: parent.width
+                                                    text: modelData.character + " · " + (modelData.perks || []).join(" / ")
+                                                    elide: Text.ElideRight
+                                                    font.pixelSize: 11
+                                                    color: "#eef2f6"
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        visible: statsHistory.count === 0
+                                        text: "Генераций пока нет"
+                                        color: win.muted
+                                        font.pixelSize: 11
+                                    }
+                                }
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 10
+                                UiButton {
+                                    width: (parent.width - 10) / 2
+                                    label: "СКОПИРОВАТЬ ОТЧЁТ"
+                                    onClicked: backend.copyStatistics()
+                                }
+                                UiButton {
+                                    width: (parent.width - 10) / 2
+                                    label: "ОЧИСТИТЬ СТАТИСТИКУ"
+                                    onClicked: resetStatsDialog.open()
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                text: "Статистика и ротация хранятся отдельно. Очистка этого раздела не меняет шансы выпадений."
+                                wrapMode: Text.Wrap
+                                font.pixelSize: 11
+                                color: "#8fa0b4"
+                            }
+                        }
+
+                        Column {
                             visible: win.page === "Клики и тайминги"
                             width: parent.width; spacing: 11
                             Text { text: "Калибровка ввода для меню снаряжения"; color: win.muted; font.pixelSize: 12 }
@@ -1781,6 +2145,41 @@ ApplicationWindow {
                 label: "ЗАКРЫТЬ"
                 onClicked: perkPopup.close()
             }
+            }
+        }
+    }
+
+    Popup {
+        id: resetStatsDialog
+        parent: Overlay.overlay
+        x: Math.max(16, (win.width - width) / 2)
+        y: Math.max(42, (win.height - height) / 2)
+        width: Math.min(415, win.width - 40)
+        height: 202
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle { color: "#1b2430"; radius: 15; border.color: "#78545c" }
+        contentItem: Column {
+            padding: 15
+            spacing: 14
+            Text { text: "ОЧИСТИТЬ СТАТИСТИКУ?"; font.bold: true; font.pixelSize: 16; color: "#f0f3f9" }
+            Text {
+                text: "Счётчики и историю выбранной стороны нельзя будет восстановить. Настройки и веса сбалансированной ротации не изменятся."
+                width: resetStatsDialog.width - 36
+                wrapMode: Text.Wrap
+                color: "#a9b9ca"; font.pixelSize: 11
+            }
+            Row {
+                spacing: 10
+                UiButton { width: (resetStatsDialog.width - 44) / 2; height: 39; label: "ОТМЕНА"; onClicked: resetStatsDialog.close() }
+                UiButton {
+                    width: (resetStatsDialog.width - 44) / 2
+                    height: 39
+                    primary: true
+                    label: "ОЧИСТИТЬ"
+                    onClicked: { backend.resetStatistics(); resetStatsDialog.close() }
+                }
             }
         }
     }
