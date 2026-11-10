@@ -17,7 +17,7 @@ from pathlib import Path
 
 REPO = "yungspiderq/dbd-randomizer"
 BASE = f"https://api.github.com/repos/{REPO}/releases"
-CURRENT_TAG = "v2.28.0-qt-beta.8"
+CURRENT_TAG = "v2.28.0-qt-beta.9"
 ASSET = "DBDRandomizerQtBeta.exe"
 LIMIT_BYTES = 650 * 1024 * 1024
 
