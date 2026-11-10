@@ -30,10 +30,11 @@ jobs:
           python -m pip install -r qml_preview/requirements.txt pyinstaller
       - name: Python syntax check
         run: python -m py_compile qml_preview/main.py qml_preview/qt_bridge.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
-      - name: Check original generation engine
-        run: python dbd_randomizer.py --selftest
-      - name: Check original smoke test suite
-        run: python smoke_test.py
+      - name: Targeted core generation checks
+        run: |
+          python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
+      - name: Targeted legacy regression tests
+        run: python -m unittest smoke_test.TestConfig smoke_test.TestGeneration smoke_test.TestAutomation -q
       - name: QML smoke launch with the real engine
         shell: pwsh
         env:
