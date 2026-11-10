@@ -34,6 +34,7 @@ class QtBridge(QObject):
     modeChanged = Signal()
     statusChanged = Signal()
     optionsChanged = Signal()
+    advancedChanged = Signal()
     historyChanged = Signal()
     detailChanged = Signal()
     charactersChanged = Signal()
@@ -177,6 +178,20 @@ class QtBridge(QObject):
             "select_char": bool(self._option("select_char"))
         }
 
+    @Property("QVariantMap", notify=advancedChanged)
+    def advanced(self):
+        return {
+            "clear": bool(self._option("use_clear_button")),
+            "verifyclipboard": bool(self._option("verify_clipboard")),
+            "restoreclipboard": bool(self._option("restore_clipboard")),
+            "focusgame": bool(self._option("focus_game")),
+            "hoververify": bool(self._option("hover_verify")),
+            "hoverretry": bool(self._option("hover_retry")),
+            "resultIndex": str(self._option("result_index") or 1),
+            "abortKey": str(self._option("abort_key") or "f9"),
+            "challengeDiff": str(self._option("challenge_diff") or "any"),
+        }
+
     @Property("QVariantList", notify=perksChanged)
     def perks(self):
         names = self.build.get("perks", []) if self.build else []
@@ -303,6 +318,49 @@ class QtBridge(QObject):
             self.cfg["options"][opt] = not bool(self._option(opt))
             self.optionsChanged.emit()
             self._save()
+
+    @Slot(str)
+    def toggleAdvanced(self, name):
+        options = {
+            "clear": "use_clear_button", "verifyclipboard": "verify_clipboard",
+            "restoreclipboard": "restore_clipboard", "focusgame": "focus_game",
+            "hoververify": "hover_verify", "hoverretry": "hover_retry"
+        }
+        key = options.get(name)
+        if key:
+            self.cfg["options"][key] = not bool(self._option(key))
+            self._save()
+            self.advancedChanged.emit()
+
+    @Slot(str, str)
+    def setAdvanced(self, name, value):
+        if name == "resultIndex":
+            try:
+                self.cfg["options"]["result_index"] = max(1,min(9,int(value)))
+            except ValueError:
+                self._notify("Номер иконки должен быть от 1 до 9.")
+                return
+        elif name == "challengeDiff":
+            if value not in ("any", "easy", "medium", "hard"):
+                return
+            self.cfg["options"]["challenge_diff"] = value
+        elif name == "abortKey":
+            if not re.fullmatch(r"f(?:[1-9]|1[0-2])", value.lower()):
+                self._notify("Выберите безопасную клавишу F1–F12.")
+                return
+            self.cfg["options"]["abort_key"] = value.lower()
+            try:
+                if self._hotkey_handle is not None:
+                    import keyboard
+                    keyboard.remove_hotkey(self._hotkey_handle)
+                self._hotkey_handle = None
+                self._hotkey()
+            except Exception:
+                pass
+        else:
+            return
+        self._save()
+        self.advancedChanged.emit()
 
     def available_characters(self, side):
         k = "K" if side == "KILLER" else "S"
