@@ -702,18 +702,18 @@ class QtBridge(QObject):
                  if not needle or needle in core._norm(name)]
         return [{"name": name} for name in names[:75 if needle else 30]]
 
-    @Slot(str, str, str, str, str, str, str, str, str)
+    @Slot(str, str, str, str, str, str, str, str, str, result=bool)
     def buildCustom(self, side, char, item, a1, a2, p1, p2, p3, p4):
         chars = self.db["killers"] if side == "KILLER" else self.db["survivors"]
         if char not in chars:
             self._notify("Выберите существующего персонажа (точное имя).")
-            return
+            return False
         perks = [x.strip() for x in (p1,p2,p3,p4)]
         pool = set(core.all_unique_perks(self.db, side))
         pool.update(self.db["killer_common_perks" if side == "KILLER" else "surv_common_perks"])
         if len(set(perks)) != 4 or any(x not in pool for x in perks):
             self._notify("Нужно четыре разных настоящих навыка из базы.")
-            return
+            return False
         item = item.strip()
         selected_addons = [x.strip() or core.EMPTY for x in (a1, a2)]
         if side == "KILLER":
@@ -727,17 +727,17 @@ class QtBridge(QObject):
             ] if item else []
             if item and not matches:
                 self._notify("Выберите настоящий предмет выжившего из каталога.")
-                return
+                return False
             if not item and any(a != core.EMPTY for a in selected_addons):
                 self._notify("Для аддонов выжившего сначала выберите предмет.")
-                return
+                return False
             category = matches[0][0] if matches else ""
             power = item or core.EMPTY
             valid_addons = set(core._playable_addons(matches[0][1].get("addons", []))) if matches else set()
         chosen = [a for a in selected_addons if a != core.EMPTY]
         if len(set(chosen)) != len(chosen) or any(a not in valid_addons for a in chosen):
             self._notify("Аддоны должны быть разными и совместимыми с выбранной силой/предметом.")
-            return
+            return False
         self.build = {"side": side, "char": char,
                       "power_or_item": power,
                       "category": category,
@@ -749,6 +749,7 @@ class QtBridge(QObject):
         self._sync()
         self.roleChanged.emit()
         self._notify("Пользовательский билд готов.")
+        return True
 
     @Slot()
     def refreshCommunity(self):
