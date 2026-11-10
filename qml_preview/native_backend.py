@@ -210,12 +210,33 @@ class QtBridge(QObject):
     def detail(self):
         b = self.build or {}
         skin, challenge, cl = b.get("skin") or {}, b.get("challenge") or {}, b.get("class") or {}
+        forbidden = b.get("forbidden") or {}
+        restrictions = []
+        for key, label in (("item", "Предмет"), ("addons", "Аддоны"), ("perks", "Навыки")):
+            if forbidden.get(key):
+                restrictions.append(label + " запрещены условием челленджа"
+                                    if key != "item" else "Предмет запрещён условием челленджа")
+        addon_names = list(b.get("addons") or [])
+        addon_details = [
+            {"slot": i + 1,
+             "name": tidy(addon_names[i]) if i < len(addon_names) else "Не выбран",
+             "raw": addon_names[i] if i < len(addon_names) else "",
+             "filled": i < len(addon_names) and addon_names[i] not in (None, "", core.EMPTY, core.NO_ADDONS),
+             "disabled": bool(forbidden.get("addons"))}
+            for i in range(2)
+        ]
+        challenge_data = challenge if isinstance(challenge, dict) else {}
+        difficulty = (getattr(core.DATA, "CHALLENGE_DIFFS", {}) or {}).get(challenge_data.get("diff"), "")
         return {"char": tidy(b.get("char", "")), "side": b.get("side", ""),
                 "power": tidy(b.get("power_or_item", "")), "category": tidy(b.get("category", "")),
-                "addons": [tidy(x) for x in b.get("addons", [])],
+                "addons": [tidy(x) for x in addon_names],
+                "addonDetails": addon_details,
                 "skin": tidy(skin.get("display") or skin.get("name")) if isinstance(skin, dict) else tidy(skin),
-                "challenge": tidy(challenge.get("ru")) if isinstance(challenge, dict) else "",
-                "challengeText": tidy(challenge.get("text")) if isinstance(challenge, dict) else "",
+                "challenge": tidy(challenge_data.get("ru")),
+                "challengeText": tidy(challenge_data.get("text")),
+                "challengeWhy": tidy(challenge_data.get("why")),
+                "challengeDifficulty": tidy(difficulty),
+                "challengeRestrictions": restrictions,
                 "class": tidy(cl.get("ru")) if isinstance(cl, dict) else "",
                 "hasBuild": bool(b)}
 
