@@ -24,6 +24,7 @@ import qt_updater
 from addon_effects import AddonEffectLibrary
 from rotation_engine import RotationState, make_rotated_build
 from perk_cards import perk_info, reconcile_pins
+from stats_engine import BuildStatistics
 from dbd_icons_store import IconStore
 
 
@@ -41,6 +42,7 @@ class QtBridge(QObject):
     optionsChanged = Signal()
     advancedChanged = Signal()
     historyChanged = Signal()
+    statisticsChanged = Signal()
     detailChanged = Signal()
     charactersChanged = Signal()
     skinsChanged = Signal()
@@ -63,6 +65,9 @@ class QtBridge(QObject):
         self._mode = self.cfg["options"].get("perk_mode", "mixed")
         self._rotation = RotationState(self.cfg["options"].get("rotation_state"))
         self._rotation_enabled = bool(self.cfg["options"].get("rotation_enabled", False))
+        self._statistics = BuildStatistics(self.cfg["options"].get("statistics_v1"))
+        self._statistics_side = self._role
+        self._statistics_group = "characters"
         self._locks = [False] * 4
         self._build_revision = 0
         self._history = []
@@ -154,6 +159,7 @@ class QtBridge(QObject):
         self.cfg["options"]["perk_mode"] = self._mode
         self.cfg["options"]["rotation_enabled"] = self._rotation_enabled
         self.cfg["options"]["rotation_state"] = self._rotation.serialize()
+        self.cfg["options"]["statistics_v1"] = self._statistics.serialize()
         self.cfg.setdefault("owned", {})["killers"] = sorted(self._owned["K"]) or ["__none__"]
         self.cfg["owned"]["survivors"] = sorted(self._owned["S"]) or ["__none__"]
         core.save_config(self.cfg)
@@ -168,6 +174,94 @@ class QtBridge(QObject):
     @Property(str, notify=modeChanged)
     def mode(self):
         return self._mode
+
+    @Property(str, notify=statisticsChanged)
+    def statisticsSide(self):
+        return self._statistics_side
+
+    @Property(str, notify=statisticsChanged)
+    def statisticsGroup(self):
+        return self._statistics_group
+
+    def _statistics_population(self):
+        side = self._statistics_side
+        group = self._statistics_group
+        if group == "characters":
+            return list(self.db["killers" if side == "KILLER" else "survivors"])
+        if group == "perks":
+            return list(set(core.all_unique_perks(self.db, side)) |
+                        set(self.db["killer_common_perks" if side == "KILLER" else "surv_common_perks"]))
+        if group == "addons":
+            if side == "KILLER":
+                return list({x for entry in self.db["killers"].values()
+                             for x in core._playable_addons(entry.get("addons", []))})
+            return list({x for entry in self.db["survivor_items"].values()
+                         for x in core._playable_addons(entry.get("addons", []))})
+        if group == "items" and side == "SURVIVOR":
+            return list({x for entry in self.db["survivor_items"].values()
+                         for x in entry.get("items", [])})
+        return []
+
+    @Property("QVariantMap", notify=statisticsChanged)
+    def statistics(self):
+        side = self._statistics_side
+        pool = self._statistics_population()
+        population = list(self.db["killers" if side == "KILLER" else "survivors"])
+        return {
+            "overview": self._statistics.overview(side, population),
+            "top": self._statistics.summary(side, self._statistics_group, pool, limit=12, order="top"),
+            "least": self._statistics.summary(side, self._statistics_group, pool, limit=12, order="least"),
+            "stale": self._statistics.summary(side, self._statistics_group, pool, limit=12, order="stale"),
+            "recent": self._statistics.recent(side, 28),
+            "group": self._statistics_group,
+            "side": side,
+            "sampleSize": len(pool)
+        }
+
+    @Slot(str)
+    def setStatisticsSide(self, side):
+        if side not in ("SURVIVOR", "KILLER"):
+            return
+        if self._statistics_side != side:
+            self._statistics_side = side
+            if side == "KILLER" and self._statistics_group == "items":
+                self._statistics_group = "characters"
+            self.statisticsChanged.emit()
+
+    @Slot(str)
+    def setStatisticsGroup(self, group):
+        if group not in ("characters", "perks", "addons", "items"):
+            return
+        if group == "items" and self._statistics_side == "KILLER":
+            return
+        if self._statistics_group != group:
+            self._statistics_group = group
+            self.statisticsChanged.emit()
+
+    @Slot()
+    def resetStatistics(self):
+        self._statistics.reset(self._statistics_side)
+        self.statisticsChanged.emit()
+        self._save()
+        self._notify("Статистика выбранной стороны очищена. История ротации сохранена.")
+
+    @Slot()
+    def copyStatistics(self):
+        view = self.statistics
+        overview = view["overview"]
+        labels = {"characters":"Персонажи", "perks":"Навыки", "addons":"Аддоны", "items":"Предметы"}
+        lines = [
+            "Статистика DBD Randomizer — " + ("Маньяки" if view["side"] == "KILLER" else "Выжившие"),
+            "Генераций: " + str(overview["generated"]) + " (обычный " +
+            str(overview["classic"]) + ", ротация " + str(overview["balanced"]) + ")",
+            "Разных персонажей: " + str(overview["seen"]) + " / " + str(overview["total"]),
+            "Категория: " + labels.get(view["group"], ""),
+        ]
+        for index, row in enumerate(view["top"], 1):
+            if row["count"]:
+                lines.append(str(index) + ". " + row["name"] + " — " + str(row["count"]))
+        QGuiApplication.clipboard().setText("\n".join(lines))
+        self._notify("Статистика скопирована.")
 
     @Property(bool, notify=rotationChanged)
     def rotationEnabled(self):
@@ -565,6 +659,9 @@ class QtBridge(QObject):
             if self._rotation_enabled:
                 self._rotation.record_build(self.build, core.EMPTY, core.NO_ADDONS)
                 self.rotationChanged.emit()
+            self._statistics.record_build(self.build, balanced=self._rotation_enabled,
+                                          empty=core.EMPTY, no_addons=core.NO_ADDONS)
+            self.statisticsChanged.emit()
             self._sync()
             self._history.insert(0, tidy(core.build_to_clipboard_text(self.build)).replace("\n", " | "))
             self._history = self._history[:12]
@@ -623,6 +720,10 @@ class QtBridge(QObject):
             else:
                 chosen = random.choice(allowed)
             self.build["perks"][index] = chosen
+            self._statistics.record_perk_reroll(self.build["side"], self.build["char"], chosen,
+                                                balanced=self._rotation_enabled, empty=core.EMPTY)
+            self.statisticsChanged.emit()
+            self._save()
             self._sync()
 
     @Slot()
