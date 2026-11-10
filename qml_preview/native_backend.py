@@ -546,7 +546,16 @@ class QtBridge(QObject):
         pool = core.all_unique_perks(self.db, self.build["side"])
         pool += self.db["killer_common_perks" if self.build["side"] == "KILLER" else "surv_common_perks"]
         existing = {p for i,p in enumerate(self.build["perks"]) if i != index}
-        allowed = [p for p in set(pool) if p not in existing]
+        forbidden = set((self.build.get("fx") or {}).get("ban_perks") or ())
+        allowed = [p for p in sorted(set(pool)) if p not in existing and p not in forbidden]
+        challenge_mode = (self.build.get("fx") or {}).get("perk_pool")
+        if challenge_mode == "common":
+            allowed = [p for p in allowed if p in self.db["killer_common_perks" if self.build["side"] == "KILLER" else "surv_common_perks"]]
+        elif challenge_mode == "own":
+            source = self.db["killers"] if self.build["side"] == "KILLER" else self.db["survivors"]
+            info = source.get(self.build["char"], [])
+            own = info.get("perks", []) if isinstance(info, dict) else info
+            allowed = [p for p in allowed if p in own]
         if self._option("respect_owned"):
             key = "killer_perks" if self.build["side"] == "KILLER" else "survivor_perks"
             whitelist = set(self.db.get("owned", {}).get(key) or [])
@@ -554,6 +563,9 @@ class QtBridge(QObject):
                 allowed = [p for p in allowed if p in whitelist]
         if allowed:
             if self._rotation_enabled:
+                former = self.build["perks"][index]
+                if len(allowed) > 1 and former in allowed:
+                    allowed = [p for p in allowed if p != former]
                 chosen = self._rotation.select(self.build["side"], "perks", allowed)[0]
                 self._rotation.record(self.build["side"], "perks", [chosen])
                 self.rotationChanged.emit()
