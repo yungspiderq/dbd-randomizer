@@ -1,0 +1,156 @@
+"""Short DBD add-on notes and optional live wiki.gg effect categories.
+
+Descriptions in this module are independently worded factual gameplay summaries,
+not reproduced wiki articles. The wiki.gg Module:Datatable/Loadout tags field is
+retrieved asynchronously. Unknown effects are left unknown, not invented.
+"""
+from __future__ import annotations
+
+import json
+import re
+import threading
+import time
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+from tools.addon_names_ru_en import ADDON_RU_EN, ITEM_ADDON_RU_EN
+
+SOURCE = "https://deadbydaylight.wiki.gg/wiki/Module:Datatable/Loadout/Descriptions"
+INDEX_API = "https://deadbydaylight.wiki.gg/api.php"
+CACHE_TTL = 14 * 24 * 3600
+UA = "DBDRandomizerQt/2.28.0 (addon effect category cache; project: yungspiderq/dbd-randomizer)"
+
+# Independently phrased factual descriptions of selected game modifications.
+# Source: DBD wiki.gg / Module:Datatable/Loadout/Descriptions, The Trapper.
+VERIFIED_RU = {
+    "Кровавая пружина": "Выживший, обезвредивший капкан в здоровом состоянии, получает ранение.",
+    "Радужный камень": "Раз в 30 секунд случайный деактивированный капкан устанавливается автоматически.",
+    "Маслянистая пружина": "После возврата капкана в рабочее состояние аура его последнего обезвредившего становится видна на несколько секунд.",
+    "Натяжная пружина": "Если выживший выбрался из капкана, через 2 секунды тот снова активируется.",
+    "Точильный камень": "Выживший, самостоятельно освободившийся из капкана, переходит в состояние при смерти.",
+    "Дополнительная пружина": "На обезвреживание капкана требуется больше времени.",
+    "Крепежные инструменты": "Ускоряют установку капкана, а побег или спасение из капкана занимают больше времени.",
+    "Ржавые челюсти": "Выживший, раненый капканом, временно получает эффект «Увечье».",
+    "Смоляная бутылка": "Делает капканы темнее и менее заметными на карте.",
+    "Зазубренные челюсти": "Получивший урон от капкана выживший страдает от эффекта «Кровотечение» до полного лечения.",
+    "Комплект из 4-х спиральных пружин": "Продлевает время обезвреживания капкана примерно на треть.",
+    "Кофейная гуща": "Усиливает ускорение после установки капкана на 5%.",
+    "Удлиненная челюсть": "Освободившийся из капкана выживший получает эффект «Глубокая рана».",
+    "Медвежий жир": "Установка капканов становится бесшумной.",
+    "Мягкие челюсти": "Капкан удерживает выжившего, не нанося урона; за попадание начисляются дополнительные игровые очки.",
+    "Самодельный бандаж": "При попадании маньяка в собственный капкан тот обезвреживается вместо удержания.",
+}
+
+CATEGORY_RU = {
+    "Deafened": "приглушение звука", "Blindness": "слепота",
+    "KillerBlind": "ослепление маньяка", "Detonation": "срабатывание",
+    "EffectRadius": "радиус действия", "EffectDuration": "длительность эффекта",
+    "EffectRange": "дальность эффекта", "ActionSpeed": "скорость действия",
+    "Charges": "заряды", "Capacity": "ёмкость", "DepletionRate": "расход ресурса",
+    "Detection": "обнаружение", "Haste": "ускорение", "Hindered": "замедление",
+    "Healing": "лечение", "Generators": "генераторы", "GruntsOfPain": "звуки персонажа",
+    "Haemorrhage": "кровотечение", "Mangled": "увечье", "DeepWound": "глубокая рана",
+    "Exposed": "уязвимость", "Oblivious": "забывчивость", "Undetectable": "незаметность",
+    "Aura": "ауры", "Hook": "крюки", "ExitBlocker": "ворота",
+    "Hatch": "люк", "ExtendedAbility": "особая способность", "ItemDrop": "потеря предмета",
+    "Range": "дальность", "Illusions": "иллюзии", "Speed": "скорость",
+}
+
+
+def english_name(side, character, category, name):
+    mapping = ADDON_RU_EN.get(character, {}) if side == "KILLER" else ITEM_ADDON_RU_EN.get(category, {})
+    return mapping.get(name, "")
+
+
+def read_live_tags():
+    params = urllib.parse.urlencode({
+        "action": "parse", "page": "Module:Datatable/Loadout",
+        "prop": "wikitext", "format": "json",
+    })
+    req = urllib.request.Request(
+        INDEX_API + "?" + params,
+        headers={"User-Agent": UA, "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=16) as response:
+        payload = json.load(response)
+    content = payload["parse"]["wikitext"]["*"]
+    if len(content) > 8_000_000:
+        raise RuntimeError("Unexpected wiki module size")
+    result = {}
+    inside = False
+    for line in content.splitlines():
+        if "p.addons = {" in line:
+            inside = True
+            continue
+        if not inside:
+            continue
+        match = re.match(r'^\s*\["((?:\\.|[^"])*)"\]\s*=\s*\{(.*)\},?\s*$', line)
+        if not match:
+            continue
+        name, body = match.groups()
+        tag_match = re.search(r"\btags\s*=\s*\{([^}]*)\}", body)
+        tags = re.findall(r'["\x27]([^"\x27]+)["\x27]', tag_match.group(1)) if tag_match else []
+        result[name.replace('\\"', '"')] = tags[:10]
+    return result
+
+
+class AddonEffectLibrary:
+    def __init__(self, root, on_change=None):
+        self.path = Path(root) / "addon_effect_categories.json"
+        self.on_change = on_change
+        self.categories = {}
+        self.loading = False
+        self._lock = threading.Lock()
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            if isinstance(data.get("categories"), dict):
+                self.categories = data["categories"]
+        except (FileNotFoundError, ValueError, OSError, AttributeError):
+            pass
+
+    def get(self, side, character, category, name):
+        if not name:
+            return {"name": "", "effect": "", "categories": [], "source": SOURCE, "verified": False}
+        english = english_name(side, character, category, name)
+        note = VERIFIED_RU.get(name, "") if side == "KILLER" and character == "Охотник" else ""
+        tags = self.categories.get(english, []) if english else []
+        return {
+            "name": name,
+            "english": english,
+            "effect": note,
+            "categories": [CATEGORY_RU.get(tag, tag) for tag in tags if tag],
+            "source": SOURCE,
+            "verified": bool(note),
+        }
+
+    def refresh_async(self):
+        with self._lock:
+            if self.loading:
+                return
+            try:
+                if self.categories and time.time() - self.path.stat().st_mtime < CACHE_TTL:
+                    return
+            except OSError:
+                pass
+            self.loading = True
+
+        def worker():
+            try:
+                new_data = read_live_tags()
+                if len(new_data) > 200:
+                    self.categories = new_data
+                    self.path.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = self.path.with_suffix(".tmp")
+                    tmp.write_text(json.dumps(
+                        {"source": SOURCE, "categories": new_data},
+                        ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+                    tmp.replace(self.path)
+                    if self.on_change:
+                        self.on_change()
+            except (OSError, ValueError, KeyError, RuntimeError):
+                pass
+            finally:
+                with self._lock:
+                    self.loading = False
+        threading.Thread(target=worker, daemon=True, name="addon-effects").start()
