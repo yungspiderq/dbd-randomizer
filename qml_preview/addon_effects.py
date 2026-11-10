@@ -130,6 +130,9 @@ def read_live_tags():
             continue
         if not inside:
             continue
+        # Do not accidentally mix the separate item/perk tables into the add-on index.
+        if re.match(r"^\s*p\.[A-Za-z_]+\s*=\s*\{", line):
+            break
         match = re.match(r'^\s*\["((?:\\.|[^"])*)"\]\s*=\s*\{(.*)\},?\s*$', line)
         if not match:
             continue
