@@ -172,6 +172,34 @@ class QtBackendTests(unittest.TestCase):
         self.bridge.buildCustom("SURVIVOR", "nonexistent", "", "", "", "x", "x", "x", "x")
         self.assertIsNone(self.bridge.build)
 
+    def test_selected_addon_effect_shows_real_summary_and_source(self):
+        with patch.object(self.bridge._addon_catalog, "refresh_async") as refresh:
+            self.bridge.selectAddonEffect("KILLER", "Охотник", "", "Радужный камень")
+            refresh.assert_called_once()
+        data = self.bridge.addonEffect
+        self.assertEqual(data["name"], "Радужный камень")
+        self.assertTrue(data["verified"])
+        self.assertIn("30", data["effect"])
+        self.assertEqual(data["english"], "Iridescent Stone")
+        self.assertTrue(data["source"].startswith("https://deadbydaylight.wiki.gg/"))
+        self.bridge._addon_catalog.categories["Iridescent Stone"] = ["EffectDuration"]
+        self.assertIn("длительность эффекта", self.bridge.addonEffect["categories"])
+
+    def test_addon_without_checked_description_never_has_invented_claim(self):
+        with patch.object(self.bridge._addon_catalog, "refresh_async"):
+            self.bridge.selectAddonEffect("KILLER", "Охотник", "", "Несуществующая запись")
+        data = self.bridge.addonEffect
+        self.assertFalse(data["verified"])
+        self.assertFalse(data["effect"])
+
+    def test_custom_build_validation_reports_success_to_ui(self):
+        survivor = next(iter(self.bridge.db["survivors"]))
+        perks = [row["name"] for row in self.bridge.searchPerks("SURVIVOR", "")[:4]]
+        self.assertEqual(len(perks), 4)
+        self.assertTrue(self.bridge.buildCustom("SURVIVOR", survivor, "", "", "", *perks))
+        self.assertEqual(self.bridge.build["char"], survivor)
+        self.assertFalse(self.bridge.buildCustom("SURVIVOR", "invalid survivor", "", "", "", *perks))
+
     def test_future_updates_use_explicit_semver(self):
         self.assertLess(qt_updater._key("v2.28.0-qt-beta.4"), qt_updater._key("v2.28.0-qt-beta.5"))
         self.assertIsNone(qt_updater._key("v2.28.0"))
