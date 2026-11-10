@@ -238,6 +238,87 @@ ApplicationWindow {
                                 UiButton { width: (parent.width - 10) / 2; label: "ВЫЖИВШИЙ"; primary: backend.role === "survivor"; onClicked: backend.setRole("survivor") }
                                 UiButton { width: (parent.width - 10) / 2; label: "МАНЬЯК"; primary: backend.role === "killer"; onClicked: backend.setRole("killer") }
                             }
+                            Rectangle {
+                                id: rotationPanel
+                                width: parent.width
+                                height: 148
+                                radius: 13
+                                color: "#1c2430"
+                                border.width: 1
+                                border.color: backend.rotationEnabled ? "#b45e62" : win.stroke
+                                Column {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 9
+                                    Row {
+                                        width: parent.width
+                                        spacing: 8
+                                        Text {
+                                            text: "РЕЖИМ РАНДОМИЗАТОРА"
+                                            color: "#cad6e5"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            font.letterSpacing: 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                        Item { width: 1; height: 1 }
+                                        Text {
+                                            text: backend.rotationEnabled ? "РОТАЦИЯ АКТИВНА" : "КЛАССИКА"
+                                            color: backend.rotationEnabled ? "#efa7a3" : "#8493a5"
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                    Row {
+                                        width: parent.width
+                                        spacing: 10
+                                        UiButton {
+                                            width: (parent.width - 10) / 2
+                                            height: 37
+                                            label: "ОБЫЧНЫЙ"
+                                            primary: !backend.rotationEnabled
+                                            onClicked: backend.setRotationEnabled(false)
+                                        }
+                                        UiButton {
+                                            width: (parent.width - 10) / 2
+                                            height: 37
+                                            label: "СБАЛАНСИРОВАННЫЙ"
+                                            primary: backend.rotationEnabled
+                                            onClicked: backend.setRotationEnabled(true)
+                                        }
+                                    }
+                                    Text {
+                                        width: parent.width
+                                        text: backend.rotationEnabled ?
+                                            "Недавно выпавшие киллеры, перки и аддоны получают меньший шанс. Без жёсткого запрета." :
+                                            "Чистая случайность: история не влияет на результат."
+                                        color: "#9cacbf"
+                                        wrapMode: Text.Wrap
+                                        font.pixelSize: 11
+                                    }
+                                    Row {
+                                        width: parent.width
+                                        spacing: 8
+                                        Text {
+                                            text: "В ротации: " + backend.rotationStats.seen +
+                                                " из " + backend.rotationStats.total +
+                                                (backend.rotationStats.last ? " · последний: " + backend.rotationStats.last : "")
+                                            width: parent.width - 120
+                                            elide: Text.ElideRight
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            color: "#dfb0a9"
+                                            font.pixelSize: 10
+                                        }
+                                        UiButton {
+                                            width: 112
+                                            height: 28
+                                            label: "СБРОС ИСТОРИИ"
+                                            onClicked: resetRotationPopup.open()
+                                        }
+                                    }
+                                }
+                            }
                             Text { text: "ВАШ БИЛД"; color: win.muted; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                             Rectangle {
                                 width: parent.width
@@ -1383,6 +1464,57 @@ ApplicationWindow {
         }
     }
 
+    Popup {
+        id: resetRotationPopup
+        parent: Overlay.overlay
+        x: Math.max(20, (win.width - width) / 2)
+        y: Math.max(50, (win.height - height) / 2)
+        width: Math.min(410, win.width - 40)
+        height: 212
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 14
+            color: "#1b2430"
+            border.color: "#754e53"
+            border.width: 1
+        }
+        contentItem: Column {
+            spacing: 14
+            padding: 14
+            Text {
+                text: "СБРОСИТЬ ИСТОРИЮ РОТАЦИИ?"
+                color: "#f2f4f8"
+                font.bold: true
+                font.pixelSize: 15
+            }
+            Text {
+                width: resetRotationPopup.width - 35
+                text: "Будет очищена статистика только для выбранной стороны (маньяки или выжившие). Настройки и история билдов останутся."
+                color: "#b8c4d3"
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+            }
+            Row {
+                spacing: 10
+                UiButton {
+                    width: (resetRotationPopup.width - 48) / 2
+                    label: "ОТМЕНА"
+                    onClicked: resetRotationPopup.close()
+                }
+                UiButton {
+                    width: (resetRotationPopup.width - 48) / 2
+                    primary: true
+                    label: "СБРОСИТЬ"
+                    onClicked: {
+                        backend.resetRotation();
+                        resetRotationPopup.close();
+                    }
+                }
+            }
+        }
+    }
     Shortcut { sequence: "F5"; onActivated: backend.generate() }
     Shortcut { sequence: "F6"; onActivated: backend.copyBuild() }
     Shortcut { sequence: "F9"; onActivated: backend.placeholder("STOP") }
