@@ -200,7 +200,7 @@ ApplicationWindow {
                     Column {
                         anchors.centerIn: parent; spacing: 8
                         Text { text: "QT ИНТЕРФЕЙС"; color: "#f2b2a7"; font.pixelSize: 10; font.weight: Font.Bold }
-                        Text { text: "Пока без автоэкипировки\nи игровых данных"; color: "#c1b9bc"; font.pixelSize: 11 }
+                        Text { text: "Оригинальные игровые данные\nи Qt-интерфейс"; color: "#c1b9bc"; font.pixelSize: 11 }
                     }
                 }
             }
@@ -241,58 +241,206 @@ ApplicationWindow {
                             Text { text: "ВАШ БИЛД"; color: win.muted; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                             Rectangle {
                                 width: parent.width
-                                height: 165
+                                height: 146
                                 radius: 13
                                 color: win.surface
                                 border.color: win.stroke
                                 Row {
                                     anchors.fill: parent
                                     anchors.margins: 12
-                                    spacing: 13
+                                    spacing: 14
                                     ArtThumb {
-                                        pixels: 138
+                                        pixels: 120
                                         iconKey: backend.detail.char
                                         placeholder: "DBD"
                                     }
                                     Column {
-                                        width: parent.width - 153
-                                        spacing: 9
+                                        width: parent.width - 135
+                                        spacing: 11
                                         Text {
                                             text: backend.detail.char || "Персонаж ещё не выбран"
                                             width: parent.width
                                             elide: Text.ElideRight
                                             color: "#f4f6fa"
-                                            font.pixelSize: 16
+                                            font.pixelSize: 17
                                             font.bold: true
                                         }
                                         Row {
-                                            width: parent.width
-                                            spacing: 8
-                                            ArtThumb { pixels: 40; iconKey: backend.detail.power; placeholder: "ITEM" }
+                                            spacing: 10
+                                            ArtThumb { pixels: 48; iconKey: backend.detail.power; placeholder: "ITEM" }
                                             Column {
                                                 spacing: 4
-                                                Text { text: backend.role === "killer" ? "СИЛА" : "ПРЕДМЕТ"; color: "#8394a7"; font.pixelSize: 9; font.bold: true }
-                                                Text { text: backend.detail.power || "Не выбрано"; width: 245; elide: Text.ElideRight; color: "#e1e7ef"; font.pixelSize: 11 }
-                                            }
-                                        }
-                                        Row {
-                                            spacing: 8
-                                            Repeater {
-                                                model: backend.detail.addons || []
-                                                ArtThumb { pixels: 38; iconKey: modelData; placeholder: "ADD" }
-                                            }
-                                            Text {
-                                                text: "Аддоны"
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                color: "#9eacbc"; font.pixelSize: 11
+                                                Text { text: backend.role === "killer" ? "СИЛА МАНЬЯКА" : "ПРЕДМЕТ ВЫЖИВШЕГО"; color: "#8394a7"; font.pixelSize: 10; font.bold: true }
+                                                Text {
+                                                    text: backend.detail.power || "Не выбрано"
+                                                    width: 350
+                                                    elide: Text.ElideRight
+                                                    color: "#e1e7ef"
+                                                    font.pixelSize: 13
+                                                }
                                             }
                                         }
                                         Text {
-                                            text: [backend.detail.skin, backend.detail.challenge, backend.detail["class"]].filter(Boolean).join(" · ")
+                                            text: [backend.detail.skin, backend.detail["class"]].filter(Boolean).join(" · ")
                                             width: parent.width
                                             elide: Text.ElideRight
-                                            color: "#d4a9a1"; font.pixelSize: 10
+                                            color: "#d4a9a1"; font.pixelSize: 11
                                         }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                width: parent.width
+                                height: 144
+                                radius: 13
+                                color: win.surface
+                                border.color: win.stroke
+                                Column {
+                                    anchors.fill: parent
+                                    anchors.margins: 13
+                                    spacing: 10
+                                    Text {
+                                        text: "АДДОНЫ · НАЗВАНИЯ"
+                                        color: win.muted
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        font.letterSpacing: 1
+                                    }
+                                    Row {
+                                        width: parent.width
+                                        spacing: 10
+                                        Repeater {
+                                            model: backend.detail.addonDetails || []
+                                            Rectangle {
+                                                id: addonCard
+                                                property var addonInfo: modelData
+                                                width: (parent.width - 10) / 2
+                                                height: 91
+                                                radius: 10
+                                                color: "#222b36"
+                                                border.color: addonInfo.disabled ? "#a35d5b" : "#3a4656"
+                                                Row {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 9
+                                                    spacing: 10
+                                                    ArtThumb {
+                                                        pixels: 64
+                                                        iconKey: addonCard.addonInfo.filled ? addonCard.addonInfo.raw : ""
+                                                        placeholder: "ADD"
+                                                    }
+                                                    Column {
+                                                        width: parent.width - 74
+                                                        spacing: 6
+                                                        Text {
+                                                            text: "АДДОН " + addonCard.addonInfo.slot
+                                                            color: "#8d9eaf"
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                        }
+                                                        Text {
+                                                            text: addonCard.addonInfo.filled ? addonCard.addonInfo.name : "Нет аддона"
+                                                            width: parent.width
+                                                            color: "#edf2f8"
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            wrapMode: Text.Wrap
+                                                            maximumLineCount: 3
+                                                            elide: Text.ElideRight
+                                                        }
+                                                        Text {
+                                                            visible: addonCard.addonInfo.disabled
+                                                            text: "ЗАПРЕЩЁН ЧЕЛЛЕНДЖЕМ"
+                                                            color: "#f19b94"
+                                                            font.pixelSize: 9
+                                                        }
+                                                    }
+                                                }
+                                                ToolTip.visible: addonHover.containsMouse && addonCard.addonInfo.filled
+                                                ToolTip.text: addonCard.addonInfo.name
+                                                MouseArea {
+                                                    id: addonHover
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    acceptedButtons: Qt.NoButton
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                id: challengeCard
+                                visible: !!backend.detail.challenge
+                                width: parent.width
+                                height: Math.max(166, challengeContent.implicitHeight + 28)
+                                radius: 13
+                                color: "#221f29"
+                                border.color: "#6c4149"
+                                Column {
+                                    id: challengeContent
+                                    x: 15
+                                    y: 14
+                                    width: parent.width - 30
+                                    spacing: 10
+                                    Row {
+                                        width: parent.width
+                                        spacing: 10
+                                        Text {
+                                            text: "УСЛОВИЕ ЧЕЛЛЕНДЖА"
+                                            color: "#f2aca6"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            font.letterSpacing: 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                        Text {
+                                            text: backend.detail.challengeDifficulty ? "· " + backend.detail.challengeDifficulty.toUpperCase() : ""
+                                            color: "#c9a8ab"
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                    Text {
+                                        text: backend.detail.challenge
+                                        width: parent.width
+                                        color: "#f6ebee"
+                                        font.pixelSize: 17
+                                        font.bold: true
+                                        wrapMode: Text.Wrap
+                                    }
+                                    Text {
+                                        text: backend.detail.challengeText || "Описание условия недоступно."
+                                        width: parent.width
+                                        color: "#e2d5dc"
+                                        font.pixelSize: 13
+                                        wrapMode: Text.Wrap
+                                    }
+                                    Text {
+                                        visible: !!backend.detail.challengeWhy
+                                        text: backend.detail.challengeWhy
+                                        width: parent.width
+                                        color: "#a995a6"
+                                        font.pixelSize: 11
+                                        font.italic: true
+                                        wrapMode: Text.Wrap
+                                    }
+                                    Repeater {
+                                        model: backend.detail.challengeRestrictions || []
+                                        Text {
+                                            width: challengeContent.width
+                                            text: "ОГРАНИЧЕНИЕ: " + modelData
+                                            color: "#f1a5a0"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            wrapMode: Text.Wrap
+                                        }
+                                    }
+                                    UiButton {
+                                        width: Math.min(230, parent.width)
+                                        height: 34
+                                        label: "ДРУГОЙ ЧЕЛЛЕНДЖ + БИЛД"
+                                        onClicked: backend.rerollChallenge()
                                     }
                                 }
                             }
