@@ -118,6 +118,40 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual(self.bridge.skinStats["owned"], stats["total"])
         self.assertIn(self.bridge.randomSkinId(), [x["id"] for x in self.bridge.skins])
 
+    def test_addons_have_real_names_and_two_labeled_slots(self):
+        self.bridge.setRole("killer")
+        self.bridge.generate()
+        meta = self.bridge.detail
+        self.assertEqual(len(meta["addonDetails"]), 2)
+        for pos, addon in enumerate(meta["addonDetails"], 1):
+            self.assertEqual(addon["slot"], pos)
+            self.assertEqual(addon["raw"], self.bridge.build["addons"][pos - 1])
+            self.assertEqual(addon["name"], self.bridge.build["addons"][pos - 1].strip())
+            self.assertIsInstance(addon["filled"], bool)
+
+    def test_full_challenge_rule_difficulty_and_equipment_restrictions(self):
+        challenge = next(ch for ch in core.DATA.CHALLENGES
+                         if ch.get("side") == "SURVIVOR"
+                         and "item" in ch.get("fx", {}).get("drop", ()))
+        self.bridge._generate(preset_challenge=challenge)
+        metadata = self.bridge.detail
+        self.assertEqual(metadata["challenge"], challenge["ru"])
+        self.assertEqual(metadata["challengeText"], challenge["text"])
+        self.assertEqual(metadata["challengeWhy"], challenge["why"])
+        self.assertEqual(metadata["challengeDifficulty"], core.DATA.CHALLENGE_DIFFS[challenge["diff"]])
+        self.assertTrue(any("Предмет" in part for part in metadata["challengeRestrictions"]))
+
+    def test_visual_catalogs_match_generator_pools(self):
+        chars = self.bridge.searchCharacters("KILLER", "")
+        self.assertGreater(len(chars), 0)
+        self.assertIn(chars[0]["name"], self.bridge.db["killers"])
+        self.assertTrue(self.bridge.searchPerks("SURVIVOR", ""))
+        killer = chars[0]["name"]
+        result = self.bridge.searchAddons("KILLER", killer, "", "")
+        playable = set(core._playable_addons(self.bridge.db["killers"][killer]["addons"]))
+        self.assertTrue(all(x["name"] in playable for x in result))
+        self.assertFalse(self.bridge.searchPerks("UNKNOWN", ""))
+
     def test_invalid_custom_build_rejected(self):
         self.bridge.buildCustom("SURVIVOR", "nonexistent", "", "", "", "x", "x", "x", "x")
         self.assertIsNone(self.bridge.build)
