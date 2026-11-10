@@ -63,6 +63,38 @@ ApplicationWindow {
         }
     }
 
+    // Portraits and outfit previews use the same lazy wiki.gg cache as the original app.
+    component ArtThumb: Rectangle {
+        id: art
+        property string iconKey: ""
+        property string placeholder: "DBD"
+        property int pixels: 52
+        width: pixels
+        height: pixels
+        radius: 10
+        color: "#252e39"
+        border.width: 1
+        border.color: "#435065"
+        clip: true
+        Image {
+            id: portrait
+            anchors.fill: parent
+            anchors.margins: 3
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            smooth: true
+            source: backend.iconVersion >= 0 ? backend.iconPath(art.iconKey) : ""
+        }
+        Text {
+            anchors.centerIn: parent
+            visible: portrait.status !== Image.Ready
+            text: art.placeholder
+            font.pixelSize: art.pixels > 100 ? 18 : 10
+            color: "#899aac"
+            font.bold: true
+        }
+    }
+
     component NavItem: Rectangle {
         id: nav
         property string label: ""
@@ -348,50 +380,315 @@ ApplicationWindow {
                             }
                         }
                         Column {
+                            id: charactersPage
                             visible: win.page === "Персонажи"
-                            width: parent.width; spacing: 12
-                            Text { text: "Белый список доступных персонажей"; color: win.muted; font.pixelSize: 12 }
-                            UiField { id: charSearch; width: parent.width; placeholderText: "Поиск по имени" }
-                            ListView {
-                                id: charList
-                                width: parent.width; height: 450; clip: true; spacing: 4
-                                model: backend.characters.filter(function(c) {
-                                    return c.name.toLowerCase().indexOf(charSearch.text.toLowerCase()) >= 0
-                                })
-                                delegate: Rectangle {
-                                    width: charList.width; height: 43; color: "#1b222c"; radius: 8
-                                    border.color: modelData.owned ? "#744947" : win.stroke
-                                    Rectangle { x: 10; y: 11; width: 19; height: 19; radius: 5
-                                        color: modelData.owned ? win.accent : "#283241"; border.color: "#536072"
-                                        Text { anchors.centerIn: parent; text: modelData.owned ? "✓" : ""; color: "white"; font.pixelSize: 13 } }
-                                    Text { x: 41; y: 12; width: parent.width - 136; text: modelData.name; elide: Text.ElideRight; color: "#e6edf6"; font.pixelSize: 12 }
-                                    Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 14; text: modelData.side === "K" ? "МАНЬЯК" : "ВЫЖИВШИЙ"; font.pixelSize: 10; color: win.muted }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: backend.setCharacter(modelData.name, modelData.side) }
+                            width: parent.width
+                            spacing: 13
+                            Text { text: "Выбор доступных персонажей"; color: "#e9edf5"; font.pixelSize: 18; font.bold: true }
+                            Text {
+                                width: parent.width
+                                text: "Маньяки и выжившие — отдельно, как в оригинале. Портреты загружаются в кэш автоматически."
+                                color: win.muted; font.pixelSize: 11; wrapMode: Text.WordWrap
+                            }
+                            UiField { id: charSearch; width: parent.width; placeholderText: "Поиск по персонажам (русское имя)" }
+                            Row {
+                                width: parent.width; spacing: 12
+                                Repeater {
+                                    model: [
+                                        { side: "K", title: "МАНЬЯКИ", color: "#f2726d" },
+                                        { side: "S", title: "ВЫЖИВАЮЩИЕ", color: "#7eaefa" }
+                                    ]
+                                    Rectangle {
+                                        id: sideCard
+                                        property string sideKey: modelData.side
+                                        property var filtered: backend.characters.filter(function(c) {
+                                            return c.side === sideKey && c.name.toLowerCase().indexOf(charSearch.text.toLowerCase()) >= 0
+                                        })
+                                        width: (charactersPage.width - 12) / 2
+                                        height: 570
+                                        radius: 14
+                                        color: "#171e27"
+                                        border.width: 1
+                                        border.color: win.stroke
+                                        Column {
+                                            anchors.fill: parent
+                                            anchors.margins: 12
+                                            spacing: 11
+                                            Row {
+                                                width: parent.width
+                                                spacing: 7
+                                                Rectangle { width: 4; height: 28; radius: 2; color: modelData.color }
+                                                Column {
+                                                    spacing: 3
+                                                    Text { text: modelData.title; font.bold: true; font.pixelSize: 13; color: "#eff3f8"; font.letterSpacing: 0.5 }
+                                                    Text {
+                                                        text: backend.characters.filter(function(c){return c.side === sideCard.sideKey && c.owned}).length
+                                                            + " из " + backend.characters.filter(function(c){return c.side === sideCard.sideKey}).length + " выбрано"
+                                                        color: "#92a2b5"; font.pixelSize: 10
+                                                    }
+                                                }
+                                            }
+                                            Row {
+                                                width: parent.width
+                                                spacing: 5
+                                                UiButton { width: (parent.width - 10) / 3; height: 33; label: "ВСЕ"; onClicked: backend.setCharactersBulk(sideCard.sideKey, "all", charSearch.text) }
+                                                UiButton { width: (parent.width - 10) / 3; height: 33; label: "НИКОГО"; onClicked: backend.setCharactersBulk(sideCard.sideKey, "none", charSearch.text) }
+                                                UiButton { width: (parent.width - 10) / 3; height: 33; label: "ИНВЕРСИЯ"; onClicked: backend.setCharactersBulk(sideCard.sideKey, "invert", charSearch.text) }
+                                            }
+                                            Rectangle { width: parent.width; height: 1; color: "#2f3947" }
+                                            ListView {
+                                                id: characterList
+                                                width: parent.width
+                                                height: sideCard.height - 128
+                                                model: sideCard.filtered
+                                                clip: true
+                                                spacing: 7
+                                                boundsBehavior: Flickable.StopAtBounds
+                                                delegate: Rectangle {
+                                                    id: characterRow
+                                                    width: characterList.width
+                                                    height: 64
+                                                    radius: 10
+                                                    color: rowHover.containsMouse ? "#283342" : "#202833"
+                                                    border.width: 1
+                                                    border.color: modelData.owned ? "#6e5157" : "#364353"
+                                                    ArtThumb {
+                                                        x: 7; y: 6
+                                                        pixels: 52
+                                                        iconKey: modelData.name
+                                                        placeholder: characterRow.ListView.view ? (sideCard.sideKey === "K" ? "K" : "S") : "DBD"
+                                                    }
+                                                    Text {
+                                                        text: modelData.name
+                                                        x: 69; y: 13
+                                                        width: parent.width - 115
+                                                        elide: Text.ElideRight
+                                                        font.pixelSize: 12
+                                                        color: modelData.owned ? "#eef3fa" : "#8996a7"
+                                                    }
+                                                    Text {
+                                                        text: modelData.owned ? "ДОСТУПЕН" : "НЕ ВЫБРАН"
+                                                        x: 69; y: 36
+                                                        font.pixelSize: 9
+                                                        font.letterSpacing: 0.4
+                                                        color: modelData.owned ? "#d1a3a3" : "#788797"
+                                                    }
+                                                    Rectangle {
+                                                        width: 20; height: 20; radius: 5
+                                                        anchors.right: parent.right
+                                                        anchors.rightMargin: 11
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        color: modelData.owned ? win.accent : "#2c3847"
+                                                        border.width: 1
+                                                        border.color: modelData.owned ? win.accent : "#667586"
+                                                        Text { anchors.centerIn: parent; text: modelData.owned ? "✓" : ""; color: "white"; font.pixelSize: 13; font.bold: true }
+                                                    }
+                                                    MouseArea {
+                                                        id: rowHover; anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: backend.setCharacter(modelData.name, sideCard.sideKey)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                            Text { text: "Выбор сохраняется автоматически. Кнопки «Все / Никого / Инверсия» работают только с найденными персонажами."; width: parent.width; wrapMode: Text.WordWrap; color: "#78899d"; font.pixelSize: 10 }
                         }
                         Column {
+                            id: skinPage
                             visible: win.page === "Внешность"
-                            width: parent.width; spacing: 12
-                            Text { text: "Отмечайте наборы внешности, которые у вас открыты"; color: win.muted; font.pixelSize: 12 }
-                            Row {
-                                width: parent.width; spacing: 8
-                                UiButton { width: 172; label: "СЛЕДУЮЩИЙ ГЕРОЙ"; onClicked: backend.nextSkinCharacter() }
-                                Text { width: parent.width - 180; anchors.verticalCenter: parent.verticalCenter; text: backend.skinCharacter; color: "#f1f3f7"; font.bold: true; font.pixelSize: 12; elide: Text.ElideRight }
+                            width: parent.width
+                            spacing: 12
+                            property string sideKey: "S"
+                            property int selectedSkinId: -1
+                            property var previewSkin: {
+                                var catalog = backend.skins;
+                                for (var i=0; i<catalog.length; ++i) {
+                                    if (catalog[i].id === selectedSkinId) return catalog[i];
+                                }
+                                return catalog.length ? catalog[0] : null;
                             }
-                            UiField { id: skinSearch; width: parent.width; placeholderText: "Поиск набора"; onTextChanged: backend.filterSkins(text) }
-                            Text { text: "Найдено вариантов: " + backend.skins.length; color: win.muted; font.pixelSize: 11 }
-                            ListView {
-                                id: skinsList
-                                width: parent.width; height: 438; clip: true; spacing: 5
-                                model: backend.skins
-                                delegate: Rectangle {
-                                    width: skinsList.width; height: 49; radius: 8
-                                    color: "#1b232d"; border.color: modelData.owned ? win.accent : win.stroke
-                                    Rectangle { x: 12; y: 13; width: 18; height: 18; radius: 5; color: modelData.owned ? win.accent : "#283342"; border.color: "#526075" }
-                                    Text { text: modelData.name; x: 42; y: 8; width: parent.width - 54; elide: Text.ElideRight; color: "#ebf0f5"; font.pixelSize: 12 }
-                                    Text { text: modelData.rarity; x: 42; y: 29; color: "#8995a7"; font.pixelSize: 10 }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: backend.toggleSkin(modelData.id) }
+                            Text { text: "Галерея внешности"; color: "#e9edf5"; font.pixelSize: 18; font.bold: true }
+                            Text { text: "Настоящие превью из базы wiki.gg. Отмеченные наборы участвуют в генерации билдов."; width: parent.width; color: win.muted; wrapMode: Text.WordWrap; font.pixelSize: 11 }
+                            Row {
+                                width: parent.width
+                                spacing: 9
+                                UiButton {
+                                    width: (parent.width - 9) / 2; label: "ВЫЖИВАЮЩИЕ"; primary: skinPage.sideKey === "S"
+                                    onClicked: { skinPage.sideKey = "S"; skinPage.selectedSkinId = -1 }
+                                }
+                                UiButton {
+                                    width: (parent.width - 9) / 2; label: "МАНЬЯКИ"; primary: skinPage.sideKey === "K"
+                                    onClicked: { skinPage.sideKey = "K"; skinPage.selectedSkinId = -1 }
+                                }
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 12
+                                Rectangle {
+                                    id: skinCharactersCard
+                                    width: 230
+                                    height: 564
+                                    radius: 14
+                                    color: "#171e27"
+                                    border.color: win.stroke
+                                    Column {
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 9
+                                        Text { text: "ПЕРСОНАЖИ"; color: "#ced7e3"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
+                                        UiField { id: skinCharSearch; width: parent.width; placeholderText: "Поиск героя" }
+                                        ListView {
+                                            id: skinCharList
+                                            width: parent.width
+                                            height: skinCharactersCard.height - 78
+                                            clip: true
+                                            spacing: 6
+                                            model: backend.skinCharacters.filter(function(c) {
+                                                return c.side === skinPage.sideKey
+                                                    && c.name.toLowerCase().indexOf(skinCharSearch.text.toLowerCase()) >= 0;
+                                            })
+                                            delegate: Rectangle {
+                                                width: skinCharList.width
+                                                height: 57
+                                                radius: 9
+                                                color: backend.skinCharacter === modelData.name ? "#39303a" : charHover.containsMouse ? "#293442" : "#202936"
+                                                border.color: backend.skinCharacter === modelData.name ? win.accent : "#354252"
+                                                ArtThumb {
+                                                    x: 5; y: 5
+                                                    pixels: 47
+                                                    iconKey: modelData.name
+                                                    placeholder: modelData.side
+                                                }
+                                                Column {
+                                                    x: 60; y: 11
+                                                    width: parent.width - 67
+                                                    spacing: 5
+                                                    Text { text: modelData.name; width: parent.width; elide: Text.ElideRight; color: "#eef3f8"; font.pixelSize: 11; font.bold: backend.skinCharacter === modelData.name }
+                                                    Text { text: modelData.count + " наборов"; color: "#9bacbe"; font.pixelSize: 9 }
+                                                }
+                                                MouseArea {
+                                                    id: charHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                    onClicked: { skinPage.selectedSkinId = -1; backend.setSkinCharacter(modelData.name) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    id: skinContent
+                                    width: skinPage.width - skinCharactersCard.width - 12
+                                    height: 564
+                                    radius: 14
+                                    color: "#171e27"
+                                    border.color: win.stroke
+                                    Column {
+                                        anchors.fill: parent
+                                        anchors.margins: 12
+                                        spacing: 10
+                                        Text { text: backend.skinCharacter || "Выберите персонажа"; color: "#eef2f7"; font.pixelSize: 15; font.bold: true }
+                                        Text {
+                                            text: backend.skinStats.owned + " из " + backend.skinStats.total + " наборов выбрано"
+                                            color: win.muted; font.pixelSize: 11
+                                        }
+                                        Rectangle {
+                                            width: parent.width
+                                            height: 140
+                                            radius: 11
+                                            color: "#212a35"
+                                            border.color: "#3e4c5e"
+                                            Row {
+                                                anchors.fill: parent
+                                                anchors.margins: 9
+                                                spacing: 13
+                                                ArtThumb {
+                                                    pixels: 120
+                                                    iconKey: skinPage.previewSkin ? "skin:" + skinPage.previewSkin.id : ""
+                                                    placeholder: "ПРЕВЬЮ"
+                                                }
+                                                Column {
+                                                    width: parent.width - 133
+                                                    spacing: 9
+                                                    Text {
+                                                        text: skinPage.previewSkin ? skinPage.previewSkin.name : "Набор не выбран"
+                                                        color: "#f0f4fa"; font.pixelSize: 13; font.bold: true
+                                                        wrapMode: Text.WordWrap; width: parent.width; maximumLineCount: 3; elide: Text.ElideRight
+                                                    }
+                                                    Text {
+                                                        text: skinPage.previewSkin ? (skinPage.previewSkin.rarity + " · " + skinPage.previewSkin.type) : ""
+                                                        color: "#c69b96"; width: parent.width; font.pixelSize: 10; wrapMode: Text.WordWrap
+                                                    }
+                                                    Text { text: skinPage.previewSkin ? skinPage.previewSkin.date : ""; color: win.muted; font.pixelSize: 10 }
+                                                    Text {
+                                                        text: skinPage.previewSkin && skinPage.previewSkin.owned ? "ЕСТЬ В КОЛЛЕКЦИИ" : "НЕ В КОЛЛЕКЦИИ"
+                                                        color: skinPage.previewSkin && skinPage.previewSkin.owned ? "#dfb3a2" : "#8d9bad"
+                                                        font.pixelSize: 9; font.bold: true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Row {
+                                            width: parent.width; spacing: 5
+                                            UiButton { width: (parent.width - 15) / 4; height: 32; label: "СЛУЧАЙНО"; primary: true; onClicked: skinPage.selectedSkinId = backend.randomSkinId() }
+                                            UiButton { width: (parent.width - 15) / 4; height: 32; label: "ВСЕ"; onClicked: backend.setSkinsOwned("all") }
+                                            UiButton { width: (parent.width - 15) / 4; height: 32; label: "НИКОГО"; onClicked: backend.setSkinsOwned("none") }
+                                            UiButton { width: (parent.width - 15) / 4; height: 32; label: "ИНВЕРСИЯ"; onClicked: backend.setSkinsOwned("invert") }
+                                        }
+                                        UiField { id: skinSearch; width: parent.width; placeholderText: "Поиск по RU/EN названию, редкости, дате"; onTextChanged: backend.filterSkins(text) }
+                                        ListView {
+                                            id: skinsList
+                                            width: parent.width
+                                            height: skinContent.height - 300
+                                            clip: true
+                                            spacing: 7
+                                            model: backend.skins
+                                            delegate: Rectangle {
+                                                id: skinRow
+                                                width: skinsList.width
+                                                height: 67
+                                                radius: 9
+                                                color: skinPage.previewSkin && skinPage.previewSkin.id === modelData.id ? "#323140" : "#202936"
+                                                border.color: skinPage.previewSkin && skinPage.previewSkin.id === modelData.id ? win.accent : "#354252"
+                                                ArtThumb {
+                                                    x: 7; y: 6; pixels: 55
+                                                    iconKey: "skin:" + modelData.id
+                                                    placeholder: "SKIN"
+                                                }
+                                                Column {
+                                                    x: 70; y: 10
+                                                    width: parent.width - 107
+                                                    spacing: 5
+                                                    Text { text: modelData.name; width: parent.width; elide: Text.ElideRight; color: "#f1f3f9"; font.pixelSize: 11; font.bold: true }
+                                                    Text { text: modelData.rarity + " · " + modelData.type; width: parent.width; elide: Text.ElideRight; color: "#9aaabe"; font.pixelSize: 10 }
+                                                    Text { text: modelData.date; color: "#7d8b9e"; font.pixelSize: 9 }
+                                                }
+                                                MouseArea {
+                                                    id: skinHover
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: skinPage.selectedSkinId = modelData.id
+                                                }
+                                                Rectangle {
+                                                    width: 25; height: 25; radius: 6
+                                                    anchors.right: parent.right
+                                                    anchors.rightMargin: 9
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    color: modelData.owned ? win.accent : "#2c3847"
+                                                    border.color: modelData.owned ? win.accent : "#63758a"
+                                                    Text { anchors.centerIn: parent; text: modelData.owned ? "✓" : "+"; color: "white"; font.pixelSize: 14; font.bold: true }
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: { skinPage.selectedSkinId = modelData.id; backend.toggleSkin(modelData.id) }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
