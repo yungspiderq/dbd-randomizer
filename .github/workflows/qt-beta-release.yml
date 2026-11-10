@@ -29,7 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r qml_preview/requirements.txt pyinstaller
       - name: Python syntax check
-        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
+        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/build_icon.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
       - name: Targeted core generation checks
         run: |
           python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
@@ -39,6 +39,10 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m unittest qml_preview/test_rotation_engine.py qml_preview/test_native_backend.py -v
+      - name: Generate icon files for Windows and QML
+        run: |
+          python qml_preview/build_icon.py
+          python -c "from PIL import Image; from pathlib import Path; p=Path('qml_preview/assets'); assert (p/'app_icon.ico').is_file() and (p/'app_icon.png').is_file(); im=Image.open(p/'app_icon.png'); assert im.size==(256,256); print('Native icon OK')"
       - name: QML smoke launch with the real engine
         shell: pwsh
         env:
@@ -49,7 +53,7 @@ jobs:
       - name: Build Windows portable exe
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name DBDRandomizerQtBeta --paths . --add-data "qml_preview/Main.qml;qml_preview" --hidden-import pydirectinput --hidden-import pyautogui --hidden-import keyboard --hidden-import PIL --collect-all PySide6 qml_preview/main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name DBDRandomizerQtBeta --paths . --add-data "qml_preview/Main.qml;qml_preview" --add-data "qml_preview/assets/app_icon.png;qml_preview/assets" --icon "qml_preview/assets/app_icon.ico" --hidden-import pydirectinput --hidden-import pyautogui --hidden-import keyboard --hidden-import PIL --collect-all PySide6 qml_preview/main.py
           if (-not (Test-Path dist/DBDRandomizerQtBeta.exe)) { exit 1 }
       - name: Test packaged EXE launch
         shell: pwsh
