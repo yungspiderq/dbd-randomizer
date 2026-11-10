@@ -35,6 +35,10 @@ jobs:
           python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
       - name: Targeted legacy regression tests
         run: python -m unittest smoke_test.TestConfig smoke_test.TestGeneration smoke_test.TestAutomation -q
+      - name: Native Qt backend regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest qml_preview/test_native_backend.py -v
       - name: QML smoke launch with the real engine
         shell: pwsh
         env:
