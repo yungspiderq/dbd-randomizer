@@ -87,8 +87,9 @@ class PerkCardTests(unittest.TestCase):
         name = old["perks"][0]
         new = self._killer(self.killer_names[1])
         self.db.setdefault("owned", {})["killer_perks"] = [
-            p for p in core.all_unique_perks(self.db, "KILLER") if p != name
-        ] + list(self.db["killer_common_perks"])
+            p for p in (core.all_unique_perks(self.db, "KILLER") +
+                        list(self.db["killer_common_perks"])) if p != name
+        ]
         pins, dropped = reconcile_pins(self.db, old, [True, False, False, False],
                                        new, respect_owned=True, empty=core.EMPTY)
         self.assertFalse(pins[0])
