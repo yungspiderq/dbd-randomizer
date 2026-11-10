@@ -314,12 +314,15 @@ class QtBridge(QObject):
 
     @Slot()
     def generate(self):
+        self._generate()
+
+    def _generate(self, preset_challenge=None):
         try:
             names = self.available_characters(self._role)
             if not names:
                 raise ValueError("Отметьте хотя бы одного персонажа этой стороны.")
-            ch = None
-            if self._option("challenge_enabled"):
+            ch = preset_challenge
+            if ch is None and self._option("challenge_enabled"):
                 hist = self.cfg.get("challenge_history", [])
                 ch = core.pick_challenge(self._role, self.challenge_diff_value(), avoid=hist)
                 if ch:
@@ -388,10 +391,7 @@ class QtBridge(QObject):
         ch = core.reroll_challenge(self.build["side"], self.challenge_diff_value(),
                                    avoid={(self.build.get("challenge") or {}).get("ru", "")})
         if ch:
-            self.generate()
-            if self.build:
-                self.build["challenge"] = ch
-                self._sync()
+            self._generate(preset_challenge=ch)
 
     @Slot()
     def copyBuild(self):
