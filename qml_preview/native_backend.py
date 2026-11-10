@@ -640,6 +640,18 @@ class QtBridge(QObject):
         selected = [name for name in names if needle in core._norm(name)]
         return [{"name": name} for name in selected[:90 if needle else 32]]
 
+    @Slot(str, result="QVariantList")
+    def searchItems(self, query):
+        """Search actual survivor items, preserving their generator category."""
+        needle = core._norm(query)
+        matches = [
+            {"name": name, "category": category}
+            for category, data in sorted(self.db["survivor_items"].items())
+            for name in data.get("items", [])
+            if not needle or needle in core._norm(name)
+        ]
+        return matches[:80 if needle else 25]
+
     @Slot(str, str, str, str, result="QVariantList")
     def searchAddons(self, side, character, item, query):
         """Use the same addon pools as the existing generator, not made-up suggestions."""
@@ -648,7 +660,7 @@ class QtBridge(QObject):
         elif side == "SURVIVOR":
             categories = self.db["survivor_items"]
             eligible = [v for v in categories.values()
-                        if not item or item in v.get("items", [])]
+                        if item and item in v.get("items", [])]
             addons = [a for category in eligible for a in category.get("addons", [])]
         else:
             return []
@@ -669,10 +681,35 @@ class QtBridge(QObject):
         if len(set(perks)) != 4 or any(x not in pool for x in perks):
             self._notify("Нужно четыре разных настоящих навыка из базы.")
             return
+        item = item.strip()
+        selected_addons = [x.strip() or core.EMPTY for x in (a1, a2)]
+        if side == "KILLER":
+            valid_addons = set(core._playable_addons(chars[char].get("addons", [])))
+            power = chars[char].get("power", core.EMPTY)
+            category = ""
+        else:
+            matches = [
+                (cat, spec) for cat, spec in self.db["survivor_items"].items()
+                if item in spec.get("items", [])
+            ] if item else []
+            if item and not matches:
+                self._notify("Выберите настоящий предмет выжившего из каталога.")
+                return
+            if not item and any(a != core.EMPTY for a in selected_addons):
+                self._notify("Для аддонов выжившего сначала выберите предмет.")
+                return
+            category = matches[0][0] if matches else ""
+            power = item or core.EMPTY
+            valid_addons = set(core._playable_addons(matches[0][1].get("addons", []))) if matches else set()
+        chosen = [a for a in selected_addons if a != core.EMPTY]
+        if len(set(chosen)) != len(chosen) or any(a not in valid_addons for a in chosen):
+            self._notify("Аддоны должны быть разными и совместимыми с выбранной силой/предметом.")
+            return
         self.build = {"side": side, "char": char,
-                      "power_or_item": item or (chars[char].get("power",core.EMPTY) if side=="KILLER" else core.EMPTY),
+                      "power_or_item": power,
+                      "category": category,
                       "power_is_item": side=="SURVIVOR",
-                      "addons":[a1 or core.EMPTY, a2 or core.EMPTY],
+                      "addons": selected_addons,
                       "perks": perks, "forbidden": {}, "skin": None}
         self._role = side
         self._locks = [False]*4
