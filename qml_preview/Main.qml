@@ -1536,6 +1536,7 @@ ApplicationWindow {
                                     Rectangle {
                                         id: rankingCard
                                         property var selectedRows: modelData.kind === "top" ? statsPage.stat.top : statsPage.stat.least
+                                        property color rankingFill: modelData.kind === "top" ? "#e56c69" : "#7b9fde"
                                         width: (statsPage.width - 12) / 2
                                         height: 576
                                         radius: 13
@@ -1562,7 +1563,7 @@ ApplicationWindow {
                                                 StatRow {
                                                     width: rankingCard.width - 22
                                                     rowData: modelData
-                                                    fillColor: modelData.kind === "top" ? "#e56c69" : "#7b9fde"
+                                                    fillColor: rankingCard.rankingFill
                                                     showIcon: backend.statisticsGroup === "characters"
                                                 }
                                             }
