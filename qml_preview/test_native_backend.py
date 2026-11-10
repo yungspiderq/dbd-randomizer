@@ -173,7 +173,7 @@ class QtBackendTests(unittest.TestCase):
         self.assertIsNone(self.bridge.build)
 
     def test_future_updates_use_explicit_semver(self):
-        self.assertLess(qt_updater._key("v2.28.0-qt-beta.3"), qt_updater._key("v2.28.0-qt-beta.4"))
+        self.assertLess(qt_updater._key("v2.28.0-qt-beta.4"), qt_updater._key("v2.28.0-qt-beta.5"))
         self.assertIsNone(qt_updater._key("v2.28.0"))
         with self.assertRaises(ValueError):
             qt_updater._get("https://attacker.example/test")
