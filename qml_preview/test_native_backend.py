@@ -142,9 +142,8 @@ class QtBackendTests(unittest.TestCase):
         self.bridge.setRole("killer")
         self.bridge.generate()
         self.bridge.setAllPerkLocks(True)
-        dropping = next(ch for ch in core.DATA.CHALLENGES
-                        if ch["side"] in ("KILLER", "ANY")
-                        and "perks" in ch.get("fx", {}).get("drop", ()))
+        dropping = {"side": "KILLER", "diff": 1, "ru": "Тестовое ограничение",
+                    "text": "Без перков", "fx": {"drop": ["perks"]}}
         self.bridge._generate(preset_challenge=dropping)
         self.assertEqual(self.bridge.lockedCount, 0)
         self.assertTrue(self.bridge.build["forbidden"]["perks"])
