@@ -66,6 +66,44 @@ class QtBackendTests(unittest.TestCase):
         self.bridge.setCharacter(s, "S")
         self.assertNotIn(s, self.bridge.available_characters("SURVIVOR"))
 
+    def test_balanced_mode_is_opt_in_and_persists(self):
+        self.assertFalse(self.bridge.rotationEnabled)
+        self.bridge.generate()
+        self.assertEqual(self.bridge.rotationStats["seen"], 0)
+        self.bridge.setRotationEnabled(True)
+        self.assertTrue(self.bridge.rotationEnabled)
+        self.bridge.generate()
+        self.assertEqual(self.bridge.rotationStats["seen"], 1)
+        self.assertTrue(self.cfg["options"]["rotation_enabled"])
+        self.assertIn("rotation_state", self.cfg["options"])
+        self.assertGreater(self.cfg["options"]["rotation_state"]["SURVIVOR"]["characters"]["counts"][self.bridge.build["char"]], 0)
+        self.bridge.setRotationEnabled(False)
+        self.assertFalse(self.bridge.rotationEnabled)
+        self.assertEqual(self.bridge.rotationStats["seen"], 1)
+
+    def test_rotation_side_isolation_and_confirmation_reset_backend(self):
+        self.bridge.setRotationEnabled(True)
+        self.bridge.generate()
+        self.assertEqual(self.bridge.rotationStats["seen"], 1)
+        self.bridge.setRole("killer")
+        self.assertEqual(self.bridge.rotationStats["seen"], 0)
+        self.bridge.generate()
+        self.assertEqual(self.bridge.rotationStats["seen"], 1)
+        self.bridge.resetRotation()
+        self.assertEqual(self.bridge.rotationStats["seen"], 0)
+        self.bridge.setRole("survivor")
+        self.assertEqual(self.bridge.rotationStats["seen"], 1)
+
+    def test_balanced_mode_reroll_uses_weighted_perk_history(self):
+        self.bridge.setRotationEnabled(True)
+        self.bridge.generate()
+        before = list(self.bridge.build["perks"])
+        self.bridge.reroll(0)
+        after = self.bridge.build["perks"]
+        self.assertEqual(len(after), 4)
+        self.assertNotEqual(after[0], before[0])
+        self.assertEqual(len(set(after)), 4)
+
     def test_lock_and_reroll(self):
         self.bridge.generate()
         self.bridge.toggleLock(0)
