@@ -1,31 +1,33 @@
-# DBD Randomizer — QML redesign preview
+# DBD Ultimate Search Randomizer — Qt Beta 3
 
-**Experimental UI preview, not a replacement for the stable app.** This folder is intentionally isolated from the legacy Python/Tkinter application, so the existing Windows build and automation remain unchanged.
+PySide6 / Qt Quick frontend for the original DBD Randomizer game database and generation logic. Unlike the first preview, the application no longer creates a hidden Tkinter window.
 
-## What's new
+## What's included
 
-- PySide6 + Qt Quick interface with custom dark UI
-- No emoji; custom vector-inspired geometric artwork drawn by QML Canvas
-- Redesigned navigation, four large perk tiles, role switch, interactive demo settings
-- Demo build generation, per-slot reroll and lock, clipboard copy, recent history
+- Custom dark interface and vector UI controls, without emoji navigation.
+- Original perk and character data, available DLC filters, killer/survivor roles, rerolls, addons, items, challenges and 2v8 classes.
+- **Characters:** two independent lists (Killers / Survivors), actual portraits downloaded from wiki.gg using the existing icon cache, live search, individual checkboxes and per-side All / None / Invert commands.
+- **Cosmetics:** character selector with portraits and separate killer/survivor switch; 256px cosmetic previews, a large preview pane, rarity/type/date, searchable catalog, ownership selection, random owned outfit and bulk select tools.
+- Main build artwork: character portrait, power/item image, addon thumbnails and perk icons.
+- Custom builds, community builds, Firebase publishing, compatible settings, coordinate capture, timings, OCR support, DirectInput game equip and hotkey stop.
+- Opt-in update checks and verified Windows EXE updates from future Qt Releases.
 
-**Important limitations:** All perks in the preview are fictional placeholders. Original DBD databases, real perks/icons, character roster, community builds, skins, 2v8 classes, OCR, auto-equipping and Windows packaging have **not** been migrated. The existing application in the root directory retains these features.
+Portraits and cosmetic thumbnails are **not bundled** in the EXE. They are downloaded on demand into `icons_cache` using the URLs already present in `dbd_icons.py` and `dbd_skins.py`. Requires an internet connection for first-time images; cached images work offline. Missing wiki images show a custom text placeholder.
 
-## Run on Windows 11
+## Installation / usage
 
-1. Install Python 3.12+.
-2. Open a terminal in this `qml_preview` directory.
-3. Run `py -m pip install -r requirements.txt`.
-4. Run `py main.py`.
+Windows 11: download `DBDRandomizerQtBeta.exe` from the GitHub Release and put it next to your old `dbd_randomizer_config.json` to preserve coordinates and preferences. Keep a backup and retain your old EXE until you have tested the new version.
 
-The UI has not yet been tested on a Windows machine with Qt installed. Python syntax is intended to be compatible with Python 3.12+.
+From source (Python 3.12+):
+```powershell
+py -m pip install -r qml_preview/requirements.txt
+py qml_preview/main.py
+```
 
-**Keyboard:** F5 — generate sample; F6 — copy; F9 — placeholder (not a working emergency stop).
+F5 generate, F6 copy, F9 stop automation (also globally registered by `keyboard` on Windows if permitted).
 
-## Next steps
+## Beta limitations
 
-Split the existing application's game generation, persistence and automation logic from Tkinter widgets, then bind them through a thread-safe Qt/Python bridge. Test every existing feature before changing the default launcher or creating a stable release. Do not enable auto-equip until working emergency stop and worker cancellation have been verified.
+The interface and packaged EXE are checked in Windows CI, but automatic equipment has **not** been tested with a real Dead by Daylight match and varying screen resolutions. Test in dry-run first. The previous Tkinter EXE cannot automatically migrate itself; one manual installation is required. The executable is a prerelease and does not replace the stable v2.28.0 in `main`.
 
-## Security
-
-No GitHub access tokens or credentials are included. Revoke previously exposed credentials through GitHub settings.
+Do not provide GitHub tokens in messages; no GitHub credentials are needed to run the application.
