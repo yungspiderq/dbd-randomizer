@@ -620,6 +620,43 @@ class QtBridge(QObject):
         QGuiApplication.clipboard().setText(core.classes_to_text(list(self._classes.items())))
         self._notify("Классы скопированы.")
 
+    @Slot(str, str, result="QVariantList")
+    def searchCharacters(self, side, query):
+        """Return real characters for the custom build picker; empty query is limited."""
+        pool = self.db["killers"] if side == "KILLER" else self.db["survivors"]
+        needle = core._norm(query)
+        names = [name for name in sorted(pool) if not needle or needle in core._norm(name)]
+        return [{"name": name} for name in names[:75]]
+
+    @Slot(str, str, result="QVariantList")
+    def searchPerks(self, side, query):
+        """Search all usable perks for the chosen role (including common perks)."""
+        if side not in ("KILLER", "SURVIVOR"):
+            return []
+        source = core.all_unique_perks(self.db, side)
+        source += list(self.db["killer_common_perks" if side == "KILLER" else "surv_common_perks"])
+        needle = core._norm(query)
+        names = sorted(set(source))
+        selected = [name for name in names if needle in core._norm(name)]
+        return [{"name": name} for name in selected[:90 if needle else 32]]
+
+    @Slot(str, str, str, str, result="QVariantList")
+    def searchAddons(self, side, character, item, query):
+        """Use the same addon pools as the existing generator, not made-up suggestions."""
+        if side == "KILLER":
+            addons = list(self.db["killers"].get(character, {}).get("addons", []))
+        elif side == "SURVIVOR":
+            categories = self.db["survivor_items"]
+            eligible = [v for v in categories.values()
+                        if not item or item in v.get("items", [])]
+            addons = [a for category in eligible for a in category.get("addons", [])]
+        else:
+            return []
+        needle = core._norm(query)
+        names = [name for name in sorted(set(core._playable_addons(addons)))
+                 if not needle or needle in core._norm(name)]
+        return [{"name": name} for name in names[:75 if needle else 30]]
+
     @Slot(str, str, str, str, str, str, str, str, str)
     def buildCustom(self, side, char, item, a1, a2, p1, p2, p3, p4):
         chars = self.db["killers"] if side == "KILLER" else self.db["survivors"]
