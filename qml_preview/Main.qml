@@ -552,13 +552,14 @@ ApplicationWindow {
                             spacing: 12
                             property string sideKey: "S"
                             property int selectedSkinId: -1
-                            property var previewSkin: {
-                                var catalog = backend.skins;
-                                for (var i=0; i<catalog.length; ++i) {
-                                    if (catalog[i].id === selectedSkinId) return catalog[i];
+                            function pickPreview(id, catalog) {
+                                for (var i = 0; i < catalog.length; ++i) {
+                                    if (catalog[i].id === id)
+                                        return catalog[i];
                                 }
                                 return catalog.length ? catalog[0] : null;
                             }
+                            property var previewSkin: pickPreview(selectedSkinId, backend.skins)
                             Text { text: "Галерея внешности"; color: "#e9edf5"; font.pixelSize: 18; font.bold: true }
                             Text { text: "Настоящие превью из базы wiki.gg. Отмеченные наборы участвуют в генерации билдов."; width: parent.width; color: win.muted; wrapMode: Text.WordWrap; font.pixelSize: 11 }
                             Row {
