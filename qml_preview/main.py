@@ -17,7 +17,7 @@ from native_backend import QtBridge
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("DBD Randomizer Qt Beta 9")
+    app.setApplicationName("DBD Randomizer Qt Beta 10")
     frozen = bool(getattr(sys, "frozen", False))
     packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
     icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
