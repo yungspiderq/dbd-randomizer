@@ -83,6 +83,14 @@ def main():
                 assert window.property("builderSmokeStatus") == 1, (
                     "QML builder logic: " + str(window.property("builderSmokeError"))
                 )
+                QTest.qWait(80)  # let Qt Quick finish dynamic Column/Grid layout
+                assert QMetaObject.invokeMethod(window, "prepareBuilderDrag")
+                QTest.qWait(90)  # let the Flickable settle after scrolling
+                assert QMetaObject.invokeMethod(window, "captureBuilderDrag")
+                app.processEvents()
+                assert window.property("builderSmokeStatus") == 1, (
+                    "Builder scene position: " + str(window.property("builderSmokeError"))
+                )
                 # Coordinates come from QML directly, so the test doesn't depend
                 # on QObject parenting of Repeater delegates.
                 start = QPoint(round(window.property("builderSmokeStartX")),
