@@ -97,6 +97,87 @@ ApplicationWindow {
         }
     }
 
+    // Shared catalog row: same portrait, selection rail, subtle hover and vector check
+    // for the character picker and the outfit gallery.
+    component CatalogRow: Rectangle {
+        id: catalogRow
+        property string title: ""
+        property string subtitle: ""
+        property string artKey: ""
+        property string artLabel: "DBD"
+        property bool selected: false
+        property bool showCheck: true
+        property color statusColor: win.colors.accentSoft
+        signal activated()
+        width: parent.width
+        height: 66
+        radius: 11
+        color: selected ? win.colors.navActive :
+               catalogHover.containsMouse ? win.colors.buttonHover : win.colors.panel
+        border.width: 1
+        border.color: selected ? win.accent : win.colors.stroke
+        Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 150 : 0 } }
+        Behavior on border.color { ColorAnimation { duration: backend.animationsEnabled ? 150 : 0 } }
+        Rectangle {
+            x: 0; y: 8; width: 3; height: parent.height - 16
+            radius: 2; color: win.accent; visible: catalogRow.selected
+        }
+        ArtThumb {
+            x: 9; y: 7; pixels: 52
+            iconKey: catalogRow.artKey
+            placeholder: catalogRow.artLabel
+        }
+        Column {
+            x: 70
+            y: 13
+            width: parent.width - (catalogRow.showCheck ? 115 : 83)
+            spacing: 5
+            Text {
+                text: catalogRow.title
+                width: parent.width
+                elide: Text.ElideRight
+                color: catalogRow.selected ? win.colors.text : win.colors.muted
+                font.pixelSize: 12
+                font.bold: catalogRow.selected
+            }
+            Text {
+                text: catalogRow.subtitle
+                width: parent.width
+                elide: Text.ElideRight
+                color: catalogRow.selected ? catalogRow.statusColor : win.muted
+                font.pixelSize: 10
+            }
+        }
+        Rectangle {
+            visible: catalogRow.showCheck
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            width: 22; height: 22; radius: 6
+            color: catalogRow.selected ? win.accent : win.colors.button
+            border.width: 1
+            border.color: catalogRow.selected ? win.accent : win.stroke
+            // Draw a checkmark using two small rectangles rather than an emoji.
+            Rectangle {
+                visible: catalogRow.selected
+                x: 5; y: 11; width: 6; height: 2; radius: 1
+                rotation: 45; color: "#ffffff"
+            }
+            Rectangle {
+                visible: catalogRow.selected
+                x: 9; y: 9; width: 10; height: 2; radius: 1
+                rotation: -45; color: "#ffffff"
+            }
+        }
+        MouseArea {
+            id: catalogHover
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: catalogRow.activated()
+        }
+    }
+
     component NavItem: Rectangle {
         id: nav
         property string label: ""
@@ -1210,52 +1291,15 @@ ApplicationWindow {
                                                 clip: true
                                                 spacing: 7
                                                 boundsBehavior: Flickable.StopAtBounds
-                                                delegate: Rectangle {
+                                                delegate: CatalogRow {
                                                     id: characterRow
                                                     width: characterList.width
-                                                    height: 64
-                                                    radius: 10
-                                                    color: rowHover.containsMouse ? "#283342" : "#202833"
-                                                    border.width: 1
-                                                    border.color: modelData.owned ? "#6e5157" : "#364353"
-                                                    ArtThumb {
-                                                        x: 7; y: 6
-                                                        pixels: 52
-                                                        iconKey: modelData.name
-                                                        placeholder: sideCard.sideKey
-                                                    }
-                                                    Text {
-                                                        text: modelData.name
-                                                        x: 69; y: 13
-                                                        width: parent.width - 115
-                                                        elide: Text.ElideRight
-                                                        font.pixelSize: 12
-                                                        color: modelData.owned ? "#eef3fa" : "#8996a7"
-                                                    }
-                                                    Text {
-                                                        text: modelData.owned ? "ДОСТУПЕН" : "НЕ ВЫБРАН"
-                                                        x: 69; y: 36
-                                                        font.pixelSize: 9
-                                                        font.letterSpacing: 0.4
-                                                        color: modelData.owned ? "#d1a3a3" : "#788797"
-                                                    }
-                                                    Rectangle {
-                                                        width: 20; height: 20; radius: 5
-                                                        anchors.right: parent.right
-                                                        anchors.rightMargin: 11
-                                                        anchors.verticalCenter: parent.verticalCenter
-                                                        color: modelData.owned ? win.accent : win.colors.buttonHover
-                                                        border.width: 1
-                                                        border.color: modelData.owned ? win.accent : "#667586"
-                                                        Text { anchors.centerIn: parent; text: modelData.owned ? "✓" : ""; color: "white"; font.pixelSize: 13; font.bold: true }
-                                                    }
-                                                    MouseArea {
-                                                        id: rowHover; anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: backend.setCharacter(modelData.name, sideCard.sideKey)
-                                                    }
-                                                }
+                                                    title: modelData.name
+                                                    artKey: modelData.name
+                                                    artLabel: sideCard.sideKey
+                                                    subtitle: modelData.owned ? "ВКЛЮЧЁН В РАНДОМ" : "НЕ ВЫБРАН"
+                                                    selected: modelData.owned
+                                                    onActivated: backend.setCharacter(modelData.name, sideCard.sideKey)
                                             }
                                         }
                                     }
@@ -1318,28 +1362,18 @@ ApplicationWindow {
                                                 return c.side === skinPage.sideKey
                                                     && c.name.toLowerCase().indexOf(skinCharSearch.text.toLowerCase()) >= 0;
                                             })
-                                            delegate: Rectangle {
+                                            delegate: CatalogRow {
                                                 width: skinCharList.width
                                                 height: 57
-                                                radius: 9
-                                                color: backend.skinCharacter === modelData.name ? "#39303a" : charHover.containsMouse ? "#293442" : win.colors.panel
-                                                border.color: backend.skinCharacter === modelData.name ? win.accent : win.colors.stroke
-                                                ArtThumb {
-                                                    x: 5; y: 5
-                                                    pixels: 47
-                                                    iconKey: modelData.name
-                                                    placeholder: modelData.side
-                                                }
-                                                Column {
-                                                    x: 60; y: 11
-                                                    width: parent.width - 67
-                                                    spacing: 5
-                                                    Text { text: modelData.name; width: parent.width; elide: Text.ElideRight; color: "#eef3f8"; font.pixelSize: 11; font.bold: backend.skinCharacter === modelData.name }
-                                                    Text { text: modelData.count + " наборов"; color: "#9bacbe"; font.pixelSize: 9 }
-                                                }
-                                                MouseArea {
-                                                    id: charHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                                    onClicked: { skinPage.selectedSkinId = -1; backend.setSkinCharacter(modelData.name) }
+                                                title: modelData.name
+                                                subtitle: modelData.count + " наборов"
+                                                artKey: modelData.name
+                                                artLabel: modelData.side
+                                                selected: backend.skinCharacter === modelData.name
+                                                showCheck: false
+                                                onActivated: {
+                                                    skinPage.selectedSkinId = -1
+                                                    backend.setSkinCharacter(modelData.name)
                                                 }
                                             }
                                         }
