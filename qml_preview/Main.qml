@@ -1312,6 +1312,7 @@ ApplicationWindow {
                                                     color: win.muted
                                                     font.pixelSize: 12
                                                 }
+                                            }
                                         }
                                     }
                                 }
