@@ -161,7 +161,22 @@ def main():
                 assert abs(window.property("uiScale") - 1.0) < 0.01
                 assert backend.appearanceTheme == "crimson"
                 assert backend.animationsEnabled
-                print("Qt appearance smoke OK: all three themes, scale, motion and reset")
+                # Verify reflow on minimum and normal window sizes across pages.
+                for width, height in ((1050, 700), (1350, 850)):
+                    window.resize(width, height)
+                    for page in ("Персонажи", "Внешность", "Избранное", "Конструктор"):
+                        window.setProperty("page", page)
+                        app.processEvents()
+                        assert window.width() == width and window.height() == height, (
+                            "Unexpected window geometry: " + str(window.size())
+                        )
+                backend.setAppearanceScale(1.2)
+                window.resize(1400, 900)
+                app.processEvents()
+                assert abs(window.property("uiScale") - 1.2) < 0.01
+                assert window.width() == 1400
+                backend.resetAppearance()
+                print("Qt appearance smoke OK: themes, scale, animation and catalog resize")
             except Exception as exc:
                 print("Qt appearance smoke FAILED: " + repr(exc), file=sys.stderr)
                 appearance_check["ok"] = False
