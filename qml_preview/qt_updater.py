@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 
 REPO = "yungspiderq/dbd-randomizer"
 BASE = f"https://api.github.com/repos/{REPO}/releases"
-CURRENT_TAG = "v2.28.0-qt-beta.14"
+CURRENT_TAG = "v2.28.0-qt-beta.16"
 ASSET = "DBDRandomizerQtBeta.zip"
 APP_EXE = "DBDRandomizerQtBeta.exe"
 PACKAGE_ROOT = "DBDRandomizerQtBeta"
@@ -59,12 +59,14 @@ def check():
     if not isinstance(releases, list):
         raise RuntimeError("Invalid release list")
     current = _key(CURRENT_TAG)
+    if current is None:
+        raise RuntimeError("Invalid installed version tag")
     newest = None
     for release in releases:
         if not isinstance(release, dict) or release.get("draft"):
             continue
         version = _key(release.get("tag_name"))
-        if not version or (current and version <= current):
+        if not version or version <= current:
             continue
         assets = release.get("assets")
         if not isinstance(assets, list):
