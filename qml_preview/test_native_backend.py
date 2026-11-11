@@ -369,6 +369,7 @@ class QtBackendTests(unittest.TestCase):
             self.bridge._worker.join(timeout=5)
 
     def test_search_does_not_claim_success_when_input_fails(self):
+        self.bridge._target_window = 501
         self.bridge.generate()
         self.bridge.cfg["options"]["dry_run"] = False
         self.bridge.cfg["options"]["ocr_verify"] = False
@@ -378,7 +379,7 @@ class QtBackendTests(unittest.TestCase):
             self.assertFalse(self.bridge._search_and_select("example"))
         with patch.object(self.bridge, "_sleep"), patch.object(self.bridge, "_click", return_value=True), \
              patch.object(self.bridge, "_paste", return_value=False), \
-             patch.object(self.bridge, "_game_is_foreground", return_value=True), \
+             patch.object(core.INPUT, "foreground_window", return_value=501), \
              patch.object(core.INPUT, "hotkey"):
             self.assertFalse(self.bridge._search_and_select("example"))
 
@@ -393,84 +394,29 @@ class QtBackendTests(unittest.TestCase):
             search.assert_not_called()
         self.assertIsNone(self.bridge.cfg["last_equipped"][self.bridge.build["side"]])
 
-    def test_exact_shipping_executable_name_not_launcher_or_title(self):
-        matches = core.INPUT._is_game_executable
-        self.assertTrue(matches(r"C:\Games\DeadByDaylight\Binaries\Win64\DeadByDaylight-Win64-Shipping.exe"))
-        self.assertTrue(matches("deadbydaylight-Win64-SHIPPING.EXE"))
-        self.assertTrue(matches(r"C:\Xbox\DeadByDaylight-WinGDK-Shipping.exe"))
-        self.assertFalse(matches("Dead by Daylight"))
-        self.assertFalse(matches("DeadByDaylight.exe"))
-        self.assertFalse(matches("DeadByDaylight-Win64-Shipping.exe.log"))
-        self.assertFalse(matches("DeadByDaylight Crash Reporter.exe"))
+    def test_manual_target_capture_accepts_any_external_window(self):
+        self.bridge.cfg["options"]["dry_run"] = False
+        with patch.object(core.INPUT, "foreground_window", return_value=501), \
+             patch.object(core.INPUT, "is_own_window", return_value=False):
+            self.bridge._capture_target_window()
+            self.assertEqual(self.bridge._target_window, 501)
+            self.bridge._assert_input_ready()
 
-    @unittest.skipUnless(sys.platform == "win32", "Win32 process API required")
-    def test_window_owner_executable_uses_real_pid_and_queryfullprocessimagename(self):
-        from unittest.mock import MagicMock
-        u32 = MagicMock()
-        k32 = MagicMock()
-        def pid_for_hwnd(_hwnd, pidptr):
-            core.ctypes.cast(
-                pidptr, core.ctypes.POINTER(core.ctypes.c_ulong)
-            ).contents.value = 4242
-            return 1
-        def process_name(_handle, _flags, buffer, _lengthptr):
-            buffer.value = r"C:\Games\DeadByDaylight-Win64-Shipping.exe"
-            return 1
-        u32.GetWindowThreadProcessId.side_effect = pid_for_hwnd
-        k32.OpenProcess.return_value = 12345
-        k32.QueryFullProcessImageNameW.side_effect = process_name
-        with patch.object(core.ctypes.windll, "user32", u32), \
-             patch.object(core.ctypes.windll, "kernel32", k32):
-            self.assertTrue(core.INPUT._is_game_executable(
-                core.INPUT._window_process_name(720)))
-        k32.OpenProcess.assert_called_once_with(0x1000, False, 4242)
-        k32.CloseHandle.assert_called_once_with(12345)
+    def test_manual_target_rejects_own_window_and_missing_foreground(self):
+        self.bridge.cfg["options"]["dry_run"] = False
+        for hwnd, is_own in ((None, True), (300, True)):
+            with self.subTest(hwnd=hwnd), \
+                 patch.object(core.INPUT, "foreground_window", return_value=hwnd), \
+                 patch.object(core.INPUT, "is_own_window", return_value=is_own):
+                with self.assertRaisesRegex(RuntimeError, "Переключитесь"):
+                    self.bridge._capture_target_window()
+                self.assertIsNone(self.bridge._target_window)
 
-    @unittest.skipUnless(sys.platform == "win32", "Win32 user32 required")
-    def test_foreground_process_match_ignores_window_caption(self):
-        from unittest.mock import MagicMock
-        user32 = MagicMock()
-        user32.GetForegroundWindow.return_value = 720
-        with patch.object(core.ctypes.windll, "user32", user32), \
-             patch.object(core.INPUT, "_window_process_name",
-                          return_value=r"C:\Games\DeadByDaylight-Win64-Shipping.exe"):
-            self.assertTrue(core.INPUT.game_is_foreground())
-            self.assertTrue(self.bridge._game_is_foreground())
-        with patch.object(core.ctypes.windll, "user32", user32), \
-             patch.object(core.INPUT, "_window_process_name",
-                          return_value=r"C:\Games\DeadByDaylightLauncher.exe"):
-            self.assertFalse(core.INPUT.game_is_foreground())
-            self.assertFalse(self.bridge._game_is_foreground())
-
-    @unittest.skipUnless(sys.platform == "win32", "Win32 EnumWindows required")
-    def test_find_game_window_by_process_even_without_dead_by_daylight_title(self):
-        from unittest.mock import MagicMock
-        user32 = MagicMock()
-        user32.IsWindowVisible.return_value = True
-        user32.GetWindowTextLengthW.return_value = 0
-        def enumerate_windows(callback, _unused):
-            for hwnd in (501, 502, 503):
-                if not callback(hwnd, 0):
-                    break
-            return True
-        user32.EnumWindows.side_effect = enumerate_windows
-        owners = {
-            501: "DeadByDaylightLauncher.exe",
-            502: r"C:\Games\DeadByDaylight-Win64-Shipping.exe",
-            503: "OtherGame.exe",
-        }
-        with patch.object(core.ctypes.windll, "user32", user32), \
-             patch.object(core.INPUT, "_window_process_name",
-                          side_effect=lambda hwnd: owners[hwnd]):
-            result = core.INPUT.find_game_window()
-        self.assertIsNotNone(result)
-        self.assertEqual(result[0], 502)
-
-    def test_focus_failure_prevents_all_real_game_input(self):
+    def test_manual_target_blocks_all_steps_when_own_window_active(self):
         self.bridge.generate()
         self.bridge.cfg["options"]["dry_run"] = False
-        self.bridge.cfg["options"]["focus_game"] = True
-        with patch.object(core.INPUT, "focus_game", return_value=(False, "окно не найдено")), \
+        with patch.object(core.INPUT, "foreground_window", return_value=300), \
+             patch.object(core.INPUT, "is_own_window", return_value=True), \
              patch.object(self.bridge, "_click") as click, \
              patch.object(self.bridge, "_sleep"):
             self.bridge._automate([("slot1", "example", "навык")])
@@ -480,9 +426,11 @@ class QtBackendTests(unittest.TestCase):
     def test_foreground_loss_aborts_before_second_click(self):
         self.bridge.generate()
         self.bridge.cfg["options"]["dry_run"] = False
-        self.bridge.cfg["options"]["focus_game"] = False
         self.bridge.cfg["options"]["hover_retry"] = False
-        with patch.object(self.bridge, "_game_is_foreground", side_effect=[True, True, False]), \
+        # Captured HWND -> preflight -> first click -> switched before next click.
+        with patch.object(core.INPUT, "foreground_window",
+                          side_effect=[501, 501, 501, 777]), \
+             patch.object(core.INPUT, "is_own_window", return_value=False), \
              patch.object(core.INPUT, "click", return_value=True) as click, \
              patch.object(self.bridge, "_search_and_select", return_value=True), \
              patch.object(self.bridge, "_sleep"):
@@ -495,15 +443,28 @@ class QtBackendTests(unittest.TestCase):
 
     def test_foreground_guard_blocks_paste_and_click(self):
         self.bridge.cfg["options"]["dry_run"] = False
-        with patch.object(self.bridge, "_game_is_foreground", return_value=False), \
+        self.bridge._target_window = 501
+        with patch.object(core.INPUT, "foreground_window", return_value=777), \
              patch.object(core.INPUT, "click") as click, \
              patch.object(core.INPUT, "paste") as paste:
-            with self.assertRaisesRegex(RuntimeError, "не активен"):
+            with self.assertRaisesRegex(RuntimeError, "изменилось"):
                 self.bridge._click((100, 100), "slot1")
-            with self.assertRaisesRegex(RuntimeError, "не активен"):
+            with self.assertRaisesRegex(RuntimeError, "изменилось"):
                 self.bridge._paste("example")
             click.assert_not_called()
             paste.assert_not_called()
+
+    @unittest.skipUnless(sys.platform == "win32", "Win32 HWND required")
+    def test_own_window_is_identified_by_current_process_id(self):
+        from unittest.mock import MagicMock
+        api = MagicMock()
+        def set_pid(_hwnd, ptr):
+            core.ctypes.cast(ptr, core.ctypes.POINTER(core.ctypes.c_ulong)).contents.value = os.getpid()
+            return 1
+        api.GetWindowThreadProcessId.side_effect = set_pid
+        with patch.object(core.ctypes.windll, "user32", api):
+            self.assertTrue(core.INPUT.is_own_window(501))
+        self.assertTrue(core.INPUT.is_own_window(0))  # no HWND is never a safe target
 
     def test_zero_duration_sleep_is_still_interruptible(self):
         self.bridge.stop()
@@ -527,6 +488,7 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual(self.bridge.cfg.get("last_equipped", {}), {})
 
     def test_ocr_requires_region_and_readable_match(self):
+        self.bridge._target_window = 501
         self.bridge.cfg["options"]["dry_run"] = False
         self.bridge.cfg["options"]["ocr_verify"] = True
         self.bridge.cfg["timings"]["retries"] = 0
@@ -536,7 +498,7 @@ class QtBackendTests(unittest.TestCase):
         self.bridge.cfg["coords"]["ocr_region"] = {
             "x": "100", "y": "100", "w": "260", "h": "70"
         }
-        with patch.object(self.bridge, "_game_is_foreground", return_value=True), \
+        with patch.object(core.INPUT, "foreground_window", return_value=501), \
              patch.object(self.bridge, "_sleep"), \
              patch.object(self.bridge, "_click", return_value=True) as click, \
              patch.object(self.bridge, "_paste", return_value=True), \
@@ -546,6 +508,7 @@ class QtBackendTests(unittest.TestCase):
             self.assertEqual(click.call_count, 1)  # search field, not result
 
     def test_stop_during_ocr_never_clicks_result(self):
+        self.bridge._target_window = 501
         self.bridge.cfg["options"]["dry_run"] = False
         self.bridge.cfg["options"]["ocr_verify"] = True
         self.bridge.cfg["timings"]["retries"] = 0
@@ -555,7 +518,7 @@ class QtBackendTests(unittest.TestCase):
         def read_and_cancel(*args):
             self.bridge.stop()
             return "example"
-        with patch.object(self.bridge, "_game_is_foreground", return_value=True), \
+        with patch.object(core.INPUT, "foreground_window", return_value=501), \
              patch.object(self.bridge, "_click", return_value=True) as click, \
              patch.object(self.bridge, "_paste", return_value=True), \
              patch.object(core.INPUT, "hotkey"), \

@@ -2,7 +2,7 @@ name: Qt beta - verify, build and publish prerelease
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "release/qt-beta17-updater-progress"]
+    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-beta18-manual-target-window"]
     paths: ["qml_preview/**", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
 
@@ -101,23 +101,23 @@ jobs:
           "$hash  DBDRandomizerQtBeta.zip" | Set-Content -Path "dist/DBDRandomizerQtBeta.zip.sha256" -Encoding ascii
           Write-Host "Portable ZIP size: $([math]::Round((Get-Item 'dist/DBDRandomizerQtBeta.zip').Length / 1MB, 2)) MiB"
 
-      - name: Verify upgrade from published Beta16 to Beta17 candidate ZIP
+      - name: Verify upgrade from published Beta17 to Beta18 candidate ZIP
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           QT_QPA_PLATFORM: offscreen
         run: |
-          $old = Join-Path $env:RUNNER_TEMP "qt-beta16-original"
+          $old = Join-Path $env:RUNNER_TEMP "qt-beta17-original"
           New-Item -ItemType Directory -Force -Path $old | Out-Null
-          gh release download v2.28.0-qt-beta.16 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
-          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published Beta16 release" }
-          python tests/qt_beta17_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
-          if ($LASTEXITCODE -ne 0) { throw "Beta16 to Beta17 candidate updater E2E failed" }
+          gh release download v2.28.0-qt-beta.17 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published Beta17 release" }
+          python tests/qt_beta18_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
+          if ($LASTEXITCODE -ne 0) { throw "Beta17 to Beta18 candidate updater E2E failed" }
 
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DBDRandomizerQtBeta17-Portable-Windows
+          name: DBDRandomizerQtBeta18-Portable-Windows
           path: |
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
@@ -128,9 +128,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.17"
+          $tag = "v2.28.0-qt-beta.18"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 17 — Updater Reliability" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 18 — Manual Window Selection" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }

@@ -51,19 +51,19 @@ class UpdaterTests(unittest.TestCase):
         self.assertIsNone(u._key("v999.0.0-malicious"))
         self.assertEqual(u.ASSET, "DBDRandomizerQtBeta.zip")
 
-    def test_beta17_version_does_not_offer_itself(self):
-        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.17")
+    def test_beta18_version_does_not_offer_itself(self):
+        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.18")
         def release(tag):
             return {"draft": False, "tag_name": tag,
                     "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
                     "assets": [{"name": u.ASSET, "size": 20000000,
                                 "browser_download_url": "https://github.com/" + u.REPO + "/releases/download/" + tag + "/" + u.ASSET}]}
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.16")]).encode())):
+                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.17")]).encode())):
             self.assertIsNone(u.check())
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release("v2.28.0-qt-beta.18"), release(u.CURRENT_TAG)]).encode())):
-            self.assertEqual(u.check()["tag"], "v2.28.0-qt-beta.18")
+                release("v2.28.0-qt-beta.19"), release(u.CURRENT_TAG)]).encode())):
+            self.assertEqual(u.check()["tag"], "v2.28.0-qt-beta.19")
 
     def test_stage_valid_zip_sha_and_preserve_user_config(self):
         archive = self.archive()
@@ -152,7 +152,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_newer_release_requires_portable_asset(self):
         base = {
-            "draft": False, "tag_name": "v2.28.0-qt-beta.18",
+            "draft": False, "tag_name": "v2.28.0-qt-beta.19",
             "name": "New Version",
             "html_url": "https://github.com/" + u.REPO + "/releases/tag/new",
             "assets": [
@@ -165,7 +165,7 @@ class UpdaterTests(unittest.TestCase):
             ]
         }
         latest = dict(base)
-        latest["tag_name"] = "v2.28.0-qt-beta.19"
+        latest["tag_name"] = "v2.28.0-qt-beta.20"
         latest["assets"] = [{"name": "DBDRandomizerQtBeta.exe", "size": 20000000}]
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([base, latest]).encode())):

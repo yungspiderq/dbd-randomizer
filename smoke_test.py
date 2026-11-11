@@ -1740,14 +1740,14 @@ class TestHoverInApp(unittest.TestCase):
         self.assertFalse(self.app._click((120, 400), "slot1"))
         self.assertEqual(len([c for c in self.fake.calls if c[0] == "click"]), 1)
 
-    def test_automation_focuses_game_window(self):
+    def test_automation_does_not_search_game_window(self):
         self.app.timing = lambda key: 0.0 if key != "retries" else 1
         self.app.build = {"side": "KILLER", "char": "Охотник", "power_or_item": "Капкан",
                           "power_is_item": False, "addons": [R.EMPTY, R.EMPTY],
                           "perks": ["А", R.EMPTY, R.EMPTY, R.EMPTY]}
         self.app.search_and_select = lambda name: True
         self.app._run_automation(self.app._equip_steps())
-        self.assertEqual(self.fake.focus_calls, 1)
+        self.assertEqual(self.fake.focus_calls, 0)
 
     def test_no_focus_in_dry_run(self):
         self.app.dry_var.set(True)
