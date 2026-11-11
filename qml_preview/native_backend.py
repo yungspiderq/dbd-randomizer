@@ -108,6 +108,7 @@ class QtBridge(QObject):
         self._worker = None
         self._stop = threading.Event()
         self._hotkey_handle = None
+        self._target_window = None
         self._planned_equipped = None
         self._update_info = None
         self._update_text = qt_updater.last_install_error(
@@ -430,7 +431,6 @@ class QtBridge(QObject):
             "clear": bool(self._option("use_clear_button")),
             "verifyclipboard": bool(self._option("verify_clipboard")),
             "restoreclipboard": bool(self._option("restore_clipboard")),
-            "focusgame": bool(self._option("focus_game")),
             "hoververify": bool(self._option("hover_verify")),
             "hoverretry": bool(self._option("hover_retry")),
             "resultIndex": str(self._option("result_index") or 1),
@@ -800,7 +800,7 @@ class QtBridge(QObject):
     def toggleAdvanced(self, name):
         options = {
             "clear": "use_clear_button", "verifyclipboard": "verify_clipboard",
-            "restoreclipboard": "restore_clipboard", "focusgame": "focus_game",
+            "restoreclipboard": "restore_clipboard",
             "hoververify": "hover_verify", "hoverretry": "hover_retry"
         }
         key = options.get(name)
@@ -1402,15 +1402,29 @@ class QtBridge(QObject):
         if self._stop.is_set():
             raise core.AbortError()
 
-    def _game_is_foreground(self):
-        """Match the foreground *process*, not the game's changeable title."""
-        return core.INPUT.game_is_foreground()
+    def _capture_target_window(self):
+        """Lock onto the window manually focused after the countdown."""
+        if self._option("dry_run"):
+            return
+        hwnd = core.INPUT.foreground_window()
+        if not hwnd or core.INPUT.is_own_window(hwnd):
+            raise RuntimeError(
+                "Переключитесь в окно DBD во время отсчёта. "
+                "Игровое окно не выбрано; клики не выполнялись."
+            )
+        self._target_window = hwnd
+        self._notify("Выбрано активное окно вручную; поиск процесса DBD отключён.")
 
     def _assert_input_ready(self):
         if self._stop.is_set():
             raise core.AbortError()
-        if not self._option("dry_run") and not self._game_is_foreground():
-            raise RuntimeError("Процесс DeadByDaylight-Win64-Shipping.exe не активен — автоэкипировка остановлена.")
+        if self._option("dry_run"):
+            return
+        if not self._target_window or core.INPUT.foreground_window() != self._target_window:
+            raise RuntimeError(
+                "Активное окно изменилось — автоэкипировка остановлена, "
+                "чтобы не нажимать в другом приложении."
+            )
 
     def _click(self,coord,label):
         self._assert_input_ready()
@@ -1546,16 +1560,19 @@ class QtBridge(QObject):
 
     def _automate(self,steps):
         try:
-            for i in range(int(self._timing("countdown")),0,-1):
-                self._notify("Старт через "+str(i)+" сек. Стоп: "+str(self._option("abort_key") or "F9").upper())
+            self._target_window = None
+            dry_run = bool(self._option("dry_run"))
+            countdown = int(self._timing("countdown"))
+            if not dry_run:
+                countdown = max(3, countdown)  # time to Alt-Tab into DBD
+            for i in range(countdown,0,-1):
+                self._notify(
+                    "Переключитесь в DBD вручную! Старт через "
+                    +str(i)+" сек. Стоп: "
+                    +str(self._option("abort_key") or "F9").upper()
+                )
                 self._sleep(1)
-            if not self._option("dry_run") and self._option("focus_game"):
-                ok,why=core.INPUT.focus_game()
-                self._notify("Фокус игры: "+str(why))
-                if not ok:
-                    raise RuntimeError("Не удалось активировать окно игры: "+str(why))
-            # Even if the focus command returned success, verify the foreground
-            # HWND. If the player Alt-Tabs later, every input is checked again.
+            self._capture_target_window()
             self._assert_input_ready()
             for i,(key,name,label) in enumerate(steps,1):
                 self._sleep(0)
@@ -1588,6 +1605,7 @@ class QtBridge(QObject):
                 self.cfg.setdefault("last_equipped",{})[self.build["side"]]=None
                 self._save()
         finally:
+            self._target_window = None
             self._messages.put(("running",False))
             self._wake.emit()
 
