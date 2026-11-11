@@ -66,6 +66,43 @@ class QtBackendTests(unittest.TestCase):
         self.bridge.setCharacter(s, "S")
         self.assertNotIn(s, self.bridge.available_characters("SURVIVOR"))
 
+    def test_live_appearance_controls_persist_without_changing_game_options(self):
+        self.assertEqual(self.bridge.appearanceTheme, "crimson")
+        self.assertEqual(self.bridge.appearanceScale, 1.0)
+        self.assertTrue(self.bridge.animationsEnabled)
+        original_mode = self.bridge.mode
+        original_rotation = self.bridge.rotationEnabled
+        self.bridge.setAppearanceTheme("frost")
+        self.assertEqual(self.bridge.appearanceTheme, "frost")
+        self.assertEqual(self.bridge.appearancePalette["accent"], "#4298e5")
+        self.bridge.setAppearanceScale(1.2)
+        self.assertAlmostEqual(self.bridge.appearanceScale, 1.2)
+        self.bridge.setAnimationsEnabled(False)
+        self.assertFalse(self.bridge.animationsEnabled)
+        self.assertEqual(self.cfg["options"]["qt_theme"], "frost")
+        self.assertAlmostEqual(self.cfg["options"]["qt_scale"], 1.2)
+        self.assertFalse(self.cfg["options"]["qt_animations"])
+        self.assertEqual(self.bridge.mode, original_mode)
+        self.assertEqual(self.bridge.rotationEnabled, original_rotation)
+
+    def test_appearance_rejects_unsupported_values_and_reset_keeps_favorites(self):
+        self.bridge.generate()
+        self.assertTrue(self.bridge.saveFavorite("appearance fixture", "", ""))
+        self.bridge.setAppearanceTheme("violet")
+        self.bridge.setAppearanceScale(0.9)
+        self.bridge.setAnimationsEnabled(False)
+        self.bridge.setAppearanceTheme("fake")
+        self.bridge.setAppearanceScale(20.0)
+        self.assertEqual(self.bridge.appearanceTheme, "violet")
+        self.assertEqual(self.bridge.appearanceScale, 0.9)
+        self.assertEqual(self.bridge.favoriteCount, 1)
+        self.bridge.resetAppearance()
+        self.assertEqual(self.bridge.appearanceTheme, "crimson")
+        self.assertEqual(self.bridge.appearanceScale, 1.0)
+        self.assertTrue(self.bridge.animationsEnabled)
+        self.assertEqual(self.bridge.favoriteCount, 1)
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], 1)
+
     def test_balanced_mode_is_opt_in_and_persists(self):
         self.assertFalse(self.bridge.rotationEnabled)
         self.bridge.generate()
