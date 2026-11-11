@@ -73,7 +73,7 @@ def main():
 
         def verify_builder():
             try:
-                from PySide6.QtCore import QMetaObject, QPoint, Qt
+                from PySide6.QtCore import QMetaObject, QPoint, QPointF, Qt
                 from PySide6.QtTest import QTest
 
                 window.setProperty("page", "Конструктор")
@@ -90,7 +90,28 @@ def main():
                 target = QPoint(round(window.property("builderSmokeTargetX")),
                                 round(window.property("builderSmokeTargetY")))
                 assert start != target, "Slot scene coordinates overlap"
+                def item_at_scene(scene_point):
+                    parent = window.contentItem()
+                    point = QPointF(scene_point)
+                    trail = []
+                    for _ in range(16):
+                        child = parent.childAt(point.x(), point.y())
+                        if child is None:
+                            break
+                        trail.append(str(child.metaObject().className()) +
+                                     ":" + child.objectName())
+                        point = child.mapFromItem(parent, point)
+                        parent = child
+                    return "/".join(trail)
+                hit_trace = item_at_scene(start)
+                print("Qt builder pointer debug: start=" + str(start) +
+                      " target=" + str(target) +
+                      " underCursor=" + hit_trace, flush=True)
+                window.requestActivate()
+                app.processEvents()
                 QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start)
+                app.processEvents()
+                print("Qt builder mousePress trace=" + str(window.property("builderSmokeTrace")), flush=True)
                 QTest.mouseMove(window, start + QPoint((target.x() - start.x()) // 4,
                                                        (target.y() - start.y()) // 4), 35)
                 QTest.mouseMove(window, target, 40)
