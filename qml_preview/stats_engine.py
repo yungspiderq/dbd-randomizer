@@ -204,27 +204,8 @@ class BuildStatistics:
         if side not in SIDES or group not in GROUPS:
             return []
         state = self._data[side]
-        counts = state["groups"][group]
-        last = state["last"][group]
-        pool = sorted(set(x for x in population if _valid_name(x))) if population else sorted(counts)
-        if order == "top":
-            pool.sort(key=lambda n: (-counts.get(n, 0), n.casefold()))
-        elif order == "least":
-            pool.sort(key=lambda n: (counts.get(n, 0), n.casefold()))
-        elif order == "stale":
-            pool = [n for n in pool if counts.get(n, 0) > 0]
-            pool.sort(key=lambda n: (last.get(n, 0), n.casefold()))
-        else:
-            return []
-        maximum = max((counts.get(n, 0) for n in pool), default=0)
-        rows = []
-        for name in pool[:max(0, min(100, int(limit)))]:
-            value = counts.get(name, 0)
-            rows.append({"name": name, "count": value,
-                         "fraction": value / maximum if maximum else 0.0,
-                         "since": (state["serial"] - last[name]) if name in last else -1,
-                         "seen": value > 0})
-        return rows
+        return self._ranking(state["groups"][group], state["last"][group],
+                             state["serial"], population, limit, order)
 
     def overview(self, side, population=()):
         state = self._data[side]
@@ -241,6 +222,73 @@ class BuildStatistics:
             "uniqueAddons": len(state["groups"]["addons"]),
             "last": state["recent"][0]["character"] if state["recent"] else "",
         }
+
+    @staticmethod
+    def _merge_counts(parts, group):
+        counter = Counter()
+        for part in parts:
+            counter.update(part["groups"][group])
+        return dict(counter)
+
+    def overview_period(self, side, population=(), days=0, *, today=None):
+        if days == 0:
+            return self.overview(side, population)
+        parts = self._days(side, days, today)
+        character_counts = self._merge_counts(parts, "characters")
+        pool = set(x for x in population if _valid_name(x))
+        return {
+            "generated": sum(p["generated"] for p in parts),
+            "rerolls": sum(p["rerolls"] for p in parts),
+            "classic": sum(p["classic"] for p in parts),
+            "balanced": sum(p["balanced"] for p in parts),
+            "seen": sum(character_counts.get(x, 0) > 0 for x in pool),
+            "total": len(pool),
+            "uniquePerks": len(self._merge_counts(parts, "perks")),
+            "uniqueAddons": len(self._merge_counts(parts, "addons")),
+            "last": self._data[side]["recent"][0]["character"]
+                    if self._data[side]["recent"] else "",
+        }
+
+    def summary_period(self, side, group, population=(), *, days=0, limit=10,
+                       order="top", today=None):
+        if days == 0:
+            return self.summary(side, group, population, limit=limit, order=order)
+        if side not in SIDES or group not in GROUPS:
+            return []
+        counts = self._merge_counts(self._days(side, days, today), group)
+        return self._ranking(counts, {}, 0, population, limit, order)
+
+    @staticmethod
+    def _ranking(counts, last, serial, population, limit, order):
+        pool = sorted(set(x for x in population if _valid_name(x))) if population else sorted(counts)
+        if order == "top":
+            pool.sort(key=lambda n: (-counts.get(n, 0), n.casefold()))
+        elif order == "least":
+            pool.sort(key=lambda n: (counts.get(n, 0), n.casefold()))
+        elif order == "stale":
+            pool = [n for n in pool if counts.get(n, 0) > 0]
+            pool.sort(key=lambda n: (last.get(n, 0), n.casefold()))
+        else:
+            return []
+        maximum = max((counts.get(n, 0) for n in pool), default=0)
+        rows = []
+        for name in pool[:max(0, min(100, int(limit)))]:
+            value = counts.get(name, 0)
+            rows.append({"name": name, "count": value,
+                         "fraction": value / maximum if maximum else 0.0,
+                         "since": serial - last[name] if name in last else -1,
+                         "seen": value > 0})
+        return rows
+
+    def recent_period(self, side, days=0, count=30, *, today=None):
+        if days == 0:
+            return self.recent(side, count)
+        end = today or datetime.now().astimezone().date()
+        if isinstance(end, str):
+            end = date.fromisoformat(end)
+        start = end - timedelta(days=days - 1)
+        return [dict(row) for row in self._data[side]["recent"]
+                if row.get("day") and start <= date.fromisoformat(row["day"]) <= end][:count]
 
     def recent(self, side, count=30):
         return [dict(row) for row in self._data[side]["recent"][:count]]
