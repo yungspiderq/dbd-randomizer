@@ -24,6 +24,12 @@ ApplicationWindow {
     property string builderSmokeExpectedB: ""
     property bool builderSmokeDragPassed: false
     property string builderSmokeTrace: ""
+    property real builderSmokeCatalogX: 0
+    property real builderSmokeCatalogY: 0
+    property real builderSmokeCatalogTargetX: 0
+    property real builderSmokeCatalogTargetY: 0
+    property string builderSmokeCatalogExpected: ""
+    property bool builderSmokeCatalogPassed: false
     property color surface: colors.surface
     property color stroke: colors.stroke
     property color muted: colors.muted
@@ -3233,6 +3239,43 @@ ApplicationWindow {
             builderSmokeError = "Pointer swap failed: " +
                 makerPage.perkNameAt(0) + " | " + makerPage.perkNameAt(1);
         }
+    }
+
+    function captureBuilderCatalogDrag() {
+        var data = backend.searchPerks("SURVIVOR", "");
+        var row = makerPerks.itemAtIndex(2);
+        var targetSlot = makerSlotRepeater.itemAt(2);
+        if (!row || !targetSlot || data.length < 3) {
+            builderSmokeStatus = -1;
+            builderSmokeError = "Builder catalog row unavailable";
+            return;
+        }
+        var start = row.mapToItem(win.contentItem, 105, 28);
+        var target = targetSlot.mapToItem(win.contentItem, 105, 43);
+        var withinScroll = work.mapFromItem(win.contentItem, start.x, start.y);
+        if (withinScroll.x < 0 || withinScroll.y < 0 ||
+                withinScroll.x >= work.width || withinScroll.y >= work.height) {
+            builderSmokeStatus = -1;
+            builderSmokeError = "Catalog row is outside viewport";
+            return;
+        }
+        if (makerPage.slotFromPointer(target.x, target.y) !== 2) {
+            builderSmokeStatus = -1;
+            builderSmokeError = "Catalog target slot not hit-tested";
+            return;
+        }
+        builderSmokeCatalogX = start.x;
+        builderSmokeCatalogY = start.y;
+        builderSmokeCatalogTargetX = target.x;
+        builderSmokeCatalogTargetY = target.y;
+        builderSmokeCatalogExpected = data[2].name;
+    }
+
+    function evaluateBuilderCatalogDrag() {
+        builderSmokeCatalogPassed = makerPage.perkNameAt(2) === builderSmokeCatalogExpected;
+        if (!builderSmokeCatalogPassed)
+            builderSmokeError = "Catalog drop failed: " + makerPage.perkNameAt(2) +
+                " expected " + builderSmokeCatalogExpected;
     }
 
     Shortcut { sequence: "F5"; onActivated: backend.generate() }
