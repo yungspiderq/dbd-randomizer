@@ -2,10 +2,10 @@ name: Qt updater - real Beta 15 to Beta 16 upgrade
 
 on:
   push:
-    branches: ["test/qt-release-upgrade-e2e"]
+    branches: ["test/qt-release-upgrade-e2e", "preview/qml-redesign-2026-11-10"]
     paths:
       - ".github/workflows/qt-release-upgrade-e2e.yml"
-      - "qml_preview/test_release_upgrade_e2e.py"
+      - "tests/qt_release_upgrade_e2e.py"
   workflow_dispatch:
 
 permissions:
@@ -41,5 +41,5 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          python qml_preview/test_release_upgrade_e2e.py --old-zip "$env:OLD_ZIP" --new-zip "$env:NEW_ZIP"
+          python tests/qt_release_upgrade_e2e.py --old-zip "$env:OLD_ZIP" --new-zip "$env:NEW_ZIP"
           if ($LASTEXITCODE -ne 0) { throw "Release-to-release updater regression failed" }
