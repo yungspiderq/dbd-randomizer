@@ -39,10 +39,31 @@ class UpdaterTests(unittest.TestCase):
                 z.writestr(member, b"outside")
         return data.getvalue()
 
+    def test_installer_error_message_can_be_read_after_relaunch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "dbd_update_error.log"
+            self.assertEqual(u.last_install_error(folder), "")
+            path.write_text("2026-11-11 first failure\n2026-11-11 Move-Item failed: Access denied\n", encoding="utf-8")
+            self.assertIn("Access denied", u.last_install_error(folder))
+
     def test_version_parsing_requires_our_beta_tags(self):
         self.assertLess(u._key("v2.28.0-qt-beta.10"), u._key(u.CURRENT_TAG))
         self.assertIsNone(u._key("v999.0.0-malicious"))
         self.assertEqual(u.ASSET, "DBDRandomizerQtBeta.zip")
+
+    def test_beta16_version_does_not_offer_itself(self):
+        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.16")
+        def release(tag):
+            return {"draft": False, "tag_name": tag,
+                    "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
+                    "assets": [{"name": u.ASSET, "size": 20000000,
+                                "browser_download_url": "https://github.com/" + u.REPO + "/releases/download/" + tag + "/" + u.ASSET}]}
+        with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
+                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.15")]).encode())):
+            self.assertIsNone(u.check())
+        with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
+                release("v2.28.0-qt-beta.17"), release(u.CURRENT_TAG)]).encode())):
+            self.assertEqual(u.check()["tag"], "v2.28.0-qt-beta.17")
 
     def test_stage_valid_zip_sha_and_preserve_user_config(self):
         archive = self.archive()
@@ -126,7 +147,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_newer_release_requires_portable_asset(self):
         base = {
-            "draft": False, "tag_name": "v2.28.0-qt-beta.15",
+            "draft": False, "tag_name": "v2.28.0-qt-beta.17",
             "name": "New Version",
             "html_url": "https://github.com/" + u.REPO + "/releases/tag/new",
             "assets": [
@@ -139,7 +160,7 @@ class UpdaterTests(unittest.TestCase):
             ]
         }
         latest = dict(base)
-        latest["tag_name"] = "v2.28.0-qt-beta.16"
+        latest["tag_name"] = "v2.28.0-qt-beta.18"
         latest["assets"] = [{"name": "DBDRandomizerQtBeta.exe", "size": 20000000}]
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([base, latest]).encode())):

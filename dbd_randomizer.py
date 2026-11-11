@@ -405,6 +405,9 @@ class _Input:
         pdi = self.pydirectinput
         landed = self.move(x, y, steps=steps, step_delay=step_delay, wiggle=wiggle,
                            settle=settle, verify=verify)
+        if not landed:
+            # Never send a click to a position the cursor failed to reach.
+            return False
         pdi.mouseDown()
         time.sleep(max(0.02, hold))
         pdi.mouseUp()

@@ -1689,7 +1689,7 @@ class TestHover(unittest.TestCase):
         inp._force_pos = lambda x, y: False
         self.assertFalse(inp.click(10, 10, hold=0.02, steps=1, step_delay=0, wiggle=0,
                                    settle=0))
-        self.assertIn("down", [c[0] for c in pdi.calls])   # клик всё равно выполнен
+        self.assertNotIn("down", [c[0] for c in pdi.calls])  # промах: запрещаем опасный клик
 
 
 class TestHoverInApp(unittest.TestCase):

@@ -2,7 +2,7 @@ name: Qt beta - verify, build and publish prerelease
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "feature/qt-beta15-build-creator"]
+    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-stability-phase1"]
     paths: ["qml_preview/**", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
 
@@ -28,6 +28,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r qml_preview/requirements.txt pyinstaller
+      - name: Verify release and updater version match
+        shell: pwsh
+        run: |
+          $releaseTag = (Select-String -Path ".github/workflows/qt-beta-release.yml" -Pattern '^\s*\$tag = "([^"]+)"').Matches.Groups[1].Value
+          $installedTag = python -c "import sys; sys.path.insert(0, 'qml_preview'); import qt_updater; print(qt_updater.CURRENT_TAG)"
+          if ($LASTEXITCODE -ne 0 -or $releaseTag -ne $installedTag) { throw "Release tag does not match updater version: $releaseTag / $installedTag" }
+          Write-Host "Release and updater version match: $installedTag"
       - name: Python syntax check
         run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/stats_engine.py qml_preview/icon_queue.py qml_preview/perk_cards.py qml_preview/favorites.py qml_preview/appearance.py qml_preview/build_icon.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
       - name: Targeted core generation checks
@@ -39,6 +46,11 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m unittest qml_preview/test_appearance.py qml_preview/test_favorites.py qml_preview/test_qt_updater.py qml_preview/test_rotation_engine.py qml_preview/test_icon_queue.py qml_preview/test_stats_engine.py qml_preview/test_perk_cards.py qml_preview/test_native_backend.py -v
+      - name: Verify real PowerShell update in an isolated Windows folder
+        shell: pwsh
+        run: |
+          python qml_preview/test_updater_windows.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Generate icon files for Windows and QML
         run: |
           python qml_preview/build_icon.py
@@ -53,6 +65,8 @@ jobs:
           python qml_preview/main.py --smoke-appearance
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python qml_preview/main.py --smoke-catalogs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python qml_preview/main.py --smoke-builder
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build Windows portable directory
         shell: pwsh
@@ -90,7 +104,7 @@ jobs:
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DBDRandomizerQtBeta15-Portable-Windows
+          name: DBDRandomizerQtBeta16-Portable-Windows
           path: |
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
@@ -101,9 +115,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.15"
+          $tag = "v2.28.0-qt-beta.16"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 15 — Build Creator 2.0" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 16 — Stability Fixes" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }

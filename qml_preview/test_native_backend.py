@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QSignalSpy, QTest
 import dbd_randomizer as core
 import native_backend
 import qt_updater
@@ -47,6 +48,19 @@ class QtBackendTests(unittest.TestCase):
         for p in reversed(self.patches):
             p.stop()
 
+    def test_installed_version_is_not_stuck_at_beta12(self):
+        self.assertEqual(self.bridge.installedVersion, qt_updater.CURRENT_TAG)
+        self.assertIn(qt_updater.CURRENT_TAG, self.bridge.updateText)
+
+    def test_installer_error_is_shown_at_startup(self):
+        with patch.object(qt_updater, "last_install_error",
+                          return_value="Предыдущее обновление не установилось: Access denied"):
+            another = native_backend.QtBridge()
+            try:
+                self.assertIn("Access denied", another.updateText)
+            finally:
+                another.close()
+
     def test_native_backend_no_tk_and_both_roles(self):
         self.assertEqual(self.bridge.role, "survivor")
         self.bridge.generate()
@@ -56,6 +70,25 @@ class QtBackendTests(unittest.TestCase):
         self.bridge.generate()
         self.assertEqual(self.bridge.build["side"], "KILLER")
         self.assertEqual(len(self.bridge.build["addons"]), 2)
+
+    def test_icon_batching_emits_once_for_a_download_burst(self):
+        spy = QSignalSpy(self.bridge.iconVersionChanged)
+        for i in range(40):
+            self.bridge._messages.put(("icons", "icon_" + str(i), True))
+        self.bridge._drain()
+        self.assertEqual(self.bridge.iconVersion, 0)
+        self.assertEqual(spy.count(), 0)
+        QTest.qWait(175)
+        self.assertEqual(self.bridge.iconVersion, 1)
+        self.assertEqual(spy.count(), 1)
+        self.bridge._messages.put(("icons", "broken_icon", False))
+        self.bridge._drain()
+        QTest.qWait(175)
+        self.assertEqual(spy.count(), 1, "Failed images must not refresh every thumbnail")
+        self.bridge._messages.put(("icons", "next_success", True))
+        self.bridge._drain()
+        QTest.qWait(175)
+        self.assertEqual(spy.count(), 2)
 
     def test_settings_mode_and_character_filter(self):
         self.bridge.setMode("any")
@@ -315,6 +348,148 @@ class QtBackendTests(unittest.TestCase):
         self.bridge._worker.join(timeout=12)
         self.assertFalse(self.bridge._worker.is_alive())
         self.assertEqual(self.bridge.cfg.get("last_equipped", {}), {})
+
+    def test_concurrent_equip_clicks_do_not_start_two_workers(self):
+        self.bridge.generate()
+        self.bridge.toggleOption("dry")
+        import threading
+        release = threading.Event()
+        entered = threading.Event()
+        def slow_automate(steps):
+            entered.set()
+            release.wait(timeout=5)
+            self.bridge._messages.put(("running", False))
+            self.bridge._wake.emit()
+        with patch.object(self.bridge, "_automate", side_effect=slow_automate) as worker:
+            self.bridge.equip()
+            self.assertTrue(entered.wait(timeout=3))
+            self.bridge.equip()
+            self.assertEqual(worker.call_count, 1)
+            release.set()
+            self.bridge._worker.join(timeout=5)
+
+    def test_search_does_not_claim_success_when_input_fails(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = False
+        self.bridge.cfg["timings"]["retries"] = 0
+        self.bridge.cfg["timings"]["search_settle"] = 0
+        with patch.object(self.bridge, "_sleep"), patch.object(self.bridge, "_click", return_value=False):
+            self.assertFalse(self.bridge._search_and_select("example"))
+        with patch.object(self.bridge, "_sleep"), patch.object(self.bridge, "_click", return_value=True), \
+             patch.object(self.bridge, "_paste", return_value=False), \
+             patch.object(self.bridge, "_game_is_foreground", return_value=True), \
+             patch.object(core.INPUT, "hotkey"):
+            self.assertFalse(self.bridge._search_and_select("example"))
+
+    def test_failed_equip_resets_cached_state(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg.setdefault("last_equipped", {})[self.bridge.build["side"]] = {"perks": ["old"]}
+        self.bridge._planned_equipped = {"perks": ["new"]}
+        with patch.object(self.bridge, "_sleep"), patch.object(self.bridge, "_click", return_value=False), \
+             patch.object(self.bridge, "_search_and_select") as search:
+            self.bridge._automate([("slot1", "example", "навык")])
+            search.assert_not_called()
+        self.assertIsNone(self.bridge.cfg["last_equipped"][self.bridge.build["side"]])
+
+    def test_focus_failure_prevents_all_real_game_input(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["focus_game"] = True
+        with patch.object(core.INPUT, "focus_game", return_value=(False, "окно не найдено")), \
+             patch.object(self.bridge, "_click") as click, \
+             patch.object(self.bridge, "_sleep"):
+            self.bridge._automate([("slot1", "example", "навык")])
+            click.assert_not_called()
+        self.assertIsNone(self.bridge.cfg.get("last_equipped", {})[self.bridge.build["side"]])
+
+    def test_foreground_loss_aborts_before_second_click(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["focus_game"] = False
+        self.bridge.cfg["options"]["hover_retry"] = False
+        with patch.object(self.bridge, "_game_is_foreground", side_effect=[True, True, False]), \
+             patch.object(core.INPUT, "click", return_value=True) as click, \
+             patch.object(self.bridge, "_search_and_select", return_value=True), \
+             patch.object(self.bridge, "_sleep"):
+            self.bridge._automate([
+                ("slot1", "first", "навык 1"),
+                ("slot2", "second", "навык 2"),
+            ])
+            self.assertEqual(click.call_count, 1)
+        self.assertIsNone(self.bridge.cfg.get("last_equipped", {})[self.bridge.build["side"]])
+
+    def test_foreground_guard_blocks_paste_and_click(self):
+        self.bridge.cfg["options"]["dry_run"] = False
+        with patch.object(self.bridge, "_game_is_foreground", return_value=False), \
+             patch.object(core.INPUT, "click") as click, \
+             patch.object(core.INPUT, "paste") as paste:
+            with self.assertRaisesRegex(RuntimeError, "не активно"):
+                self.bridge._click((100, 100), "slot1")
+            with self.assertRaisesRegex(RuntimeError, "не активно"):
+                self.bridge._paste("example")
+            click.assert_not_called()
+            paste.assert_not_called()
+
+    def test_zero_duration_sleep_is_still_interruptible(self):
+        self.bridge.stop()
+        with self.assertRaises(core.AbortError):
+            self.bridge._sleep(0)
+        with self.assertRaises(core.AbortError):
+            self.bridge._sleep(-1)
+
+    def test_stop_mid_step_prevents_search(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = True
+        self.bridge._stop.clear()
+        def click_then_stop(coord, key):
+            self.bridge.stop()
+            return True
+        with patch.object(self.bridge, "_click", side_effect=click_then_stop), \
+             patch.object(self.bridge, "_search_and_select") as search:
+            self.bridge._automate([("slot1", "example", "навык")])
+            search.assert_not_called()
+        self.assertTrue(self.bridge._stop.is_set())
+        self.assertEqual(self.bridge.cfg.get("last_equipped", {}), {})
+
+    def test_ocr_requires_region_and_readable_match(self):
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = True
+        self.bridge.cfg["timings"]["retries"] = 0
+        self.bridge.cfg["coords"].pop("ocr_region", None)
+        with self.assertRaisesRegex(ValueError, "OCR"):
+            self.bridge._search_and_select("example")
+        self.bridge.cfg["coords"]["ocr_region"] = {
+            "x": "100", "y": "100", "w": "260", "h": "70"
+        }
+        with patch.object(self.bridge, "_game_is_foreground", return_value=True), \
+             patch.object(self.bridge, "_sleep"), \
+             patch.object(self.bridge, "_click", return_value=True) as click, \
+             patch.object(self.bridge, "_paste", return_value=True), \
+             patch.object(core.INPUT, "hotkey"), \
+             patch.object(core, "ocr_read", return_value=None):
+            self.assertFalse(self.bridge._search_and_select("example"))
+            self.assertEqual(click.call_count, 1)  # search field, not result
+
+    def test_stop_during_ocr_never_clicks_result(self):
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = True
+        self.bridge.cfg["timings"]["retries"] = 0
+        self.bridge.cfg["coords"]["ocr_region"] = {
+            "x": "100", "y": "100", "w": "260", "h": "70"
+        }
+        def read_and_cancel(*args):
+            self.bridge.stop()
+            return "example"
+        with patch.object(self.bridge, "_game_is_foreground", return_value=True), \
+             patch.object(self.bridge, "_click", return_value=True) as click, \
+             patch.object(self.bridge, "_paste", return_value=True), \
+             patch.object(core.INPUT, "hotkey"), \
+             patch.object(core, "ocr_read", side_effect=read_and_cancel):
+            with self.assertRaises(core.AbortError):
+                self.bridge._search_and_select("example")
+            self.assertEqual(click.call_count, 1)
 
     def test_character_panels_and_filtered_bulk_actions(self):
         entries = self.bridge.characters
