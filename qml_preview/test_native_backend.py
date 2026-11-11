@@ -345,6 +345,7 @@ class QtBackendTests(unittest.TestCase):
             self.assertFalse(self.bridge._search_and_select("example"))
         with patch.object(self.bridge, "_sleep"), patch.object(self.bridge, "_click", return_value=True), \
              patch.object(self.bridge, "_paste", return_value=False), \
+             patch.object(self.bridge, "_game_is_foreground", return_value=True), \
              patch.object(core.INPUT, "hotkey"):
             self.assertFalse(self.bridge._search_and_select("example"))
 
@@ -358,6 +359,97 @@ class QtBackendTests(unittest.TestCase):
             self.bridge._automate([("slot1", "example", "навык")])
             search.assert_not_called()
         self.assertIsNone(self.bridge.cfg["last_equipped"][self.bridge.build["side"]])
+
+    def test_focus_failure_prevents_all_real_game_input(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["focus_game"] = True
+        with patch.object(core.INPUT, "focus_game", return_value=(False, "окно не найдено")), \
+             patch.object(self.bridge, "_click") as click, \
+             patch.object(self.bridge, "_sleep"):
+            self.bridge._automate([("slot1", "example", "навык")])
+            click.assert_not_called()
+        self.assertIsNone(self.bridge.cfg.get("last_equipped", {})[self.bridge.build["side"]])
+
+    def test_foreground_loss_aborts_before_second_click(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["focus_game"] = False
+        self.bridge.cfg["options"]["hover_retry"] = False
+        with patch.object(self.bridge, "_game_is_foreground", side_effect=[True, True, False]), \
+             patch.object(core.INPUT, "click", return_value=True) as click, \
+             patch.object(self.bridge, "_search_and_select", return_value=True), \
+             patch.object(self.bridge, "_sleep"):
+            self.bridge._automate([
+                ("slot1", "first", "навык 1"),
+                ("slot2", "second", "навык 2"),
+            ])
+            self.assertEqual(click.call_count, 1)
+        self.assertIsNone(self.bridge.cfg.get("last_equipped", {})[self.bridge.build["side"]])
+
+    def test_foreground_guard_blocks_paste_and_click(self):
+        self.bridge.cfg["options"]["dry_run"] = False
+        with patch.object(self.bridge, "_game_is_foreground", return_value=False), \
+             patch.object(core.INPUT, "click") as click, \
+             patch.object(core.INPUT, "paste") as paste:
+            with self.assertRaisesRegex(RuntimeError, "не активно"):
+                self.bridge._click((100, 100), "slot1")
+            with self.assertRaisesRegex(RuntimeError, "не активно"):
+                self.bridge._paste("example")
+            click.assert_not_called()
+            paste.assert_not_called()
+
+    def test_stop_mid_step_prevents_search(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = True
+        self.bridge._stop.clear()
+        def click_then_stop(coord, key):
+            self.bridge.stop()
+            return True
+        with patch.object(self.bridge, "_click", side_effect=click_then_stop), \
+             patch.object(self.bridge, "_search_and_select") as search:
+            self.bridge._automate([("slot1", "example", "навык")])
+            search.assert_not_called()
+        self.assertTrue(self.bridge._stop.is_set())
+        self.assertEqual(self.bridge.cfg.get("last_equipped", {}), {})
+
+    def test_ocr_requires_region_and_readable_match(self):
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = True
+        self.bridge.cfg["timings"]["retries"] = 0
+        self.bridge.cfg["coords"].pop("ocr_region", None)
+        with self.assertRaisesRegex(ValueError, "OCR"):
+            self.bridge._search_and_select("example")
+        self.bridge.cfg["coords"]["ocr_region"] = {
+            "x": "100", "y": "100", "w": "260", "h": "70"
+        }
+        with patch.object(self.bridge, "_game_is_foreground", return_value=True), \
+             patch.object(self.bridge, "_sleep"), \
+             patch.object(self.bridge, "_click", return_value=True) as click, \
+             patch.object(self.bridge, "_paste", return_value=True), \
+             patch.object(core.INPUT, "hotkey"), \
+             patch.object(core, "ocr_read", return_value=None):
+            self.assertFalse(self.bridge._search_and_select("example"))
+            self.assertEqual(click.call_count, 1)  # search field, not result
+
+    def test_stop_during_ocr_never_clicks_result(self):
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = True
+        self.bridge.cfg["timings"]["retries"] = 0
+        self.bridge.cfg["coords"]["ocr_region"] = {
+            "x": "100", "y": "100", "w": "260", "h": "70"
+        }
+        def read_and_cancel(*args):
+            self.bridge.stop()
+            return "example"
+        with patch.object(self.bridge, "_game_is_foreground", return_value=True), \
+             patch.object(self.bridge, "_click", return_value=True) as click, \
+             patch.object(self.bridge, "_paste", return_value=True), \
+             patch.object(core.INPUT, "hotkey"), \
+             patch.object(core, "ocr_read", side_effect=read_and_cancel):
+            with self.assertRaises(core.AbortError):
+                self.bridge._search_and_select("example")
+            self.assertEqual(click.call_count, 1)
 
     def test_character_panels_and_filtered_bulk_actions(self):
         entries = self.bridge.characters
