@@ -3177,24 +3177,6 @@ ApplicationWindow {
             makerPage.changeSide("SURVIVOR");
             makerPage.assignPerk(a, 0);
             makerPage.assignPerk(b, 1);
-            // Keep slots visible so QtTest can exercise pointer input afterwards.
-            var firstSlot = makerSlotRepeater.itemAt(0);
-            if (!firstSlot) throw new Error("No slot delegate");
-            var slotLocation = firstSlot.mapToItem(work.contentItem, 0, 0);
-            work.contentY = Math.max(0, slotLocation.y - 120);
-            var firstPos = firstSlot.mapToItem(win.contentItem, 30, 40);
-            if (makerPage.slotFromPointer(firstPos.x, firstPos.y) !== 0)
-                throw new Error("Visible slot hit test failed");
-            if (makerPage.slotFromPointer(-100, -100) !== -1)
-                throw new Error("Outside viewport must reject drop");
-            var secondSlot = makerSlotRepeater.itemAt(1);
-            if (!secondSlot) throw new Error("No second slot delegate");
-            var start = firstSlot.mapToItem(win.contentItem, 105, 43);
-            var target = secondSlot.mapToItem(win.contentItem, 105, 43);
-            builderSmokeStartX = start.x;
-            builderSmokeStartY = start.y;
-            builderSmokeTargetX = target.x;
-            builderSmokeTargetY = target.y;
             builderSmokeExpectedA = a;
             builderSmokeExpectedB = b;
             builderSmokeStatus = 1;
@@ -3202,6 +3184,45 @@ ApplicationWindow {
             builderSmokeError = "" + e;
             builderSmokeStatus = -1;
         }
+    }
+
+    // Two-step geometry capture: a side change schedules Qt Quick layout work.
+    // Scroll first, then measure slot coordinates after the event loop polishes.
+    function prepareBuilderDrag() {
+        var firstSlot = makerSlotRepeater.itemAt(0);
+        if (!firstSlot) {
+            builderSmokeStatus = -1;
+            builderSmokeError = "No slot delegate";
+            return;
+        }
+        var slotLocation = firstSlot.mapToItem(work.contentItem, 0, 0);
+        work.contentY = Math.max(0, slotLocation.y - 120);
+    }
+
+    function captureBuilderDrag() {
+        var first = makerSlotRepeater.itemAt(0);
+        var second = makerSlotRepeater.itemAt(1);
+        if (!first || !second) {
+            builderSmokeStatus = -1;
+            builderSmokeError = "Slots unavailable after polish";
+            return;
+        }
+        var start = first.mapToItem(win.contentItem, 105, 43);
+        var target = second.mapToItem(win.contentItem, 105, 43);
+        if (makerPage.slotFromPointer(start.x, start.y) !== 0) {
+            builderSmokeStatus = -1;
+            builderSmokeError = "Slot hit-test failed after layout";
+            return;
+        }
+        if (makerPage.slotFromPointer(-100, -100) !== -1) {
+            builderSmokeStatus = -1;
+            builderSmokeError = "Outside viewport accepted";
+            return;
+        }
+        builderSmokeStartX = start.x;
+        builderSmokeStartY = start.y;
+        builderSmokeTargetX = target.x;
+        builderSmokeTargetY = target.y;
     }
 
     function evaluateBuilderDrag() {
