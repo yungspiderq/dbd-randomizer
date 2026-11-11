@@ -1532,7 +1532,7 @@ class QtBridge(QObject):
     def _automate(self,steps):
         try:
             for i in range(int(self._timing("countdown")),0,-1):
-                self._notify("Старт через "+str(i)+" сек. Стоп: F9")
+                self._notify("Старт через "+str(i)+" сек. Стоп: "+str(self._option("abort_key") or "F9").upper())
                 self._sleep(1)
             if not self._option("dry_run") and self._option("focus_game"):
                 ok,why=core.INPUT.focus_game()
