@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 
 REPO = "yungspiderq/dbd-randomizer"
 BASE = f"https://api.github.com/repos/{REPO}/releases"
-CURRENT_TAG = "v2.28.0-qt-beta.16"
+CURRENT_TAG = "v2.28.0-qt-beta.17"
 ASSET = "DBDRandomizerQtBeta.zip"
 APP_EXE = "DBDRandomizerQtBeta.exe"
 PACKAGE_ROOT = "DBDRandomizerQtBeta"
@@ -163,8 +163,16 @@ def _unpack_verified(archive, staging):
     return root
 
 
-def stage(info, target_dir):
-    """Return a verified sibling staging folder's inner portable app directory."""
+def stage(info, target_dir, progress=None):
+    """Download, hash-check and unpack a release with optional progress callback.
+
+    The callback receives brief status messages; it never reports verified
+    completion before size/hash validation and safe archive extraction.
+    """
+    def notify(message):
+        if progress is not None:
+            progress(message)
+
     target_dir = Path(target_dir).resolve()
     if not target_dir.is_dir():
         raise RuntimeError("Application installation folder not found")
@@ -173,7 +181,10 @@ def stage(info, target_dir):
     archive = staging / ASSET
     amount = 0
     digest = hashlib.sha256()
+    last_bucket = -1
+    expected_size = int(info["asset_size"])
     try:
+        notify("Подключение к GitHub Releases…")
         with _get(info["asset_url"], timeout=120) as stream, archive.open("wb") as out:
             while chunk := stream.read(256 * 1024):
                 amount += len(chunk)
@@ -181,10 +192,17 @@ def stage(info, target_dir):
                     raise RuntimeError("Update exceeds download size limit")
                 digest.update(chunk)
                 out.write(chunk)
-        if amount != info["asset_size"] or digest.hexdigest() != expected:
+                bucket = min(10, (amount * 10) // max(expected_size, 1))
+                if bucket > last_bucket:
+                    last_bucket = bucket
+                    notify(f"Скачивание обновления: {min(100, bucket * 10)}%")
+        notify("Сверяю размер и SHA-256 загруженного архива…")
+        if amount != expected_size or digest.hexdigest() != expected:
             raise RuntimeError("Update size / SHA-256 verification failed")
+        notify("Проверка пройдена. Распаковываю обновление…")
         result = _unpack_verified(archive, staging)
         archive.unlink(missing_ok=True)
+        notify("Распаковка завершена. Подготавливаю установщик…")
         return result
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
