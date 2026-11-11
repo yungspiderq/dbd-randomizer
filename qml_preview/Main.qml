@@ -224,23 +224,24 @@ ApplicationWindow {
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 11"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
-                Item { height: 24 }
+                Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
-                NavItem { ordinal: 3; label: "Билды сообщества"; onClicked: win.page = label }
-                NavItem { ordinal: 4; label: "Персонажи"; onClicked: win.page = label }
-                NavItem { ordinal: 5; label: "Внешность"; onClicked: win.page = label }
-                NavItem { ordinal: 6; label: "Статистика"; onClicked: win.page = label }
-                NavItem { ordinal: 7; label: "Клики и тайминги"; onClicked: win.page = label }
-                NavItem { ordinal: 8; label: "Классы 2v8"; onClicked: win.page = label }
-                Item { height: 23 }
+                NavItem { ordinal: 3; label: "Избранное"; onClicked: win.page = label }
+                NavItem { ordinal: 4; label: "Билды сообщества"; onClicked: win.page = label }
+                NavItem { ordinal: 5; label: "Персонажи"; onClicked: win.page = label }
+                NavItem { ordinal: 6; label: "Внешность"; onClicked: win.page = label }
+                NavItem { ordinal: 7; label: "Статистика"; onClicked: win.page = label }
+                NavItem { ordinal: 8; label: "Клики и тайминги"; onClicked: win.page = label }
+                NavItem { ordinal: 9; label: "Классы 2v8"; onClicked: win.page = label }
+                Item { height: 10 }
                 Rectangle { width: parent.width; height: 1; color: "#26303d" }
                 Item { height: 10 }
                 UiButton { width: parent.width; label: "Новый билд"; onClicked: { win.page = "Билд"; backend.generate() } }
                 UiButton { width: parent.width; label: "Копировать билд"; onClicked: backend.copyBuild() }
-                Item { height: 20 }
+                Item { height: 10 }
                 Rectangle {
-                    width: parent.width; height: 95; radius: 10; color: "#25232a"
+                    width: parent.width; height: 74; radius: 10; color: "#25232a"
                     border.color: "#534046"
                     Column {
                         anchors.centerIn: parent; spacing: 8
@@ -282,6 +283,23 @@ ApplicationWindow {
                                 width: parent.width; spacing: 10
                                 UiButton { width: (parent.width - 10) / 2; label: "ВЫЖИВШИЙ"; primary: backend.role === "survivor"; onClicked: backend.setRole("survivor") }
                                 UiButton { width: (parent.width - 10) / 2; label: "МАНЬЯК"; primary: backend.role === "killer"; onClicked: backend.setRole("killer") }
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 10
+                                UiButton {
+                                    width: (parent.width - 10) / 2
+                                    height: 39
+                                    primary: true
+                                    label: "СОХРАНИТЬ БИЛД В ИЗБРАННОЕ"
+                                    onClicked: favoriteEditor.openNew()
+                                }
+                                UiButton {
+                                    width: (parent.width - 10) / 2
+                                    height: 39
+                                    label: "МОИ СОХРАНЁННЫЕ БИЛДЫ (" + backend.favoriteCount + ")"
+                                    onClicked: win.page = "Избранное"
+                                }
                             }
                             Rectangle {
                                 id: rotationPanel
@@ -1391,6 +1409,245 @@ ApplicationWindow {
                             }
                         }
                         Column {
+                            id: favoritesPage
+                            visible: win.page === "Избранное"
+                            width: parent.width
+                            spacing: 14
+                            Text {
+                                text: "Библиотека избранных билдов"
+                                font.pixelSize: 20
+                                font.bold: true
+                                color: "#eef2f8"
+                            }
+                            Text {
+                                text: "Сохраняй свои сборки по коллекциям, добавляй заметки, находи и загружай обратно. Всё остаётся на этом компьютере."
+                                color: "#98a8bb"
+                                font.pixelSize: 12
+                                wrapMode: Text.Wrap
+                                width: parent.width
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 9
+                                UiButton {
+                                    width: (parent.width - 9) * 0.55
+                                    primary: true
+                                    label: "СОХРАНИТЬ ТЕКУЩИЙ БИЛД"
+                                    onClicked: favoriteEditor.openNew()
+                                }
+                                Rectangle {
+                                    width: (parent.width - 9) * 0.45
+                                    height: 44
+                                    radius: 10
+                                    color: "#212a36"
+                                    border.color: win.stroke
+                                    Text {
+                                        text: "В БИБЛИОТЕКЕ: " + backend.favoriteCount + " / 180"
+                                        anchors.centerIn: parent
+                                        color: "#d1dbe8"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                    }
+                                }
+                            }
+                            UiField {
+                                id: favoriteSearch
+                                width: parent.width
+                                placeholderText: "Поиск по названию, коллекции, персонажу, навыкам и заметкам..."
+                                onTextChanged: backend.setFavoriteSearch(text)
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 7
+                                Repeater {
+                                    model: [
+                                        {side:"ALL",label:"ВСЕ"},
+                                        {side:"SURVIVOR",label:"ВЫЖИВШИЕ"},
+                                        {side:"KILLER",label:"МАНЬЯКИ"}
+                                    ]
+                                    UiButton {
+                                        width: (favoritesPage.width - 14) / 3
+                                        height: 37
+                                        primary: backend.favoriteSide === modelData.side
+                                        label: modelData.label
+                                        onClicked: backend.setFavoriteSide(modelData.side)
+                                    }
+                                }
+                            }
+                            Text {
+                                text: "КОЛЛЕКЦИЯ"
+                                color: "#9aaec1"
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            ComboBox {
+                                id: favoriteCollectionChoice
+                                width: parent.width
+                                height: 42
+                                model: backend.favoriteCollections
+                                currentIndex: Math.max(0, backend.favoriteCollections.indexOf(backend.favoriteCollection))
+                                onActivated: backend.setFavoriteCollection(currentText)
+                                font.pixelSize: 12
+                                contentItem: Text {
+                                    text: favoriteCollectionChoice.displayText
+                                    color: "#e6edf5"
+                                    verticalAlignment: Text.AlignVCenter
+                                    leftPadding: 13
+                                    font.pixelSize: 12
+                                }
+                                background: Rectangle {
+                                    radius: 9
+                                    color: "#242d39"
+                                    border.color: win.stroke
+                                }
+                            }
+                            Text {
+                                text: "НАЙДЕНО: " + backend.favorites.length
+                                color: "#b8c5d5"
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            Rectangle {
+                                visible: backend.favorites.length === 0
+                                width: parent.width
+                                height: 130
+                                radius: 12
+                                color: win.surface
+                                border.color: win.stroke
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 7
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: backend.favoriteCount ? "НИЧЕГО НЕ НАЙДЕНО" : "ИЗБРАННЫХ БИЛДОВ ПОКА НЕТ"
+                                        color: "#f0f2f6"
+                                        font.bold: true
+                                        font.pixelSize: 13
+                                    }
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: backend.favoriteCount ? "Измени фильтр или строку поиска." : "Создай билд и сохрани его одной кнопкой."
+                                        color: "#9dadc0"
+                                        font.pixelSize: 12
+                                    }
+                                }
+                            }
+                            ListView {
+                                id: favoriteList
+                                width: parent.width
+                                height: Math.min(600, Math.max(120, backend.favorites.length * 182))
+                                visible: backend.favorites.length > 0
+                                clip: true
+                                spacing: 10
+                                boundsBehavior: Flickable.StopAtBounds
+                                model: backend.favorites
+                                delegate: Rectangle {
+                                    id: favoriteCard
+                                    property var entry: modelData
+                                    width: favoriteList.width
+                                    height: 172
+                                    radius: 13
+                                    color: "#1b2530"
+                                    border.color: "#3c4a5b"
+                                    ArtThumb {
+                                        x: 12
+                                        y: 14
+                                        pixels: 64
+                                        iconKey: favoriteCard.entry.char
+                                        placeholder: "DBD"
+                                    }
+                                    Column {
+                                        x: 89
+                                        y: 13
+                                        width: parent.width - 102
+                                        spacing: 6
+                                        Text {
+                                            width: parent.width
+                                            text: favoriteCard.entry.title
+                                            color: "#f2f5fa"
+                                            font.pixelSize: 15
+                                            font.bold: true
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            width: parent.width
+                                            text: (favoriteCard.entry.side === "KILLER" ? "МАНЬЯК" : "ВЫЖИВШИЙ") +
+                                                " · " + favoriteCard.entry.char +
+                                                " · " + favoriteCard.entry.collection
+                                            color: "#e3a7a1"
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            width: parent.width
+                                            text: favoriteCard.entry.perks.join("  /  ")
+                                            color: "#c3d0e0"
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            width: parent.width
+                                            text: favoriteCard.entry.note || "Без заметки"
+                                            color: "#90a0b3"
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                    Text {
+                                        x: 13; y: 100
+                                        text: "Сохранено " + favoriteCard.entry.saved_at
+                                        color: "#7c8c9e"
+                                        font.pixelSize: 10
+                                    }
+                                    Row {
+                                        x: 12; y: 122
+                                        width: parent.width - 24
+                                        spacing: 8
+                                        UiButton {
+                                            width: (parent.width - 24) / 4
+                                            height: 36
+                                            primary: true
+                                            label: "ЗАГРУЗИТЬ"
+                                            onClicked: {
+                                                if (backend.loadFavorite(favoriteCard.entry.id))
+                                                    win.page = "Билд";
+                                            }
+                                        }
+                                        UiButton {
+                                            width: (parent.width - 24) / 4
+                                            height: 36
+                                            label: "КОПИРОВАТЬ"
+                                            onClicked: backend.copyFavorite(favoriteCard.entry.id)
+                                        }
+                                        UiButton {
+                                            width: (parent.width - 24) / 4
+                                            height: 36
+                                            label: "ИЗМЕНИТЬ"
+                                            onClicked: favoriteEditor.openEdit(favoriteCard.entry)
+                                        }
+                                        UiButton {
+                                            width: (parent.width - 24) / 4
+                                            height: 36
+                                            label: "УДАЛИТЬ"
+                                            onClicked: {
+                                                deleteFavoriteDialog.favoriteId = favoriteCard.entry.id;
+                                                deleteFavoriteDialog.favoriteTitle = favoriteCard.entry.title;
+                                                deleteFavoriteDialog.open();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                color: "#8899ad"
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                                text: "Билды сохраняются в настройках приложения. Загрузка из избранного не меняет статистику генераций и шансы ротации. Если в DBD переименуют или удалят навык, программа предупредит об устаревшей сборке."
+                            }
+                        }
+
+                        Column {
                             id: statsPage
                             visible: win.page === "Статистика"
                             width: parent.width
@@ -2209,6 +2466,132 @@ ApplicationWindow {
                     primary: true
                     label: "ОЧИСТИТЬ"
                     onClicked: { backend.resetStatistics(); resetStatsDialog.close() }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: favoriteEditor
+        property string editingId: ""
+        function openNew() {
+            if (!backend.detail.hasBuild) {
+                backend.saveFavorite("", "", "");
+                return;
+            }
+            editingId = "";
+            favoriteTitle.text = backend.detail.char + " — мой билд";
+            favoriteGroup.text = "Мои сборки";
+            favoriteNote.text = "";
+            open();
+        }
+        function openEdit(entry) {
+            editingId = entry.id;
+            favoriteTitle.text = entry.title;
+            favoriteGroup.text = entry.collection;
+            favoriteNote.text = entry.note;
+            open();
+        }
+        parent: Overlay.overlay
+        x: Math.max(16, (win.width - width) / 2)
+        y: Math.max(40, (win.height - height) / 2)
+        width: Math.min(460, win.width - 40)
+        height: 365
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            color: "#1a2531"
+            radius: 15
+            border.color: "#6b4d57"
+        }
+        contentItem: Column {
+            padding: 14
+            spacing: 10
+            Text {
+                text: favoriteEditor.editingId ? "РЕДАКТИРОВАТЬ ИЗБРАННОЕ" : "СОХРАНИТЬ БИЛД"
+                color: "#f2f5f9"
+                font.pixelSize: 16
+                font.bold: true
+            }
+            Text { text: "НАЗВАНИЕ"; font.pixelSize: 10; font.bold: true; color: "#a9b9cc" }
+            UiField { id: favoriteTitle; width: favoriteEditor.width - 34; maximumLength: 72; placeholderText: "Название билда" }
+            Text { text: "КОЛЛЕКЦИЯ"; font.pixelSize: 10; font.bold: true; color: "#a9b9cc" }
+            UiField { id: favoriteGroup; width: favoriteEditor.width - 34; maximumLength: 48; placeholderText: "Например: любимые / маньяки / эксперименты" }
+            Text { text: "ЗАМЕТКА"; font.pixelSize: 10; font.bold: true; color: "#a9b9cc" }
+            UiField { id: favoriteNote; width: favoriteEditor.width - 34; maximumLength: 240; placeholderText: "Почему нравится этот билд?" }
+            Row {
+                width: favoriteEditor.width - 34
+                spacing: 9
+                UiButton {
+                    width: (parent.width - 9) / 2
+                    height: 37
+                    label: "ОТМЕНА"
+                    onClicked: favoriteEditor.close()
+                }
+                UiButton {
+                    width: (parent.width - 9) / 2
+                    height: 37
+                    primary: true
+                    label: favoriteEditor.editingId ? "СОХРАНИТЬ" : "ДОБАВИТЬ В ИЗБРАННОЕ"
+                    onClicked: {
+                        var success = favoriteEditor.editingId ?
+                            backend.editFavorite(favoriteEditor.editingId, favoriteTitle.text, favoriteGroup.text, favoriteNote.text) :
+                            backend.saveFavorite(favoriteTitle.text, favoriteGroup.text, favoriteNote.text);
+                        if (success)
+                            favoriteEditor.close();
+                    }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: deleteFavoriteDialog
+        property string favoriteId: ""
+        property string favoriteTitle: ""
+        parent: Overlay.overlay
+        x: Math.max(16, (win.width - width) / 2)
+        y: Math.max(40, (win.height - height) / 2)
+        width: Math.min(430, win.width - 40)
+        height: 190
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            color: "#1a2531"
+            radius: 14
+            border.color: "#80545d"
+        }
+        contentItem: Column {
+            padding: 14
+            spacing: 14
+            Text { text: "УДАЛИТЬ ИЗБРАННЫЙ БИЛД?"; color: "#f3f5fa"; font.pixelSize: 15; font.bold: true }
+            Text {
+                width: deleteFavoriteDialog.width - 36
+                text: deleteFavoriteDialog.favoriteTitle + " будет удалён из библиотеки. Отменить это действие не получится."
+                color: "#a9bacd"
+                wrapMode: Text.Wrap
+                font.pixelSize: 12
+            }
+            Row {
+                width: deleteFavoriteDialog.width - 34
+                spacing: 9
+                UiButton {
+                    width: (parent.width - 9) / 2
+                    height: 37
+                    label: "ОТМЕНА"
+                    onClicked: deleteFavoriteDialog.close()
+                }
+                UiButton {
+                    width: (parent.width - 9) / 2
+                    height: 37
+                    primary: true
+                    label: "УДАЛИТЬ"
+                    onClicked: {
+                        backend.deleteFavorite(deleteFavoriteDialog.favoriteId);
+                        deleteFavoriteDialog.close();
+                    }
                 }
             }
         }
