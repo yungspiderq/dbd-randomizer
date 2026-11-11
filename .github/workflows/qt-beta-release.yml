@@ -29,7 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r qml_preview/requirements.txt pyinstaller
       - name: Python syntax check
-        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/stats_engine.py qml_preview/perk_cards.py qml_preview/build_icon.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
+        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/stats_engine.py qml_preview/icon_queue.py qml_preview/perk_cards.py qml_preview/build_icon.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
       - name: Targeted core generation checks
         run: |
           python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
@@ -38,7 +38,7 @@ jobs:
       - name: Native Qt backend regression tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m unittest qml_preview/test_rotation_engine.py qml_preview/test_stats_engine.py qml_preview/test_perk_cards.py qml_preview/test_native_backend.py -v
+        run: python -m unittest qml_preview/test_rotation_engine.py qml_preview/test_icon_queue.py qml_preview/test_stats_engine.py qml_preview/test_perk_cards.py qml_preview/test_native_backend.py -v
       - name: Generate icon files for Windows and QML
         run: |
           python qml_preview/build_icon.py
@@ -53,14 +53,20 @@ jobs:
       - name: Build Windows portable exe
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name DBDRandomizerQtBeta --paths . --add-data "qml_preview/Main.qml;qml_preview" --add-data "qml_preview/assets/app_icon.png;qml_preview/assets" --icon "qml_preview/assets/app_icon.ico" --hidden-import pydirectinput --hidden-import pyautogui --hidden-import keyboard --hidden-import PIL --collect-all PySide6 qml_preview/main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name DBDRandomizerQtBeta --paths . --add-data "qml_preview/Main.qml;qml_preview" --add-data "qml_preview/assets/app_icon.png;qml_preview/assets" --icon "qml_preview/assets/app_icon.ico" --hidden-import pydirectinput --hidden-import pyautogui --hidden-import keyboard --hidden-import PIL --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtQuickLayouts qml_preview/main.py
           if (-not (Test-Path dist/DBDRandomizerQtBeta.exe)) { exit 1 }
+          $size = (Get-Item dist/DBDRandomizerQtBeta.exe).Length
+          Write-Host "Beta 10 EXE size: $([math]::Round($size / 1MB, 2)) MiB; Beta 9 was $([math]::Round(275443744 / 1MB, 2)) MiB"
+          if ($size -ge 275443744) { throw "Package did not become smaller than Beta 9" }
       - name: Test packaged EXE launch
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
+          $watch = [System.Diagnostics.Stopwatch]::StartNew()
           $p = Start-Process -FilePath "$PWD/dist/DBDRandomizerQtBeta.exe" -ArgumentList "--smoke" -PassThru -Wait
+          $watch.Stop()
+          Write-Host "Frozen EXE smoke time: $([math]::Round($watch.Elapsed.TotalSeconds, 2)) seconds"
           if ($p.ExitCode -ne 0) { throw "Frozen QML startup failed with exit $($p.ExitCode)" }
 
       - name: Create SHA-256 checksum
