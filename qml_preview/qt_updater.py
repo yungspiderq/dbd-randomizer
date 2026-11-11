@@ -236,8 +236,8 @@ try {
     $newRuntimeMoved = $true
     Move-Item -LiteralPath $sourceExe -Destination $exe -ErrorAction Stop
     $newExeMoved = $true
-    $success = $true
     Start-Process -FilePath $exe -WorkingDirectory $TargetDir
+    $success = $true
 } catch {
     $errorText = $_.Exception.Message
     try {
