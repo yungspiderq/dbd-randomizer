@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "qml_preview"))
 import qt_updater as updater
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from qt_release_upgrade_e2e import verify_download, smoke, PREVIOUS, CURRENT
 
 def digest(path: Path) -> str:
