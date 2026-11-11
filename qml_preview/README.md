@@ -1,41 +1,25 @@
-# DBD Randomizer Qt Beta 11 — Portable Windows Fix
+# DBD Ultimate Search Randomizer — Qt Beta 12
 
-Beta 11 переходит на **Windows `--onedir`**, чтобы исправить проблемы запуска с `python312.dll`, которые могли возникать при однофайловой распаковке Beta 10.
+Современный Qt Quick (PySide6/QML) интерфейс для DBD Randomizer с исходной базой перков, предметов и аддонов.
 
-## Установка
+## Beta 12: избранные билды
 
-1. Скачайте `DBDRandomizerQtBeta.zip` из GitHub Releases.
-2. Извлеките **всю** папку `DBDRandomizerQtBeta`.
-3. Запустите `DBDRandomizerQtBeta.exe` из папки, не переносите его отдельно.
-4. Для переноса предпочтений и координат после резервного копирования перенесите `dbd_randomizer_config.json` из папки прежней версии рядом с новым EXE.
+Раздел **«Избранное»** позволяет создавать личные коллекции билдов, искать по имени, навыкам, персонажу, коллекции и заметкам, фильтровать по стороне, копировать, переименовывать и восстанавливать билды.
 
-Структура:
-```text
-DBDRandomizerQtBeta/
-  DBDRandomizerQtBeta.exe
-  _internal/
-    python312.dll
-    ... (Qt, Python и ресурсы)
-  dbd_randomizer_config.json   <- ваш файл, если он нужен
-```
+Сохраняются четыре перка, два аддона, персонаж, предмет и внешность. При загрузке проверяется соответствие текущей базе DBD; если сборка устарела, приложение объяснит проблему. Сохранённые билды не включают ограничения челленджей и не меняют показатели случайной ротации при загрузке.
 
-**Из старой Beta 10 может потребоваться ручная установка**, особенно если она падает до появления интерфейса. Последующие Qt ZIP-релизы будут скачиваться и устанавливаться через обновлятор с проверкой SHA-256, заменой только EXE и `_internal`, резервным копированием старой версии на время установки и попыткой отката при сбое.
+Лимит 180 сборок. Формат: `options.favorite_builds_v1` в `dbd_randomizer_config.json`; сохраняется вместе с остальными настройками. Перед установкой обновления рекомендуем создать копию этого файла.
 
-## Разработка
+## Portable Windows
 
-Python 3.12+:
+Скачайте `DBDRandomizerQtBeta.zip`, распакуйте **всю папку** и запустите `DBDRandomizerQtBeta.exe` рядом с папкой `_internal`. Из Qt Beta 11 можно перейти через «Проверить обновления». Дальнейшие обновления устанавливаются из ZIP после проверки SHA-256.
+
+Запуск из исходников (Python 3.12+):
 ```powershell
 py -m pip install -r qml_preview/requirements.txt
 py qml_preview/main.py
 ```
 
-Windows portable build:
-```powershell
-py -m pip install pyinstaller
-py qml_preview/build_icon.py
-pyinstaller --noconfirm --clean --onedir --contents-directory _internal --windowed --name DBDRandomizerQtBeta --paths . --add-data "qml_preview/Main.qml;qml_preview" --add-data "qml_preview/assets/app_icon.png;qml_preview/assets" --icon "qml_preview/assets/app_icon.ico" --hidden-import pydirectinput --hidden-import pyautogui --hidden-import keyboard --hidden-import PIL --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtQuickLayouts qml_preview/main.py
-```
+Ключевые функции: обычный и сбалансированный рандом, графики истории по дням, карточки перков, закрепление слотов, модальные описания аддонов, конструктор, каталог персонажей и скинов, автоэкипировка с сухим прогоном.
 
-Контрольные проверки в GitHub Actions: Python/Qt unit-тесты, QML smoke, `python312.dll` в `_internal`, запуск готового EXE, структура и безопасная распаковка ZIP, SHA-256.
-
-Основные функции предыдущих Beta сохранены. Внутриигровые клики сначала проверяйте в режиме «Сухой прогон», F9 останавливает автоматизацию.
+Windows GitHub Actions тестирует Python-движок, сохранения, восстановление билдов, интерфейс QML, portable ZIP и запуск EXE. Реальные игровые клики всё ещё требуют ручной проверки на пользовательском компьютере.
