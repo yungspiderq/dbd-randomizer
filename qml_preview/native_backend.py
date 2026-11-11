@@ -89,6 +89,11 @@ class QtBridge(QObject):
         self._log = []
         self._messages = queue.SimpleQueue()
         self._icon_version = 0
+        # Coalesce icon download bursts into a single redraw for the QML catalogs.
+        self._icon_refresh = QTimer(self)
+        self._icon_refresh.setSingleShot(True)
+        self._icon_refresh.setInterval(120)
+        self._icon_refresh.timeout.connect(self._flush_icons)
         self._icons = IconStore(core.ICONS_DIR, enabled=True)
         self._icon_pending = set()
         self._icon_urls = {}
@@ -166,9 +171,12 @@ class QtBridge(QObject):
                     self._notify("Не удалось запустить установку: " + str(e))
                     self._update_busy = False
                     self.updateChanged.emit()
-        if needs_icons:
-            self._icon_version += 1
-            self.iconVersionChanged.emit()
+        if needs_icons and not self._icon_refresh.isActive():
+            self._icon_refresh.start()
+
+    def _flush_icons(self):
+        self._icon_version += 1
+        self.iconVersionChanged.emit()
 
     def _save(self):
         self.cfg.setdefault("options", {})["side"] = self._role
@@ -1668,4 +1676,5 @@ class QtBridge(QObject):
         except Exception:
             pass
         self._tick.stop()
+        self._icon_refresh.stop()
         self._save()
