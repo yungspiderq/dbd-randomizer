@@ -198,81 +198,156 @@ UPGRADE_SCRIPT = r'''
 param(
     [int]$WaitFor,
     [string]$TargetDir,
-    [string]$StagedDir
+    [string]$StagedDir,
+    [switch]$SkipLaunch
 )
 $ErrorActionPreference = "Stop"
-try { Wait-Process -Id $WaitFor -ErrorAction SilentlyContinue } catch {}
-Start-Sleep -Milliseconds 800
-
 $exe = Join-Path $TargetDir "DBDRandomizerQtBeta.exe"
 $runtime = Join-Path $TargetDir "_internal"
 $exeBackup = Join-Path $TargetDir ".dbd_qt_previous.exe"
 $runtimeBackup = Join-Path $TargetDir ".dbd_qt_previous_internal"
 $sourceExe = Join-Path $StagedDir "DBDRandomizerQtBeta.exe"
 $sourceRuntime = Join-Path $StagedDir "_internal"
-
+$errorLog = Join-Path $TargetDir "dbd_update_error.log"
+$progressLog = Join-Path $TargetDir "dbd_update_progress.log"
+$phase = "initializing"
 $oldExeMoved = $false
 $oldRuntimeMoved = $false
 $newExeMoved = $false
 $newRuntimeMoved = $false
 $success = $false
+$failed = $false
+
+function Write-Progress([string]$message) {
+    try {
+        "$([DateTime]::Now.ToString('s')) $message" |
+            Out-File -FilePath $progressLog -Encoding utf8 -Append -ErrorAction Stop
+    } catch { }
+}
+
+function Move-WithRetry([string]$from, [string]$to) {
+    for ($attempt = 0; $attempt -lt 6; $attempt++) {
+        try {
+            Move-Item -LiteralPath $from -Destination $to -ErrorAction Stop
+            return
+        } catch {
+            if ($attempt -eq 5) { throw }
+            Start-Sleep -Milliseconds (250 * ($attempt + 1))
+        }
+    }
+}
 
 try {
+    $phase = "waiting for old application"
+    Write-Progress $phase
+    if ($WaitFor -gt 0) {
+        $oldProcess = Get-Process -Id $WaitFor -ErrorAction SilentlyContinue
+        if ($null -ne $oldProcess) {
+            Wait-Process -Id $WaitFor -Timeout 90 -ErrorAction Stop
+        }
+    }
+    Start-Sleep -Milliseconds 500
+
+    $phase = "validating staged files"
+    Write-Progress $phase
     if (-not (Test-Path -LiteralPath $sourceExe -PathType Leaf) -or
         -not (Test-Path -LiteralPath $sourceRuntime -PathType Container) -or
         -not (Test-Path -LiteralPath (Join-Path $sourceRuntime "python312.dll") -PathType Leaf)) {
         throw "Staged portable application is incomplete"
     }
     if ((Test-Path -LiteralPath $exeBackup) -or (Test-Path -LiteralPath $runtimeBackup)) {
-        throw "Previous update backup found; do not overwrite it"
+        throw "Previous update backup exists; inspect the old installation before retrying"
     }
+
+    $phase = "backing up old runtime"
+    Write-Progress $phase
     if (Test-Path -LiteralPath $runtime) {
-        Move-Item -LiteralPath $runtime -Destination $runtimeBackup -ErrorAction Stop
+        Move-WithRetry $runtime $runtimeBackup
         $oldRuntimeMoved = $true
     }
+    $phase = "backing up old executable"
+    Write-Progress $phase
     if (Test-Path -LiteralPath $exe) {
-        Move-Item -LiteralPath $exe -Destination $exeBackup -ErrorAction Stop
+        Move-WithRetry $exe $exeBackup
         $oldExeMoved = $true
     }
-    Move-Item -LiteralPath $sourceRuntime -Destination $runtime -ErrorAction Stop
+    $phase = "installing new runtime"
+    Write-Progress $phase
+    Move-WithRetry $sourceRuntime $runtime
     $newRuntimeMoved = $true
-    Move-Item -LiteralPath $sourceExe -Destination $exe -ErrorAction Stop
+    $phase = "installing new executable"
+    Write-Progress $phase
+    Move-WithRetry $sourceExe $exe
     $newExeMoved = $true
-    Start-Process -FilePath $exe -WorkingDirectory $TargetDir
+
+    $phase = "launching updated application"
+    Write-Progress $phase
+    if (-not $SkipLaunch) {
+        Start-Process -FilePath $exe -WorkingDirectory $TargetDir -ErrorAction Stop
+    }
     $success = $true
 } catch {
-    $errorText = $_.Exception.Message
+    $failed = $true
+    $errorText = "$phase : $($_.Exception.Message)"
+    Write-Progress ("FAILED: " + $errorText)
     try {
         if ($newExeMoved -and (Test-Path -LiteralPath $exe)) {
-            Remove-Item -LiteralPath $exe -Force
+            Remove-Item -LiteralPath $exe -Force -ErrorAction Stop
         }
         if ($newRuntimeMoved -and (Test-Path -LiteralPath $runtime)) {
-            Remove-Item -LiteralPath $runtime -Recurse -Force
+            Remove-Item -LiteralPath $runtime -Recurse -Force -ErrorAction Stop
         }
         if ($oldExeMoved -and (Test-Path -LiteralPath $exeBackup)) {
-            Move-Item -LiteralPath $exeBackup -Destination $exe -Force
+            Move-Item -LiteralPath $exeBackup -Destination $exe -ErrorAction Stop
         }
         if ($oldRuntimeMoved -and (Test-Path -LiteralPath $runtimeBackup)) {
-            Move-Item -LiteralPath $runtimeBackup -Destination $runtime -Force
+            Move-Item -LiteralPath $runtimeBackup -Destination $runtime -ErrorAction Stop
         }
     } catch {
         $errorText += " | Rollback failed: " + $_.Exception.Message
     }
-    "$([DateTime]::Now.ToString('s')) $errorText" |
-        Out-File -FilePath (Join-Path $TargetDir "dbd_update_error.log") -Encoding utf8 -Append
+    try {
+        "$([DateTime]::Now.ToString('s')) $errorText" |
+            Out-File -FilePath $errorLog -Encoding utf8 -Append -ErrorAction Stop
+    } catch {
+        Write-Progress ("Cannot write error log: " + $_.Exception.Message)
+    }
+    # If rollback succeeded, reopen the previous app so its UI can explain
+    # the failed update rather than leaving the user with a closed window.
+    if (-not $SkipLaunch -and (Test-Path -LiteralPath $exe -PathType Leaf)) {
+        try {
+            Start-Process -FilePath $exe -WorkingDirectory $TargetDir -ErrorAction Stop
+        } catch {
+            Write-Progress ("Could not restart old application: " + $_.Exception.Message)
+        }
+    }
 } finally {
     if ($success) {
-        if (Test-Path -LiteralPath $exeBackup) { Remove-Item -LiteralPath $exeBackup -Force }
-        if (Test-Path -LiteralPath $runtimeBackup) {
-            Remove-Item -LiteralPath $runtimeBackup -Recurse -Force
+        # Backups are never deleted before the new EXE has been placed.
+        try {
+            if (Test-Path -LiteralPath $exeBackup) {
+                Remove-Item -LiteralPath $exeBackup -Force -ErrorAction Stop
+            }
+            if (Test-Path -LiteralPath $runtimeBackup) {
+                Remove-Item -LiteralPath $runtimeBackup -Recurse -Force -ErrorAction Stop
+            }
+            if (Test-Path -LiteralPath $errorLog) {
+                Remove-Item -LiteralPath $errorLog -Force -ErrorAction Stop
+            }
+        } catch {
+            Write-Progress ("Installed, but cleanup needs attention: " + $_.Exception.Message)
         }
         $stageParent = Split-Path -Parent $StagedDir
         if (Test-Path -LiteralPath $stageParent) {
             Remove-Item -LiteralPath $stageParent -Recurse -Force -ErrorAction SilentlyContinue
         }
+        Write-Progress "SUCCESS: installed portable Qt update"
     }
 }
+if ($failed) { exit 1 }
+exit 0
 '''
+
 
 
 def last_install_error(target_dir):
