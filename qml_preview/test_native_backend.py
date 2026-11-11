@@ -148,6 +148,28 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual(self.bridge.lockedCount, 0)
         self.assertTrue(self.bridge.build["forbidden"]["perks"])
 
+    def test_period_selector_matches_saved_current_day_and_cannot_modify_role(self):
+        self.bridge.generate()
+        self.bridge.setStatisticsPeriod(1)
+        self.assertEqual(self.bridge.statisticsPeriod, 1)
+        self.assertEqual(self.bridge.statistics["period"], 1)
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], 1)
+        self.assertEqual(self.bridge.role, "survivor")
+        self.bridge.setStatisticsPeriod(7)
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], 1)
+        self.bridge.setStatisticsPeriod(30)
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], 1)
+        self.bridge.setStatisticsPeriod(100)
+        self.assertEqual(self.bridge.statisticsPeriod, 30)
+        self.bridge.setStatisticsPeriod(0)
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], 1)
+
+    def test_icon_path_uses_bounded_worker_queue(self):
+        self.assertEqual(self.bridge._icon_queue.worker_count, 3)
+        self.assertEqual(self.bridge._icon_queue.pending_count, 0)
+        self.assertEqual(self.bridge.iconPath(""), "")
+        self.assertEqual(self.bridge.iconPath("a deliberately unknown nonexistent icon"), "")
+
     def test_statistics_tracks_both_modes_and_perk_rerolls(self):
         self.bridge.generate()
         overview = self.bridge.statistics["overview"]
