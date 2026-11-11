@@ -393,6 +393,56 @@ class QtBackendTests(unittest.TestCase):
             search.assert_not_called()
         self.assertIsNone(self.bridge.cfg["last_equipped"][self.bridge.build["side"]])
 
+    def test_exact_shipping_executable_name_not_launcher_or_title(self):
+        matches = core.INPUT._is_game_executable
+        self.assertTrue(matches(r"C:\Games\DeadByDaylight\Binaries\Win64\DeadByDaylight-Win64-Shipping.exe"))
+        self.assertTrue(matches("deadbydaylight-Win64-SHIPPING.EXE"))
+        self.assertTrue(matches(r"C:\Xbox\DeadByDaylight-WinGDK-Shipping.exe"))
+        self.assertFalse(matches("Dead by Daylight"))
+        self.assertFalse(matches("DeadByDaylight.exe"))
+        self.assertFalse(matches("DeadByDaylight-Win64-Shipping.exe.log"))
+        self.assertFalse(matches("DeadByDaylight Crash Reporter.exe"))
+
+    @unittest.skipUnless(sys.platform == "win32", "Win32 user32 required")
+    def test_foreground_process_match_ignores_window_caption(self):
+        from unittest.mock import MagicMock
+        user32 = MagicMock()
+        user32.GetForegroundWindow.return_value = 720
+        with patch.object(core.ctypes.windll, "user32", user32), \
+             patch.object(core.INPUT, "_window_process_name",
+                          return_value=r"C:\Games\DeadByDaylight-Win64-Shipping.exe"):
+            self.assertTrue(core.INPUT.game_is_foreground())
+            self.assertTrue(self.bridge._game_is_foreground())
+        with patch.object(core.ctypes.windll, "user32", user32), \
+             patch.object(core.INPUT, "_window_process_name",
+                          return_value=r"C:\Games\DeadByDaylightLauncher.exe"):
+            self.assertFalse(core.INPUT.game_is_foreground())
+            self.assertFalse(self.bridge._game_is_foreground())
+
+    @unittest.skipUnless(sys.platform == "win32", "Win32 EnumWindows required")
+    def test_find_game_window_by_process_even_without_dead_by_daylight_title(self):
+        from unittest.mock import MagicMock
+        user32 = MagicMock()
+        user32.IsWindowVisible.return_value = True
+        user32.GetWindowTextLengthW.return_value = 0
+        def enumerate_windows(callback, _unused):
+            for hwnd in (501, 502, 503):
+                if not callback(hwnd, 0):
+                    break
+            return True
+        user32.EnumWindows.side_effect = enumerate_windows
+        owners = {
+            501: "DeadByDaylightLauncher.exe",
+            502: r"C:\Games\DeadByDaylight-Win64-Shipping.exe",
+            503: "OtherGame.exe",
+        }
+        with patch.object(core.ctypes.windll, "user32", user32), \
+             patch.object(core.INPUT, "_window_process_name",
+                          side_effect=lambda hwnd: owners[hwnd]):
+            result = core.INPUT.find_game_window()
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], 502)
+
     def test_focus_failure_prevents_all_real_game_input(self):
         self.bridge.generate()
         self.bridge.cfg["options"]["dry_run"] = False
@@ -425,9 +475,9 @@ class QtBackendTests(unittest.TestCase):
         with patch.object(self.bridge, "_game_is_foreground", return_value=False), \
              patch.object(core.INPUT, "click") as click, \
              patch.object(core.INPUT, "paste") as paste:
-            with self.assertRaisesRegex(RuntimeError, "не активно"):
+            with self.assertRaisesRegex(RuntimeError, "не активен"):
                 self.bridge._click((100, 100), "slot1")
-            with self.assertRaisesRegex(RuntimeError, "не активно"):
+            with self.assertRaisesRegex(RuntimeError, "не активен"):
                 self.bridge._paste("example")
             click.assert_not_called()
             paste.assert_not_called()
