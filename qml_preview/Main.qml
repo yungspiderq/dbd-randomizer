@@ -7,15 +7,17 @@ ApplicationWindow {
     visible: true
     width: 1350
     height: 800
-    minimumWidth: 1000
-    minimumHeight: 650
-    color: "#0c0f14"
-    title: "DBD Ultimate Search Randomizer | Qt Beta 12"
+    minimumWidth: Math.round(1000 * uiScale)
+    minimumHeight: Math.round(650 * uiScale)
+    property real uiScale: backend.appearanceScale
+    property var colors: backend.appearancePalette
+    color: colors.background
+    title: "DBD Ultimate Search Randomizer | Qt Beta 13"
     property string page: "Билд"
-    property color surface: "#171d26"
-    property color stroke: "#2f3947"
-    property color muted: "#8995a5"
-    property color accent: "#ea5753"
+    property color surface: colors.surface
+    property color stroke: colors.stroke
+    property color muted: colors.muted
+    property color accent: colors.accent
     font.family: "Segoe UI"
     onClosing: backend.close()
 
@@ -26,11 +28,11 @@ ApplicationWindow {
         signal clicked()
         implicitHeight: 44
         radius: 10
-        color: primary ? (over.containsMouse ? "#fa6d66" : win.accent) :
-                         (over.containsMouse ? "#2d3645" : "#242b36")
+        color: primary ? (over.containsMouse ? win.colors.accentHover : win.accent) :
+                         (over.containsMouse ? win.colors.buttonHover : win.colors.button)
         border.width: primary ? 0 : 1
         border.color: win.stroke
-        Behavior on color { ColorAnimation { duration: 140 } }
+        Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 170 : 0 } }
         Text {
             anchors.centerIn: parent
             text: button.label
@@ -57,8 +59,8 @@ ApplicationWindow {
         selectionColor: "#87413f"
         background: Rectangle {
             radius: 8
-            color: "#1e2631"
-            border.color: parent.activeFocus ? "#dd5956" : "#374251"
+            color: win.colors.input
+            border.color: parent.activeFocus ? win.colors.inputFocus : win.colors.inputStroke
             border.width: 1
         }
     }
@@ -103,7 +105,8 @@ ApplicationWindow {
         width: parent.width
         height: 48
         radius: 9
-        color: win.page === label ? "#262e3a" : hover.containsMouse ? "#1c222c" : "transparent"
+        color: win.page === label ? win.colors.navActive : hover.containsMouse ? win.colors.navHover : "transparent"
+        Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 170 : 0 } }
         Rectangle { width: 3; height: parent.height - 16; anchors.verticalCenter: parent.verticalCenter; color: win.accent; visible: win.page === nav.label; radius: 2 }
         Row {
             anchors.verticalCenter: parent.verticalCenter
@@ -118,7 +121,7 @@ ApplicationWindow {
     component StatRow: Rectangle {
         id: statLine
         property var rowData: ({name:"", count:0, fraction:0, since:-1})
-        property color fillColor: "#e46b67"
+        property color fillColor: win.colors.chart
         property bool showIcon: false
         width: parent.width
         height: 56
@@ -162,7 +165,7 @@ ApplicationWindow {
                 height: parent.height
                 radius: 4
                 color: statLine.fillColor
-                Behavior on width { NumberAnimation { duration: 230; easing.type: Easing.OutCubic } }
+                Behavior on width { NumberAnimation { duration: backend.animationsEnabled ? 230 : 0; easing.type: Easing.OutCubic } }
             }
         }
     }
@@ -195,19 +198,29 @@ ApplicationWindow {
                 x: backend.options[option.keyName] ? 19 : 3
                 y: 3
                 color: "white"
-                Behavior on x { NumberAnimation { duration: 120 } }
+                Behavior on x { NumberAnimation { duration: backend.animationsEnabled ? 160 : 0 } }
             }
         }
         MouseArea { id: pointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.toggleOption(option.keyName) }
     }
 
     RowLayout {
-        anchors.fill: parent
+        id: scaledWorkspace
+        x: 0
+        y: 0
+        width: win.width / win.uiScale
+        height: win.height / win.uiScale
+        transform: Scale {
+            origin.x: 0
+            origin.y: 0
+            xScale: win.uiScale
+            yScale: win.uiScale
+        }
         spacing: 0
         Rectangle {
             Layout.preferredWidth: 228
             Layout.fillHeight: true
-            color: "#11151c"
+            color: win.colors.sidebar
             border.color: "#202734"
             Flickable {
                 anchors.fill: parent
@@ -230,7 +243,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 12"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 13"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -241,6 +254,7 @@ ApplicationWindow {
                 NavItem { ordinal: 7; label: "Статистика"; onClicked: win.page = label }
                 NavItem { ordinal: 8; label: "Клики и тайминги"; onClicked: win.page = label }
                 NavItem { ordinal: 9; label: "Классы 2v8"; onClicked: win.page = label }
+                NavItem { ordinal: 10; label: "Оформление"; onClicked: win.page = label }
                 Item { height: 10 }
                 Rectangle { width: parent.width; height: 1; color: "#26303d" }
                 Item { height: 10 }
@@ -252,7 +266,7 @@ ApplicationWindow {
                     border.color: "#534046"
                     Column {
                         anchors.centerIn: parent; spacing: 8
-                        Text { text: "QT ИНТЕРФЕЙС"; color: "#f2b2a7"; font.pixelSize: 10; font.weight: Font.Bold }
+                        Text { text: "QT ИНТЕРФЕЙС"; color: win.colors.accentSoft; font.pixelSize: 10; font.weight: Font.Bold }
                         Text { text: "Оригинальные игровые данные\nи Qt-интерфейс"; color: "#c1b9bc"; font.pixelSize: 11 }
                     }
                 }
@@ -278,9 +292,32 @@ ApplicationWindow {
                     Column {
                         id: content
                         x: 26; y: 25
+                        SequentialAnimation {
+                            id: pageReveal
+                            NumberAnimation {
+                                target: content
+                                property: "opacity"
+                                from: 0.58
+                                to: 1.0
+                                duration: 240
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                        Connections {
+                            target: win
+                            function onPageChanged() {
+                                if (backend.animationsEnabled) {
+                                    pageReveal.restart()
+                                } else {
+                                    pageReveal.stop()
+                                    content.opacity = 1
+                                }
+                                work.contentY = 0
+                            }
+                        }
                         width: work.width - 52
                         spacing: 18
-                        Text { text: win.page === "Билд" ? "Генератор билда" : win.page; font.pixelSize: 27; font.weight: Font.Bold; color: "#f3f5f8" }
+                        Text { text: win.page === "Билд" ? "Генератор билда" : win.page; font.pixelSize: 27; font.weight: Font.Bold; color: win.colors.text }
                         Text { text: "Новый интерфейс с оригинальной базой DBD и автоматизацией"; font.pixelSize: 12; color: win.muted }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Column {
@@ -634,7 +671,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 242
                                         radius: 14
-                                        color: "#1b2430"
+                                        color: win.colors.panel
                                         border.width: 1
                                         border.color: card.perkInfo.locked ? "#d6a667" : cardHover.containsMouse ? "#7c5f68" : "#384556"
                                         clip: true
@@ -1582,7 +1619,7 @@ ApplicationWindow {
                                             text: (favoriteCard.entry.side === "KILLER" ? "МАНЬЯК" : "ВЫЖИВШИЙ") +
                                                 " · " + favoriteCard.entry.char +
                                                 " · " + favoriteCard.entry.collection
-                                            color: "#e3a7a1"
+                                            color: win.colors.accentSoft
                                             font.pixelSize: 11
                                             elide: Text.ElideRight
                                         }
@@ -1830,7 +1867,7 @@ ApplicationWindow {
                                     Rectangle {
                                         id: rankingCard
                                         property var selectedRows: modelData.kind === "top" ? statsPage.stat.top : statsPage.stat.least
-                                        property color rankingFill: modelData.kind === "top" ? "#e56c69" : "#7b9fde"
+                                        property color rankingFill: modelData.kind === "top" ? win.colors.chart : win.colors.chartAlt
                                         width: (statsPage.width - 12) / 2
                                         height: 576
                                         radius: 13
@@ -2042,7 +2079,7 @@ ApplicationWindow {
                                     width: parent.width; height: 126; radius: 13; color: win.surface; border.color: win.stroke
                                     Column { x: 17; y: 14; width: parent.width - 34; spacing: 10
                                         Text { text: modelData.side === "KILLER" ? "МАНЬЯК" : "ВЫЖИВШИЙ"; color: win.accent; font.bold: true; font.pixelSize: 10 }
-                                        Text { text: modelData.title; color: "#f3f5f8"; font.bold: true; font.pixelSize: 17 }
+                                        Text { text: modelData.title; color: win.colors.text; font.bold: true; font.pixelSize: 17 }
                                         Text { text: modelData.skills; width: parent.width; height: 57; wrapMode: Text.Wrap; color: "#b2c0d0"; font.pixelSize: 11 }
                                     }
                                 }
@@ -2281,7 +2318,7 @@ ApplicationWindow {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle {
             radius: 14
-            color: "#1b2430"
+            color: win.colors.panel
             border.color: "#754e53"
             border.width: 1
         }
@@ -2454,7 +2491,7 @@ ApplicationWindow {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: "#1b2430"; radius: 15; border.color: "#78545c" }
+        background: Rectangle { color: win.colors.panel; radius: 15; border.color: "#78545c" }
         contentItem: Column {
             padding: 15
             spacing: 14
