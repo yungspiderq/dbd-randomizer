@@ -235,8 +235,17 @@ def run_parent(old_zip: Path, new_zip: Path, releases_json: Path):
         target = root / "DBD Installed With Spaces"
         unpacked.rename(target)
         smoke(target / updater.APP_EXE, target, PREVIOUS)
+        # Use a valid application config. Startup/save is allowed to migrate
+        # schemas or reorder JSON; verify that actual user choices survive.
+        import dbd_randomizer as core
+        cfg = core.default_config()
+        cfg["options"]["side"] = "KILLER"
+        cfg["options"]["perk_mode_mixed_default_v22"] = True
+        cfg["publish"]["nickname"] = "KEEP-MY-QT-NICKNAME"
+        cfg["coords"]["slot1"]["x"] = "333"
+        config_file = target / "dbd_randomizer_config.json"
+        config_file.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
         userfiles = {
-            target / "dbd_randomizer_config.json": '{"language":"ru","owned":["do not lose"]}',
             target / "custom_favorites.json": '{"preserve":true}',
         }
         for path, value in userfiles.items():
@@ -256,7 +265,7 @@ def run_parent(old_zip: Path, new_zip: Path, releases_json: Path):
         ]
         print("Spawning Qt app and actual QML button test", flush=True)
         worker = subprocess.run(
-            command, env=env, cwd=ROOT, capture_output=True, text=True,
+            command, env=env, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
             timeout=350, errors="replace",
         )
         print("Qt worker STDOUT:\n" + worker.stdout[-5000:], flush=True)
@@ -287,6 +296,14 @@ def run_parent(old_zip: Path, new_zip: Path, releases_json: Path):
         for path, original in userfiles.items():
             if path.read_text(encoding="utf-8") != original:
                 raise AssertionError(f"User file changed: {path}")
+        retained = json.loads(config_file.read_text(encoding="utf-8-sig"))
+        if retained["publish"]["nickname"] != "KEEP-MY-QT-NICKNAME":
+            raise AssertionError("User nickname lost during update/relaunch")
+        if retained["options"]["side"] != "KILLER":
+            raise AssertionError("Selected killer/survivor side lost during update/relaunch")
+        if retained["coords"]["slot1"]["x"] != "333":
+            raise AssertionError("User-calibrated slot coordinates lost")
+        print("User preferences survived the restart and config normalization", flush=True)
         if (target / "dbd_update_error.log").exists():
             raise AssertionError("Installer recorded an error despite successful hand-off")
         print("PASS: QML check button -> published release metadata -> "
