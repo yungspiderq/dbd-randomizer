@@ -79,7 +79,9 @@ def _click_qml_button(window, label: str):
         work = window.findChild(QObject, "workScroll")
     if work is None:
         raise AssertionError("QML main Flickable is missing")
-    viewport = work.contentItem()
+    viewport = work.property("contentItem")
+    if viewport is None:
+        raise AssertionError("Qt Flickable has no contentItem property")
     local = button.mapToItem(viewport, QPointF(button.width() / 2, button.height() / 2))
     target_y = max(0, min(
         float(work.property("contentHeight")) - work.height(),
