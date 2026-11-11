@@ -1078,16 +1078,39 @@ class QtBridge(QObject):
         return [{"name": name} for name in names[:75]]
 
     @Slot(str, str, result="QVariantList")
-    def searchPerks(self, side, query):
-        """Search all usable perks for the chosen role (including common perks)."""
+    @Slot(str, str, str, str, result="QVariantList")
+    def searchPerks(self, side, query, category="all", character=""):
+        """Search actual role perks with verified ownership and category filters."""
         if side not in ("KILLER", "SURVIVOR"):
             return []
-        source = core.all_unique_perks(self.db, side)
-        source += list(self.db["killer_common_perks" if side == "KILLER" else "surv_common_perks"])
-        needle = core._norm(query)
-        names = sorted(set(source))
-        selected = [name for name in names if needle in core._norm(name)]
-        return [{"name": name} for name in selected[:90 if needle else 32]]
+        common = set(self.db["killer_common_perks" if side == "KILLER" else "surv_common_perks"])
+        chars = self.db["killers" if side == "KILLER" else "survivors"]
+        names = set(core.all_unique_perks(self.db, side)) | common
+        if category == "common":
+            names &= common
+        elif category == "unique":
+            names -= common
+        elif category == "character":
+            spec = chars.get(character)
+            if spec is None:
+                return []
+            names &= set(spec.get("perks", []) if isinstance(spec, dict) else spec)
+        elif category != "all":
+            return []
+        owners = {}
+        for hero, spec in chars.items():
+            for name in (spec.get("perks", []) if isinstance(spec, dict) else spec):
+                owners.setdefault(name, []).append(hero)
+        needle = core._norm(query or "")
+        filtered = [name for name in sorted(names)
+                    if not needle or needle in core._norm(name)
+                    or needle in core._norm(" ".join(owners.get(name, [])))]
+        return [{
+            "name": name,
+            "owner": ", ".join(owners.get(name, [])),
+            "kind": "Общий навык" if name in common else "Уникальный навык",
+            "common": name in common,
+        } for name in filtered[:90 if needle else 48]]
 
     @Slot(str, result="QVariantList")
     def searchItems(self, query):
