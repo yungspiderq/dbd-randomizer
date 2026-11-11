@@ -31,7 +31,10 @@ jobs:
       - name: Verify release and updater version match
         shell: pwsh
         run: |
-          python -c "import re, pathlib, sys; sys.path.insert(0, 'qml_preview'); import qt_updater; w=pathlib.Path('.github/workflows/qt-beta-release.yml').read_text(encoding='utf-8'); tags=re.findall(r'\$tag = \"([^\"]+)\"', w); assert tags == [qt_updater.CURRENT_TAG], (tags, qt_updater.CURRENT_TAG); print('Version tag matches updater')"
+          $releaseTag = (Select-String -Path ".github/workflows/qt-beta-release.yml" -Pattern '^\s*\$tag = "([^"]+)"').Matches.Groups[1].Value
+          $installedTag = python -c "import sys; sys.path.insert(0, 'qml_preview'); import qt_updater; print(qt_updater.CURRENT_TAG)"
+          if ($LASTEXITCODE -ne 0 -or $releaseTag -ne $installedTag) { throw "Release tag does not match updater version: $releaseTag / $installedTag" }
+          Write-Host "Release and updater version match: $installedTag"
       - name: Python syntax check
         run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/stats_engine.py qml_preview/icon_queue.py qml_preview/perk_cards.py qml_preview/favorites.py qml_preview/appearance.py qml_preview/build_icon.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
       - name: Targeted core generation checks
