@@ -5,7 +5,6 @@ backend handles state, persistence, background networking and game UI automation
 """
 from __future__ import annotations
 
-import ctypes
 import os
 import queue
 import random
@@ -159,6 +158,11 @@ class QtBridge(QObject):
                 needs_icons = needs_icons or bool(item[2])
             elif kind == "effects":
                 self.addonEffectChanged.emit()
+            elif kind == "update_progress":
+                # Progress is not a terminal result: do not clear _update_busy
+                # or _update_info before the verified archive is installed.
+                self._update_text = item[1]
+                self.updateChanged.emit()
             elif kind == "update":
                 self._update_info = item[1]
                 self._update_text = item[2]
@@ -167,6 +171,8 @@ class QtBridge(QObject):
             elif kind == "install":
                 try:
                     qt_updater.install_staged(item[1])
+                    self._update_text = "Обновление проверено. Закрываю приложение для установки…"
+                    self.updateChanged.emit()
                     self._notify("Обновление проверено. Завершаю приложение для установки.")
                     QGuiApplication.instance().quit()
                 except Exception as e:
@@ -1397,24 +1403,14 @@ class QtBridge(QObject):
             raise core.AbortError()
 
     def _game_is_foreground(self):
-        """Fail closed: only send input when the actual DBD window owns focus."""
-        if sys.platform != "win32":
-            return False
-        try:
-            game = core.INPUT.find_game_window()
-            if not game:
-                return False
-            get_foreground = ctypes.windll.user32.GetForegroundWindow
-            get_foreground.restype = ctypes.c_void_p  # HWND is pointer-sized on Win64
-            return int(game[0]) == int(get_foreground() or 0)
-        except Exception:
-            return False
+        """Match the foreground *process*, not the game's changeable title."""
+        return core.INPUT.game_is_foreground()
 
     def _assert_input_ready(self):
         if self._stop.is_set():
             raise core.AbortError()
         if not self._option("dry_run") and not self._game_is_foreground():
-            raise RuntimeError("Окно Dead by Daylight не активно — автоэкипировка остановлена.")
+            raise RuntimeError("Процесс DeadByDaylight-Win64-Shipping.exe не активен — автоэкипировка остановлена.")
 
     def _click(self,coord,label):
         self._assert_input_ready()
@@ -1657,7 +1653,12 @@ class QtBridge(QObject):
         self._notify("Скачиваю обновление; текущая версия продолжает работать.")
         def work():
             try:
-                staged = qt_updater.stage(info, os.path.dirname(sys.executable))
+                def progress(message):
+                    self._messages.put(("update_progress", message))
+                    self._wake.emit()
+                staged = qt_updater.stage(
+                    info, os.path.dirname(sys.executable), progress=progress
+                )
                 self._messages.put(("install", staged))
                 self._wake.emit()
             except Exception as e:
