@@ -2571,7 +2571,7 @@ ApplicationWindow {
                         OptionRow { title: "Только открытые навыки"; keyName: "owned" }
                         OptionRow { title: "Класс режима 2v8"; keyName: "classes" }
                         OptionRow { title: "Сухой прогон (без кликов)"; keyName: "dry" }
-                        OptionRow { title: "Проверка OCR"; keyName: "ocr" }
+                        OptionRow { title: "Проверять текст результата (нужна область OCR)"; keyName: "ocr" }
                         OptionRow { title: "Выбирать персонажа в игре"; keyName: "select_char" }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Text { text: "ПАРАМЕТРЫ ПОИСКА И КУРСОРА"; color: "#d8dfe8"; font.pixelSize: 11; font.bold: true }
@@ -2619,8 +2619,8 @@ ApplicationWindow {
                         }
 
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
-                        UiButton { width: parent.width; label: "ЭКИПИРОВАТЬ В ИГРЕ"; onClicked: backend.equip() }
-                        UiButton { width: parent.width; label: "СТОП АВТОМАТИЗАЦИИ (F9)"; onClicked: backend.stop() }
+                        UiButton { width: parent.width; label: backend.running ? "ЭКИПИРОВКА ВЫПОЛНЯЕТСЯ..." : "ЭКИПИРОВАТЬ В ИГРЕ"; onClicked: { if (!backend.running) backend.equip() } }
+                        UiButton { width: parent.width; label: "СТОП АВТОМАТИЗАЦИИ (" + backend.advanced.abortKey.toUpperCase() + ")"; onClicked: backend.stop() }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Text { text: "ОБНОВЛЕНИЯ"; color: "#d8dfe8"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
                         UiButton { width: parent.width; label: backend.updateBusy ? "ПОДОЖДИТЕ..." : "ПРОВЕРИТЬ ОБНОВЛЕНИЯ"; onClicked: backend.checkUpdate() }
@@ -2629,7 +2629,7 @@ ApplicationWindow {
 
                         Rectangle {
                             width: parent.width; height: 83; color: "#251f24"; radius: 10; border.color: "#49353e"
-                            Text { anchors.fill: parent; anchors.margins: 13; wrapMode: Text.WordWrap; text: "Qt оболочка с оригинальным движком. Перед автоэкипировкой проверьте координаты, сухой прогон и стоп-клавишу F9."; color: "#dec0bf"; font.pixelSize: 11 }
+                            Text { anchors.fill: parent; anchors.margins: 13; wrapMode: Text.WordWrap; text: "Сначала проверь координаты в сухом прогоне. При потере фокуса DBD действия прекращаются. OCR проверяет текст результата поиска, но не подтверждает установку перка. Стоп: " + backend.advanced.abortKey.toUpperCase() + "."; color: "#dec0bf"; font.pixelSize: 11 }
                         }
                     }
                     }
