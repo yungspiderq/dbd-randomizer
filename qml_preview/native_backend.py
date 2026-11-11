@@ -159,6 +159,11 @@ class QtBridge(QObject):
                 needs_icons = needs_icons or bool(item[2])
             elif kind == "effects":
                 self.addonEffectChanged.emit()
+            elif kind == "update_progress":
+                # Progress is not a terminal result: do not clear _update_busy
+                # or _update_info before the verified archive is installed.
+                self._update_text = item[1]
+                self.updateChanged.emit()
             elif kind == "update":
                 self._update_info = item[1]
                 self._update_text = item[2]
@@ -167,6 +172,8 @@ class QtBridge(QObject):
             elif kind == "install":
                 try:
                     qt_updater.install_staged(item[1])
+                    self._update_text = "Обновление проверено. Закрываю приложение для установки…"
+                    self.updateChanged.emit()
                     self._notify("Обновление проверено. Завершаю приложение для установки.")
                     QGuiApplication.instance().quit()
                 except Exception as e:
@@ -1657,7 +1664,12 @@ class QtBridge(QObject):
         self._notify("Скачиваю обновление; текущая версия продолжает работать.")
         def work():
             try:
-                staged = qt_updater.stage(info, os.path.dirname(sys.executable))
+                def progress(message):
+                    self._messages.put(("update_progress", message))
+                    self._wake.emit()
+                staged = qt_updater.stage(
+                    info, os.path.dirname(sys.executable), progress=progress
+                )
                 self._messages.put(("install", staged))
                 self._wake.emit()
             except Exception as e:
