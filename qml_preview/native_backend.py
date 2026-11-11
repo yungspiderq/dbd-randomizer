@@ -1412,19 +1412,23 @@ class QtBridge(QObject):
         dest=(result[0]+(idx-1)*step,result[1])
         for attempt in range(1+int(self._timing("retries"))):
             self._sleep(0)
-            self._click(search,"search")
+            if not self._click(search,"search"):
+                continue
             self._sleep(0.12)
             if self._option("use_clear_button"):
                 clear=self._coord("clear")
                 if clear:
-                    self._click(clear,"clear")
+                    if not self._click(clear,"clear"):
+                        continue
                     self._sleep(0.08)
-                    self._click(search,"search")
+                    if not self._click(search,"search"):
+                        continue
                     self._sleep(0.08)
             if not self._option("dry_run"):
                 core.INPUT.hotkey("ctrl","a")
                 self._sleep(0.03)
-            self._paste(target)
+            if not self._paste(target):
+                continue
             self._sleep(self._timing("search_settle")*(1.6 if attempt else 1.0))
             region=self._ocr_region()
             if self._option("ocr_verify") and region and not self._option("dry_run"):
@@ -1432,7 +1436,8 @@ class QtBridge(QObject):
                 if ocr and core._norm(target) not in core._norm(ocr):
                     self._notify("OCR: результат не совпал для "+target)
                     continue
-            self._click(dest,"result")
+            if not self._click(dest,"result"):
+                continue
             self._sleep(0.15)
             return True
         return False
@@ -1470,7 +1475,9 @@ class QtBridge(QObject):
 
     @Slot()
     def equip(self):
-        if self._running:
+        # The Qt event loop may not process queued 'running' signals until
+        # after another button click. Reserve the slot synchronously.
+        if self._running or (self._worker is not None and self._worker.is_alive()):
             self._notify("Экипировка уже идёт.")
             return
         try:
@@ -1484,11 +1491,13 @@ class QtBridge(QObject):
                 self._notify("Ввод недоступен: "+core.INPUT.reason)
                 return
             self._stop.clear()
-            self._messages.put(("running",True))
-            self._wake.emit()
+            self._running = True
+            self.runningChanged.emit()
             self._worker=threading.Thread(target=self._automate,args=(steps,),daemon=True)
             self._worker.start()
         except Exception as e:
+            self._running = False
+            self.runningChanged.emit()
             self._notify("Подготовка экипировки: "+str(e))
 
     def _automate(self,steps):
@@ -1502,20 +1511,23 @@ class QtBridge(QObject):
             for i,(key,name,label) in enumerate(steps,1):
                 self._sleep(0)
                 self._notify("Экипировка "+str(i)+"/"+str(len(steps))+": "+label+" / "+name)
-                self._click(self._coord(key),key)
-                self._sleep(self._timing("after_slot_click"))
-                ok=self._search_and_select(name)
-                if not ok:
-                    self._click(self._coord(key),key)
+                ok=False
+                for attempt in range(2):
+                    if not self._click(self._coord(key),key):
+                        continue
                     self._sleep(self._timing("after_slot_click"))
-                    ok=self._search_and_select(name)
+                    if self._search_and_select(name):
+                        ok=True
+                        break
                 if not ok:
-                    self._notify("Не подтверждён: "+name)
+                    raise RuntimeError("Не удалось выбрать: "+name)
                 self._sleep(self._timing("between_steps"))
             if not self._option("dry_run"):
-                self.cfg.setdefault("last_equipped",{})[self.build["side"]]=self._planned_equipped
+                # A successful click only proves that input was sent, NOT that the
+                # game equipped the item. Never cache an unverified screen state.
+                self.cfg.setdefault("last_equipped",{})[self.build["side"]]=None
                 self._save()
-            self._notify("Экипировка завершена.")
+            self._notify("Экипировка завершена. Проверьте результат в игре.")
         except core.AbortError:
             self._notify("Автоматизация остановлена.")
             if not self._option("dry_run"):
