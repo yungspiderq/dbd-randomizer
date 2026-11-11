@@ -25,6 +25,7 @@ from addon_effects import AddonEffectLibrary
 from rotation_engine import RotationState, make_rotated_build
 from perk_cards import perk_info, reconcile_pins
 from stats_engine import BuildStatistics
+from favorites import FavoriteBuilds
 from dbd_icons_store import IconStore
 from icon_queue import IconDownloadQueue
 
@@ -44,6 +45,7 @@ class QtBridge(QObject):
     advancedChanged = Signal()
     historyChanged = Signal()
     statisticsChanged = Signal()
+    favoritesChanged = Signal()
     detailChanged = Signal()
     charactersChanged = Signal()
     skinsChanged = Signal()
@@ -67,6 +69,11 @@ class QtBridge(QObject):
         self._rotation = RotationState(self.cfg["options"].get("rotation_state"))
         self._rotation_enabled = bool(self.cfg["options"].get("rotation_enabled", False))
         self._statistics = BuildStatistics(self.cfg["options"].get("statistics_v1"))
+        self._favorites = FavoriteBuilds(self.cfg["options"].get("favorite_builds_v1"),
+                                         empty=core.EMPTY, no_addons=core.NO_ADDONS)
+        self._favorite_search = ""
+        self._favorite_side = "ALL"
+        self._favorite_collection = "Все коллекции"
         self._statistics_side = self._role
         self._statistics_group = "characters"
         self._statistics_period = 0
@@ -165,6 +172,7 @@ class QtBridge(QObject):
         self.cfg["options"]["rotation_enabled"] = self._rotation_enabled
         self.cfg["options"]["rotation_state"] = self._rotation.serialize()
         self.cfg["options"]["statistics_v1"] = self._statistics.serialize()
+        self.cfg["options"]["favorite_builds_v1"] = self._favorites.serialize()
         self.cfg.setdefault("owned", {})["killers"] = sorted(self._owned["K"]) or ["__none__"]
         self.cfg["owned"]["survivors"] = sorted(self._owned["S"]) or ["__none__"]
         core.save_config(self.cfg)
@@ -408,6 +416,115 @@ class QtBridge(QObject):
                 changed = True
         if changed:
             self.perksChanged.emit()
+
+    @Property(int, notify=favoritesChanged)
+    def favoriteCount(self):
+        return self._favorites.count
+
+    @Property("QVariantList", notify=favoritesChanged)
+    def favorites(self):
+        return self._favorites.list(self._favorite_search, self._favorite_side,
+                                    self._favorite_collection)
+
+    @Property("QVariantList", notify=favoritesChanged)
+    def favoriteCollections(self):
+        return self._favorites.collections()
+
+    @Property(str, notify=favoritesChanged)
+    def favoriteSide(self):
+        return self._favorite_side
+
+    @Property(str, notify=favoritesChanged)
+    def favoriteCollection(self):
+        return self._favorite_collection
+
+    @Slot(str)
+    def setFavoriteSearch(self, text):
+        self._favorite_search = str(text or "")[:180]
+        self.favoritesChanged.emit()
+
+    @Slot(str)
+    def setFavoriteSide(self, side):
+        if side not in ("ALL", "KILLER", "SURVIVOR"):
+            return
+        self._favorite_side = side
+        self.favoritesChanged.emit()
+
+    @Slot(str)
+    def setFavoriteCollection(self, name):
+        if name not in self._favorites.collections():
+            name = "Все коллекции"
+        self._favorite_collection = name
+        self.favoritesChanged.emit()
+
+    @Slot(str, str, str, result=bool)
+    def saveFavorite(self, title, collection, note):
+        if not self.build:
+            self._notify("Сначала создайте билд для сохранения.")
+            return False
+        try:
+            ident = self._favorites.add(self.build, title, collection, note)
+            self._save()
+            self.favoritesChanged.emit()
+            self._notify("Билд сохранён в избранное: " +
+                         self._favorites.get(ident)["title"])
+            return True
+        except (ValueError, TypeError) as exc:
+            self._notify("Не удалось сохранить билд: " + str(exc))
+            return False
+
+    @Slot(str, str, str, str, result=bool)
+    def editFavorite(self, ident, title, collection, note):
+        if not self._favorites.update(ident, title, collection, note):
+            self._notify("Сохранённый билд не найден.")
+            return False
+        if self._favorite_collection not in self._favorites.collections():
+            self._favorite_collection = "Все коллекции"
+        self._save()
+        self.favoritesChanged.emit()
+        self._notify("Название и заметки сохранены.")
+        return True
+
+    @Slot(str, result=bool)
+    def deleteFavorite(self, ident):
+        if not self._favorites.delete(ident):
+            self._notify("Билд уже отсутствует в избранном.")
+            return False
+        if self._favorite_collection not in self._favorites.collections():
+            self._favorite_collection = "Все коллекции"
+        self._save()
+        self.favoritesChanged.emit()
+        self._notify("Билд удалён из избранного.")
+        return True
+
+    @Slot(str, result=bool)
+    def loadFavorite(self, ident):
+        try:
+            build = self._favorites.restore(ident, self.db, core)
+        except (ValueError, TypeError) as exc:
+            self._notify("Не удалось открыть сохранённый билд: " + str(exc))
+            return False
+        self.build = build
+        self._role = build["side"]
+        self._locks = [False] * 4
+        self.roleChanged.emit()
+        self.rotationChanged.emit()
+        self._sync()
+        # Reopening a saved build is not a fresh random roll; do not change
+        # either rotation weights or generation statistics.
+        self._save()
+        self._notify("Загружен сохранённый билд: " + build["char"])
+        return True
+
+    @Slot(str)
+    def copyFavorite(self, ident):
+        try:
+            build = self._favorites.restore(ident, self.db, core)
+        except (ValueError, TypeError) as exc:
+            self._notify("Нельзя скопировать устаревший билд: " + str(exc))
+            return
+        QGuiApplication.clipboard().setText(core.build_to_clipboard_text(build))
+        self._notify("Сохранённый билд скопирован.")
 
     @Property("QVariantList", notify=historyChanged)
     def history(self):
