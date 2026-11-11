@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QSignalSpy, QTest
 import dbd_randomizer as core
 import native_backend
 import qt_updater
@@ -56,6 +57,25 @@ class QtBackendTests(unittest.TestCase):
         self.bridge.generate()
         self.assertEqual(self.bridge.build["side"], "KILLER")
         self.assertEqual(len(self.bridge.build["addons"]), 2)
+
+    def test_icon_batching_emits_once_for_a_download_burst(self):
+        spy = QSignalSpy(self.bridge.iconVersionChanged)
+        for i in range(40):
+            self.bridge._messages.put(("icons", "icon_" + str(i), True))
+        self.bridge._drain()
+        self.assertEqual(self.bridge.iconVersion, 0)
+        self.assertEqual(spy.count(), 0)
+        QTest.qWait(175)
+        self.assertEqual(self.bridge.iconVersion, 1)
+        self.assertEqual(spy.count(), 1)
+        self.bridge._messages.put(("icons", "broken_icon", False))
+        self.bridge._drain()
+        QTest.qWait(175)
+        self.assertEqual(spy.count(), 1, "Failed images must not refresh every thumbnail")
+        self.bridge._messages.put(("icons", "next_success", True))
+        self.bridge._drain()
+        QTest.qWait(175)
+        self.assertEqual(spy.count(), 2)
 
     def test_settings_mode_and_character_filter(self):
         self.bridge.setMode("any")
