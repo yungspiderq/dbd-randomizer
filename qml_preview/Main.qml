@@ -1228,10 +1228,10 @@ ApplicationWindow {
                                     // Backing fields preserve the strict buildCustom validation contract.
                                     Item {
                                         width: 1; height: 0; visible: false
-                                        UiField { id: makerPerk1 }
-                                        UiField { id: makerPerk2 }
-                                        UiField { id: makerPerk3 }
-                                        UiField { id: makerPerk4 }
+                                        UiField { id: makerPerk1; objectName: "builderValue0" }
+                                        UiField { id: makerPerk2; objectName: "builderValue1" }
+                                        UiField { id: makerPerk3; objectName: "builderValue2" }
+                                        UiField { id: makerPerk4; objectName: "builderValue3" }
                                     }
                                     Grid {
                                         id: makerSlots
@@ -3161,6 +3161,18 @@ ApplicationWindow {
             if (makerPage.perkNameAt(1) !== "" || makerPage.perkNameAt(2) !== "")
                 throw new Error("Side change did not clear selected perks");
             makerPage.changeSide("SURVIVOR");
+            makerPage.assignPerk(a, 0);
+            makerPage.assignPerk(b, 1);
+            // Keep slots visible so QtTest can exercise pointer input afterwards.
+            var firstSlot = makerSlotRepeater.itemAt(0);
+            if (!firstSlot) throw new Error("No slot delegate");
+            var slotLocation = firstSlot.mapToItem(work.contentItem, 0, 0);
+            work.contentY = Math.max(0, slotLocation.y - 120);
+            var firstPos = firstSlot.mapToItem(win.contentItem, 30, 40);
+            if (makerPage.slotFromPointer(firstPos.x, firstPos.y) !== 0)
+                throw new Error("Visible slot hit test failed");
+            if (makerPage.slotFromPointer(-100, -100) !== -1)
+                throw new Error("Outside viewport must reject drop");
             builderSmokeStatus = 1;
         } catch (e) {
             builderSmokeError = "" + e;
