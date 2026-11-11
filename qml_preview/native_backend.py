@@ -5,7 +5,6 @@ backend handles state, persistence, background networking and game UI automation
 """
 from __future__ import annotations
 
-import ctypes
 import os
 import queue
 import random
@@ -1404,24 +1403,14 @@ class QtBridge(QObject):
             raise core.AbortError()
 
     def _game_is_foreground(self):
-        """Fail closed: only send input when the actual DBD window owns focus."""
-        if sys.platform != "win32":
-            return False
-        try:
-            game = core.INPUT.find_game_window()
-            if not game:
-                return False
-            get_foreground = ctypes.windll.user32.GetForegroundWindow
-            get_foreground.restype = ctypes.c_void_p  # HWND is pointer-sized on Win64
-            return int(game[0]) == int(get_foreground() or 0)
-        except Exception:
-            return False
+        """Match the foreground *process*, not the game's changeable title."""
+        return core.INPUT.game_is_foreground()
 
     def _assert_input_ready(self):
         if self._stop.is_set():
             raise core.AbortError()
         if not self._option("dry_run") and not self._game_is_foreground():
-            raise RuntimeError("Окно Dead by Daylight не активно — автоэкипировка остановлена.")
+            raise RuntimeError("Процесс DeadByDaylight-Win64-Shipping.exe не активен — автоэкипировка остановлена.")
 
     def _click(self,coord,label):
         self._assert_input_ready()
