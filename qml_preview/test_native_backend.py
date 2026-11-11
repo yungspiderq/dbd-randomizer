@@ -399,6 +399,13 @@ class QtBackendTests(unittest.TestCase):
             click.assert_not_called()
             paste.assert_not_called()
 
+    def test_zero_duration_sleep_is_still_interruptible(self):
+        self.bridge.stop()
+        with self.assertRaises(core.AbortError):
+            self.bridge._sleep(0)
+        with self.assertRaises(core.AbortError):
+            self.bridge._sleep(-1)
+
     def test_stop_mid_step_prevents_search(self):
         self.bridge.generate()
         self.bridge.cfg["options"]["dry_run"] = True
