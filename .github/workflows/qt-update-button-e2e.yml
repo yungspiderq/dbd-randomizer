@@ -1,0 +1,52 @@
+name: Qt update buttons - real published releases end to end
+
+on:
+  push:
+    branches: ["test/qt-update-button-e2e"]
+    paths:
+      - ".github/workflows/qt-update-button-e2e.yml"
+      - "tests/qt_update_button_e2e.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qt-button-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out Qt UI and test harness
+        uses: actions/checkout@v4
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Qt UI test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r qml_preview/requirements.txt
+      - name: Get published release archives and actual release metadata
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $old = Join-Path $env:RUNNER_TEMP 'qt-actual-beta15'
+          $new = Join-Path $env:RUNNER_TEMP 'qt-actual-beta16'
+          New-Item -ItemType Directory -Force -Path $old,$new | Out-Null
+          gh release download v2.28.0-qt-beta.15 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
+          if ($LASTEXITCODE -ne 0) { throw 'Beta15 archive download failed' }
+          gh release download v2.28.0-qt-beta.16 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $new
+          if ($LASTEXITCODE -ne 0) { throw 'Beta16 archive download failed' }
+          gh api "repos/${{ github.repository }}/releases?per_page=30" > (Join-Path $new 'releases.json')
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub release API lookup failed' }
+          "BETA15_ZIP=$old/DBDRandomizerQtBeta.zip" >> $env:GITHUB_ENV
+          "BETA16_ZIP=$new/DBDRandomizerQtBeta.zip" >> $env:GITHUB_ENV
+          "RELEASES_JSON=$new/releases.json" >> $env:GITHUB_ENV
+      - name: Click real QML update buttons then verify installation and relaunch
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python tests/qt_update_button_e2e.py --old-zip "$env:BETA15_ZIP" --new-zip "$env:BETA16_ZIP" --release-json "$env:RELEASES_JSON"
+          if ($LASTEXITCODE -ne 0) { throw 'Real QML update button regression test failed' }
