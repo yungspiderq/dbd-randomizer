@@ -316,6 +316,49 @@ class QtBackendTests(unittest.TestCase):
         self.assertFalse(self.bridge._worker.is_alive())
         self.assertEqual(self.bridge.cfg.get("last_equipped", {}), {})
 
+    def test_concurrent_equip_clicks_do_not_start_two_workers(self):
+        self.bridge.generate()
+        self.bridge.toggleOption("dry")
+        import threading
+        release = threading.Event()
+        entered = threading.Event()
+        def slow_automate(steps):
+            entered.set()
+            release.wait(timeout=5)
+            self.bridge._messages.put(("running", False))
+            self.bridge._wake.emit()
+        with patch.object(self.bridge, "_automate", side_effect=slow_automate) as worker:
+            self.bridge.equip()
+            self.assertTrue(entered.wait(timeout=3))
+            self.bridge.equip()
+            self.assertEqual(worker.call_count, 1)
+            release.set()
+            self.bridge._worker.join(timeout=5)
+
+    def test_search_does_not_claim_success_when_input_fails(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = False
+        self.bridge.cfg["timings"]["retries"] = 0
+        self.bridge.cfg["timings"]["search_settle"] = 0
+        with patch.object(self.bridge, "_sleep"), patch.object(self.bridge, "_click", return_value=False):
+            self.assertFalse(self.bridge._search_and_select("example"))
+        with patch.object(self.bridge, "_sleep"), patch.object(self.bridge, "_click", return_value=True), \
+             patch.object(self.bridge, "_paste", return_value=False), \
+             patch.object(core.INPUT, "hotkey"):
+            self.assertFalse(self.bridge._search_and_select("example"))
+
+    def test_failed_equip_resets_cached_state(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg.setdefault("last_equipped", {})[self.bridge.build["side"]] = {"perks": ["old"]}
+        self.bridge._planned_equipped = {"perks": ["new"]}
+        with patch.object(self.bridge, "_sleep"), patch.object(self.bridge, "_click", return_value=False), \
+             patch.object(self.bridge, "_search_and_select") as search:
+            self.bridge._automate([("slot1", "example", "навык")])
+            search.assert_not_called()
+        self.assertIsNone(self.bridge.cfg["last_equipped"][self.bridge.build["side"]])
+
     def test_character_panels_and_filtered_bulk_actions(self):
         entries = self.bridge.characters
         self.assertTrue(any(c["side"] == "K" for c in entries))
