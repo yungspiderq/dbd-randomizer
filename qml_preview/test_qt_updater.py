@@ -51,19 +51,19 @@ class UpdaterTests(unittest.TestCase):
         self.assertIsNone(u._key("v999.0.0-malicious"))
         self.assertEqual(u.ASSET, "DBDRandomizerQtBeta.zip")
 
-    def test_beta16_version_does_not_offer_itself(self):
-        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.16")
+    def test_beta17_version_does_not_offer_itself(self):
+        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.17")
         def release(tag):
             return {"draft": False, "tag_name": tag,
                     "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
                     "assets": [{"name": u.ASSET, "size": 20000000,
                                 "browser_download_url": "https://github.com/" + u.REPO + "/releases/download/" + tag + "/" + u.ASSET}]}
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.15")]).encode())):
+                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.16")]).encode())):
             self.assertIsNone(u.check())
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release("v2.28.0-qt-beta.17"), release(u.CURRENT_TAG)]).encode())):
-            self.assertEqual(u.check()["tag"], "v2.28.0-qt-beta.17")
+                release("v2.28.0-qt-beta.18"), release(u.CURRENT_TAG)]).encode())):
+            self.assertEqual(u.check()["tag"], "v2.28.0-qt-beta.18")
 
     def test_stage_valid_zip_sha_and_preserve_user_config(self):
         archive = self.archive()
@@ -78,8 +78,13 @@ class UpdaterTests(unittest.TestCase):
                 "asset_size": len(archive),
                 "digest": "sha256:" + hashlib.sha256(archive).hexdigest(),
             }
+            messages = []
             with patch.object(u, "_get", return_value=io.BytesIO(archive)):
-                unpacked = u.stage(info, target)
+                unpacked = u.stage(info, target, progress=messages.append)
+            self.assertTrue(any("Скачивание обновления" in x for x in messages))
+            self.assertTrue(any("SHA-256" in x for x in messages))
+            self.assertTrue(any("Распаковка завершена" in x for x in messages))
+            self.assertLessEqual(sum("Скачивание обновления" in x for x in messages), 11)
             self.assertTrue((unpacked / u.APP_EXE).is_file())
             self.assertTrue((unpacked / "_internal/python312.dll").is_file())
             self.assertEqual(config.read_text(encoding="utf-8"), '{"retain":true}')
