@@ -26,6 +26,7 @@ from rotation_engine import RotationState, make_rotated_build
 from perk_cards import perk_info, reconcile_pins
 from stats_engine import BuildStatistics
 from dbd_icons_store import IconStore
+from icon_queue import IconDownloadQueue
 
 
 def tidy(s):
@@ -77,6 +78,8 @@ class QtBridge(QObject):
         self._icon_version = 0
         self._icons = IconStore(core.ICONS_DIR, enabled=True)
         self._icon_pending = set()
+        self._icon_urls = {}
+        self._icon_queue = IconDownloadQueue(self._icons, self._icon_processed, workers=3)
         self._addon_catalog = AddonEffectLibrary(core.APP_DIR, on_change=self._effects_updated)
         self._selected_addon = {"side": "", "character": "", "category": "", "name": ""}
         self._skin_character = next(iter(self.db["survivors"]), "")
@@ -133,7 +136,7 @@ class QtBridge(QObject):
                 self.communityChanged.emit()
             elif kind == "icons":
                 self._icon_pending.discard(item[1])
-                needs_icons = True
+                needs_icons = needs_icons or bool(item[2])
             elif kind == "effects":
                 self.addonEffectChanged.emit()
             elif kind == "update":
@@ -502,16 +505,21 @@ class QtBridge(QObject):
     def iconPath(self, key):
         if not key or key in (core.EMPTY, core.NO_ADDONS):
             return ""
+        known = self._icon_urls.get(key)
+        if known:
+            return known
         path = self._icons.local_path(key)
         if path and self._icons.is_cached(key):
-            return QUrl.fromLocalFile(path).toString()
-        if key not in self._icon_pending and self._icons.enabled:
+            url = QUrl.fromLocalFile(path).toString()
+            self._icon_urls[key] = url
+            return url
+        if key not in self._icon_pending and self._icon_queue.request(key):
             self._icon_pending.add(key)
-            self._icons.request([key], on_ready=lambda _: self._icon_downloaded(key))
         return ""
 
-    def _icon_downloaded(self, key):
-        self._messages.put(("icons", key))
+    def _icon_processed(self, key, success):
+        # Executed on one of the three worker threads, never directly update Qt.
+        self._messages.put(("icons", key, success))
         self._wake.emit()
 
     def _effects_updated(self):
