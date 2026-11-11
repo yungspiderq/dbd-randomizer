@@ -1380,6 +1380,7 @@ class QtBridge(QObject):
 
     @Slot()
     def close(self):
+        self._icon_queue.close()
         self.stop()
         if self._worker:
             self._worker.join(timeout=1.0)
