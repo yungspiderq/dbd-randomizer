@@ -28,6 +28,9 @@ def main():
         app.setWindowIcon(QIcon(str(icon)))
     backend = QtBridge()
     engine = QQmlApplicationEngine()
+    engine.warnings.connect(lambda messages: [
+        print("QML WARNING: " + str(message), file=sys.stderr) for message in messages
+    ])
     engine.rootContext().setContextProperty("backend", backend)
     qml_path = (Path(sys._MEIPASS) / "qml_preview" / "Main.qml") if getattr(sys, "frozen", False) else HERE / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))
