@@ -75,37 +75,32 @@ def _click_qml_button(window, label: str):
         raise AssertionError(f"Expected one visible QML button {label!r}, got {len(matches)}")
 
     button = matches[0]
-    work = window.findChild(type(window.contentItem()), "workScroll")
-    if work is None:
-        from PySide6.QtCore import QObject
-        work = window.findChild(QObject, "workScroll")
-    if work is None:
-        raise AssertionError("QML main Flickable is missing")
-    viewport = work.property("contentItem")
+    # Update controls are in the *right-hand settings sidebar*, NOT the
+    # central "workScroll" Flickable. Find the nearest scrolling ancestor.
+    scroll = button.parentItem()
+    while scroll is not None and scroll.property("contentY") is None:
+        scroll = scroll.parentItem()
+    if scroll is None:
+        raise AssertionError("Cannot locate the update button's own settings Flickable")
+    viewport = scroll.property("contentItem")
     if viewport is None:
-        raise AssertionError("Qt Flickable has no contentItem property")
-    # Some settings buttons are wider than the viewport in the legacy QML
-    # layout. Clicking near the left edge stays in the actual visible area.
+        raise AssertionError("Settings Flickable has no contentItem property")
     hit = QPointF(min(35, button.width() / 2), button.height() / 2)
     local = button.mapToItem(viewport, hit)
-    target_y = max(0, local.y() - work.height() / 2)
-    # Qt Quick reports layout height differently for hidden pages; exercise a
-    # programmatic scroll to the actual item rather than assuming max contentY.
-    work.setProperty("contentY", target_y)
-    QTest.qWait(160)  # settle Flickable and dynamic settings layout
+    max_y = max(0, float(scroll.property("contentHeight")) - scroll.height())
+    target_y = min(max_y, max(0, local.y() - scroll.height() / 2))
+    scroll.setProperty("contentY", target_y)
+    QTest.qWait(160)
     pos = button.mapToItem(window.contentItem(), hit)
-    in_view = work.mapFromItem(window.contentItem(), pos)
-    print("QML scroll diagnostics:", {
-        "button": label, "target_y": round(target_y),
-        "viewport_width": round(work.width()),
-        "viewport_height": round(work.height()),
-        "reported_content_height": work.property("contentHeight"),
-        "effective_contentY": work.property("contentY"),
-        "button_viewport_x": round(in_view.x()),
-        "button_viewport_y": round(in_view.y()),
+    in_view = scroll.mapFromItem(window.contentItem(), pos)
+    print("Qt settings sidebar:", {
+        "button": label, "scroll_y": round(target_y),
+        "viewport": (round(scroll.width()), round(scroll.height())),
+        "content_height": scroll.property("contentHeight"),
+        "button_local": (round(in_view.x()), round(in_view.y())),
     }, flush=True)
-    if not (0 <= in_view.x() < work.width() and 0 <= in_view.y() < work.height()):
-        raise AssertionError(f"QML button outside scroll viewport: {label}, {in_view}")
+    if not (0 <= in_view.x() < scroll.width() and 0 <= in_view.y() < scroll.height()):
+        raise AssertionError(f"Update button outside its own settings panel: {label}, {in_view}")
     window.requestActivate()
     QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, pos.toPoint())
     QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, pos.toPoint())
@@ -158,10 +153,6 @@ def run_worker(target: Path, new_zip: Path, releases_json: Path):
         raise AssertionError("Unable to load real Qt settings page")
     window = engine.rootObjects()[0]
     window.setProperty("page", "Клики и тайминги")
-    # An offscreen Windows test window can be taller than the screen; this
-    # exposes the real QML buttons without tying their click test to Flickable
-    # wheel-scrolling behavior (tested separately by UI smoke).
-    window.resize(1360, 3100)
     app.processEvents()
 
     errors = []
