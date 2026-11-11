@@ -52,6 +52,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python qml_preview/main.py --smoke-appearance
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python qml_preview/main.py --smoke-catalogs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build Windows portable directory
         shell: pwsh
         run: |
@@ -88,7 +90,7 @@ jobs:
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DBDRandomizerQtBeta13-Portable-Windows
+          name: DBDRandomizerQtBeta14-Portable-Windows
           path: |
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
@@ -98,9 +100,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.13"
+          $tag = "v2.28.0-qt-beta.14"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 13 — Appearance Update" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 14 — Visual Polish" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }
