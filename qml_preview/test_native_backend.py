@@ -464,7 +464,7 @@ class QtBackendTests(unittest.TestCase):
         api.GetWindowThreadProcessId.side_effect = set_pid
         with patch.object(core.ctypes.windll, "user32", api):
             self.assertTrue(core.INPUT.is_own_window(501))
-        self.assertFalse(core.INPUT.is_own_window(0))
+        self.assertTrue(core.INPUT.is_own_window(0))  # no HWND is never a safe target
 
     def test_zero_duration_sleep_is_still_interruptible(self):
         self.bridge.stop()
