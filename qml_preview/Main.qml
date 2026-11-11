@@ -100,6 +100,8 @@ ApplicationWindow {
             fillMode: Image.PreserveAspectFit
             asynchronous: true
             smooth: true
+            sourceSize.width: Math.max(32, art.pixels * 2)
+            sourceSize.height: Math.max(32, art.pixels * 2)
             source: backend.iconVersion >= 0 ? backend.iconPath(art.iconKey) : ""
         }
         Text {
@@ -814,6 +816,8 @@ ApplicationWindow {
                                                 anchors.fill: parent
                                                 anchors.margins: 5
                                                 fillMode: Image.PreserveAspectFit
+                                                sourceSize.width: 204
+                                                sourceSize.height: 186
                                                 source: backend.iconVersion >= 0 ? backend.iconPath(card.perkInfo.raw) : ""
                                                 asynchronous: true
                                                 smooth: true
@@ -1138,6 +1142,8 @@ ApplicationWindow {
                                     UiField { id: makerChar; width: parent.width; placeholderText: "Найти персонажа..." }
                                     ListView {
                                         id: makerCharacters
+                                        reuseItems: true
+                                        cacheBuffer: 96
                                         width: parent.width
                                         height: 151
                                         spacing: 5
@@ -1167,6 +1173,8 @@ ApplicationWindow {
                                     }
                                     ListView {
                                         id: makerItems
+                                        reuseItems: true
+                                        cacheBuffer: 96
                                         visible: makerPage.makerSide === "SURVIVOR"
                                         width: parent.width
                                         height: visible ? 100 : 0
@@ -1200,6 +1208,8 @@ ApplicationWindow {
                                     UiField { id: addonSearch; width: parent.width; placeholderText: "Поиск доступных аддонов по названию..." }
                                     ListView {
                                         id: makerAddons
+                                        reuseItems: true
+                                        cacheBuffer: 96
                                         width: parent.width; height: 136; spacing: 5; clip: true
                                         model: backend.searchAddons(makerPage.makerSide, makerChar.text, makerItem.text, addonSearch.text)
                                         delegate: Rectangle {
@@ -1367,6 +1377,8 @@ ApplicationWindow {
                                     }
                                     ListView {
                                         id: makerPerks
+                                        reuseItems: true
+                                        cacheBuffer: 96
                                         objectName: "builderPerkList"
                                         width: parent.width; height: 218
                                         spacing: 6; clip: true
@@ -1491,6 +1503,8 @@ ApplicationWindow {
                             visible: win.page === "Персонажи"
                             width: parent.width
                             spacing: 13
+                            property var characterCatalog: backend.characters
+                            property string searchNeedle: charSearch.text.trim().toLowerCase()
                             Text { text: "Выбор доступных персонажей"; color: win.colors.text; font.pixelSize: 18; font.bold: true }
                             Text {
                                 width: parent.width
@@ -1508,9 +1522,13 @@ ApplicationWindow {
                                     Rectangle {
                                         id: sideCard
                                         property string sideKey: modelData.side
-                                        property var filtered: backend.characters.filter(function(c) {
-                                            return c.side === sideKey && c.name.toLowerCase().indexOf(charSearch.text.toLowerCase()) >= 0
+                                        property var sideEntries: charactersPage.characterCatalog.filter(function(c) {
+                                            return c.side === sideCard.sideKey;
                                         })
+                                        property var filtered: sideEntries.filter(function(c) {
+                                            return c.name.toLowerCase().indexOf(charactersPage.searchNeedle) >= 0;
+                                        })
+                                        property int ownedCount: sideEntries.filter(function(c) { return c.owned; }).length
                                         width: (charactersPage.width - 12) / 2
                                         height: 570
                                         radius: 14
@@ -1529,8 +1547,7 @@ ApplicationWindow {
                                                     spacing: 3
                                                     Text { text: modelData.title; font.bold: true; font.pixelSize: 13; color: win.colors.text; font.letterSpacing: 0.5 }
                                                     Text {
-                                                        text: backend.characters.filter(function(c){return c.side === sideCard.sideKey && c.owned}).length
-                                                            + " из " + backend.characters.filter(function(c){return c.side === sideCard.sideKey}).length + " выбрано"
+                                                        text: sideCard.ownedCount + " из " + sideCard.sideEntries.length + " выбрано"
                                                         color: "#92a2b5"; font.pixelSize: 10
                                                     }
                                                 }
@@ -1545,6 +1562,8 @@ ApplicationWindow {
                                             Rectangle { width: parent.width; height: 1; color: "#2f3947" }
                                             ListView {
                                                 id: characterList
+                                        reuseItems: true
+                                        cacheBuffer: 96
                                                 objectName: "charactersCatalog"
                                                 width: parent.width
                                                 height: sideCard.height - 128
@@ -1623,6 +1642,8 @@ ApplicationWindow {
                                         UiField { id: skinCharSearch; width: parent.width; placeholderText: "Поиск героя" }
                                         ListView {
                                             id: skinCharList
+                                        reuseItems: true
+                                        cacheBuffer: 96
                                             objectName: "outfitCharactersCatalog"
                                             width: parent.width
                                             height: skinCharactersCard.height - 78
@@ -1708,9 +1729,22 @@ ApplicationWindow {
                                             UiButton { width: (parent.width - 15) / 4; height: 32; label: "НИКОГО"; onClicked: backend.setSkinsOwned("none") }
                                             UiButton { width: (parent.width - 15) / 4; height: 32; label: "ИНВЕРСИЯ"; onClicked: backend.setSkinsOwned("invert") }
                                         }
-                                        UiField { id: skinSearch; width: parent.width; placeholderText: "Поиск по RU/EN названию, редкости, дате"; onTextChanged: backend.filterSkins(text) }
+                                        Timer {
+                                            id: skinSearchDebounce
+                                            interval: 160
+                                            repeat: false
+                                            onTriggered: backend.filterSkins(skinSearch.text)
+                                        }
+                                        UiField {
+                                            id: skinSearch
+                                            width: parent.width
+                                            placeholderText: "Поиск по RU/EN названию, редкости, дате"
+                                            onTextChanged: skinSearchDebounce.restart()
+                                        }
                                         ListView {
                                             id: skinsList
+                                        reuseItems: true
+                                        cacheBuffer: 96
                                             objectName: "outfitsCatalog"
                                             width: parent.width
                                             height: skinContent.height - 330
@@ -1779,6 +1813,7 @@ ApplicationWindow {
                             visible: win.page === "Избранное"
                             width: parent.width
                             spacing: 14
+                            property var filteredFavorites: backend.favorites
                             Text {
                                 text: "Библиотека избранных билдов"
                                 font.pixelSize: 20
@@ -1816,11 +1851,17 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                            Timer {
+                                id: favoriteSearchDebounce
+                                interval: 160
+                                repeat: false
+                                onTriggered: backend.setFavoriteSearch(favoriteSearch.text)
+                            }
                             UiField {
                                 id: favoriteSearch
                                 width: parent.width
                                 placeholderText: "Поиск по названию, коллекции, персонажу, навыкам и заметкам..."
-                                onTextChanged: backend.setFavoriteSearch(text)
+                                onTextChanged: favoriteSearchDebounce.restart()
                             }
                             Row {
                                 width: parent.width
@@ -1868,13 +1909,13 @@ ApplicationWindow {
                                 }
                             }
                             Text {
-                                text: "НАЙДЕНО: " + backend.favorites.length
+                                text: "НАЙДЕНО: " + favoritesPage.filteredFavorites.length
                                 color: "#b8c5d5"
                                 font.pixelSize: 11
                                 font.bold: true
                             }
                             Rectangle {
-                                visible: backend.favorites.length === 0
+                                visible: favoritesPage.filteredFavorites.length === 0
                                 width: parent.width
                                 height: 130
                                 radius: 12
@@ -1900,14 +1941,16 @@ ApplicationWindow {
                             }
                             ListView {
                                 id: favoriteList
+                                        reuseItems: true
+                                        cacheBuffer: 96
                                 objectName: "favoritesCatalog"
                                 width: parent.width
-                                height: Math.min(600, Math.max(120, backend.favorites.length * 182))
-                                visible: backend.favorites.length > 0
+                                height: Math.min(600, Math.max(120, favoritesPage.filteredFavorites.length * 182))
+                                visible: favoritesPage.filteredFavorites.length > 0
                                 clip: true
                                 spacing: 10
                                 boundsBehavior: Flickable.StopAtBounds
-                                model: backend.favorites
+                                model: favoritesPage.filteredFavorites
                                 delegate: Rectangle {
                                     id: favoriteCard
                                     property var entry: modelData
