@@ -672,6 +672,17 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual(self.bridge.build["char"], survivor)
         self.assertFalse(self.bridge.buildCustom("SURVIVOR", "invalid survivor", "", "", "", *perks))
 
+    def test_updater_progress_keeps_busy_flag_and_release(self):
+        info = {"tag": "v2.28.0-qt-beta.18"}
+        self.bridge._update_info = info
+        self.bridge._update_busy = True
+        self.bridge._messages.put(("update_progress", "Скачивание обновления: 40%"))
+        self.bridge._drain()
+        self.assertEqual(self.bridge.updateText, "Скачивание обновления: 40%")
+        self.assertTrue(self.bridge.updateBusy)
+        self.assertTrue(self.bridge.updateAvailable)
+        self.assertIs(self.bridge._update_info, info)
+
     def test_future_updates_use_explicit_semver(self):
         self.assertLess(qt_updater._key("v2.28.0-qt-beta.14"), qt_updater._key("v2.28.0-qt-beta.15"))
         self.assertIsNone(qt_updater._key("v2.28.0"))
