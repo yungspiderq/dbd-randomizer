@@ -17,7 +17,7 @@ from native_backend import QtBridge
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("DBD Randomizer Qt Beta 12")
+    app.setApplicationName("DBD Randomizer Qt Beta 13")
     frozen = bool(getattr(sys, "frozen", False))
     packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
     icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
@@ -39,10 +39,42 @@ def main():
         window = engine.rootObjects()[0]
         if hasattr(window, "setIcon"):
             window.setIcon(QIcon(str(icon)))
-    if "--smoke" in sys.argv:
+    appearance_check = {"ok": True}
+    if "--smoke-appearance" in sys.argv:
+        window = engine.rootObjects()[0]
+
+        def verify_live_appearance():
+            try:
+                window.setProperty("page", "Оформление")
+                backend.setAppearanceTheme("frost")
+                backend.setAppearanceScale(1.2)
+                backend.setAnimationsEnabled(False)
+                app.processEvents()
+                assert window.property("page") == "Оформление"
+                assert abs(window.property("uiScale") - 1.2) < 0.01
+                assert window.property("color").name().lower() == "#0b1018"
+                assert backend.appearancePalette["accent"] == "#4298e5"
+                backend.setAppearanceTheme("violet")
+                app.processEvents()
+                assert window.property("color").name().lower() == "#100f18"
+                backend.resetAppearance()
+                app.processEvents()
+                assert abs(window.property("uiScale") - 1.0) < 0.01
+                assert backend.appearanceTheme == "crimson"
+                assert backend.animationsEnabled
+                print("Qt appearance smoke OK: all three themes, scale, motion and reset")
+            except Exception as exc:
+                print("Qt appearance smoke FAILED: " + repr(exc), file=sys.stderr)
+                appearance_check["ok"] = False
+            finally:
+                app.quit()
+
+        QTimer.singleShot(300, verify_live_appearance)
+    elif "--smoke" in sys.argv:
         QTimer.singleShot(2800, app.quit)
     app.aboutToQuit.connect(backend.close)
-    return app.exec()
+    result = app.exec()
+    return result if appearance_check["ok"] else 1
 
 
 if __name__ == "__main__":
