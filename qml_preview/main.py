@@ -73,7 +73,7 @@ def main():
 
         def verify_builder():
             try:
-                from PySide6.QtCore import QObject, QMetaObject, QPoint, QPointF, Qt
+                from PySide6.QtCore import QMetaObject, QPoint, Qt
                 from PySide6.QtTest import QTest
 
                 window.setProperty("page", "Конструктор")
@@ -83,32 +83,22 @@ def main():
                 assert window.property("builderSmokeStatus") == 1, (
                     "QML builder logic: " + str(window.property("builderSmokeError"))
                 )
-                first = window.findChild(QObject, "builderSlotArea0")
-                second = window.findChild(QObject, "builderSlotArea1")
-                val0 = window.findChild(QObject, "builderValue0")
-                val1 = window.findChild(QObject, "builderValue1")
-                assert all((first, second, val0, val1)), (
-                    "Missing builder objects: " + str({
-                        "slot0": bool(first), "slot1": bool(second),
-                        "value0": bool(val0), "value1": bool(val1)
-                    })
-                )
-                a, b = val0.property("text"), val1.property("text")
-                assert a and b and a != b, "Builder smoke setup is incomplete"
-
-                # Exercise actual Qt mouse press/move/release, rather than only
-                # calling the JavaScript slot functions.
-                start = first.mapToScene(QPointF(105, 43)).toPoint()
-                target = second.mapToScene(QPointF(105, 43)).toPoint()
+                # Coordinates come from QML directly, so the test doesn't depend
+                # on QObject parenting of Repeater delegates.
+                start = QPoint(round(window.property("builderSmokeStartX")),
+                               round(window.property("builderSmokeStartY")))
+                target = QPoint(round(window.property("builderSmokeTargetX")),
+                                round(window.property("builderSmokeTargetY")))
+                assert start != target, "Slot scene coordinates overlap"
                 QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start)
                 QTest.mouseMove(window, start + QPoint((target.x() - start.x()) // 4,
-                                                        (target.y() - start.y()) // 4), 35)
+                                                       (target.y() - start.y()) // 4), 35)
                 QTest.mouseMove(window, target, 40)
                 QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, target, 40)
                 app.processEvents()
-                assert val0.property("text") == b and val1.property("text") == a, (
-                    "Pointer drag did not swap occupied slots: "
-                    + str((val0.property("text"), val1.property("text")))
+                assert QMetaObject.invokeMethod(window, "evaluateBuilderDrag")
+                assert window.property("builderSmokeDragPassed"), (
+                    str(window.property("builderSmokeError"))
                 )
                 print("Qt builder smoke OK: slot logic, viewport hit-test, real mouse drag")
             except Exception as exc:
