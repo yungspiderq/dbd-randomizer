@@ -1693,6 +1693,123 @@ ApplicationWindow {
                         }
 
                         Column {
+                            id: appearancePage
+                            visible: win.page === "Оформление"
+                            width: parent.width
+                            spacing: 18
+                            Text { text: "Персонализация интерфейса"; color: win.colors.text; font.pixelSize: 20; font.bold: true }
+                            Text {
+                                width: parent.width; wrapMode: Text.WordWrap
+                                text: "Цвет, масштаб и движение на твой вкус. Настройки меняются сразу и сохраняются после перезапуска."
+                                color: win.muted; font.pixelSize: 12
+                            }
+                            Text { text: "ЦВЕТОВЫЕ ТЕМЫ"; color: win.colors.text; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1 }
+                            Row {
+                                width: parent.width; spacing: 10
+                                Repeater {
+                                    model: [
+                                        {key:"crimson", title:"CRIMSON", note:"Оригинальный красный", accent:"#ea5753", background:"#171d26"},
+                                        {key:"frost", title:"FROST", note:"Холодный синий", accent:"#4298e5", background:"#172231"},
+                                        {key:"violet", title:"VIOLET", note:"Неоновый фиолетовый", accent:"#ad73dc", background:"#221d30"}
+                                    ]
+                                    Rectangle {
+                                        id: themeTile
+                                        property var item: modelData
+                                        property bool selected: backend.appearanceTheme === themeTile.item.key
+                                        width: (appearancePage.width - 20) / 3; height: 185
+                                        radius: 13
+                                        color: themeTile.item.background
+                                        border.width: selected ? 2 : 1
+                                        border.color: selected ? themeTile.item.accent : win.stroke
+                                        Behavior on border.color { ColorAnimation { duration: backend.animationsEnabled ? 190 : 0 } }
+                                        Rectangle {
+                                            x: 12; y: 13; width: parent.width - 24; height: 65
+                                            radius: 8; color: "#121923"
+                                            Rectangle { x: 10; y: 11; width: 19; height: 44; radius: 5; color: themeTile.item.accent }
+                                            Column {
+                                                x: 39; y: 12; spacing: 8
+                                                Rectangle { width: 60; height: 8; radius: 4; color: "#6b7b91" }
+                                                Rectangle { width: 80; height: 8; radius: 4; color: "#46586b" }
+                                                Rectangle { width: 51; height: 8; radius: 4; color: themeTile.item.accent }
+                                            }
+                                        }
+                                        Text { x: 12; y: 86; text: themeTile.item.title; font.pixelSize: 14; font.bold: true; color: "white" }
+                                        Text { x: 12; y: 110; text: themeTile.item.note; width: parent.width - 24; font.pixelSize: 10; color: "#b6c2d2"; elide: Text.ElideRight }
+                                        Rectangle {
+                                            x: 12; y: 140; width: parent.width - 24; height: 32
+                                            radius: 7; color: themeTile.selected ? themeTile.item.accent : "#344252"
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: themeTile.selected ? "ВЫБРАНО" : "ВЫБРАТЬ"
+                                                font.pixelSize: 11; font.bold: true; color: "white"
+                                            }
+                                        }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: backend.setAppearanceTheme(themeTile.item.key) }
+                                    }
+                                }
+                            }
+                            Rectangle { width: parent.width; height: 1; color: win.stroke }
+                            Text { text: "МАСШТАБ ОКНА"; font.pixelSize: 12; font.bold: true; color: win.colors.text; font.letterSpacing: 1 }
+                            Text {
+                                width: parent.width; wrapMode: Text.WordWrap
+                                text: "Увеличивает навигацию, карточки и содержимое вкладок. Минимальный размер окна тоже изменяется."
+                                color: win.muted; font.pixelSize: 11
+                            }
+                            Row {
+                                width: parent.width; spacing: 9
+                                Repeater {
+                                    model: [
+                                        {value:0.9, label:"90%"},
+                                        {value:1.0, label:"100%"},
+                                        {value:1.1, label:"110%"},
+                                        {value:1.2, label:"120%"}
+                                    ]
+                                    UiButton {
+                                        width: (appearancePage.width - 27) / 4
+                                        height: 41
+                                        label: modelData.label
+                                        primary: Math.abs(backend.appearanceScale - modelData.value) < 0.01
+                                        onClicked: backend.setAppearanceScale(modelData.value)
+                                    }
+                                }
+                            }
+                            Rectangle { width: parent.width; height: 1; color: win.stroke }
+                            Text { text: "АНИМАЦИИ"; font.pixelSize: 12; font.bold: true; color: win.colors.text; font.letterSpacing: 1 }
+                            Row {
+                                width: parent.width; spacing: 10
+                                UiButton {
+                                    width: (parent.width - 10) / 2
+                                    label: "ПЛАВНЫЕ ПЕРЕХОДЫ"
+                                    primary: backend.animationsEnabled
+                                    onClicked: backend.setAnimationsEnabled(true)
+                                }
+                                UiButton {
+                                    width: (parent.width - 10) / 2
+                                    label: "БЕЗ АНИМАЦИЙ"
+                                    primary: !backend.animationsEnabled
+                                    onClicked: backend.setAnimationsEnabled(false)
+                                }
+                            }
+                            Text {
+                                width: parent.width; wrapMode: Text.WordWrap
+                                text: "Можно отключить движение в меню и карточках, сохранив все функции рандомизатора."
+                                font.pixelSize: 11; color: win.muted
+                            }
+                            Row {
+                                width: parent.width; spacing: 10
+                                UiButton {
+                                    width: (parent.width - 10) / 2; label: "СБРОСИТЬ ОФОРМЛЕНИЕ"
+                                    onClicked: appearanceReset.open()
+                                }
+                                UiButton {
+                                    width: (parent.width - 10) / 2; primary: true
+                                    label: "К ГЕНЕРАТОРУ"
+                                    onClicked: win.page = "Билд"
+                                }
+                            }
+                        }
+
+                        Column {
                             id: statsPage
                             visible: win.page === "Статистика"
                             width: parent.width
@@ -2637,6 +2754,36 @@ ApplicationWindow {
                         backend.deleteFavorite(deleteFavoriteDialog.favoriteId);
                         deleteFavoriteDialog.close();
                     }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: appearanceReset
+        parent: Overlay.overlay
+        x: Math.max(16, (win.width - width) / 2)
+        y: Math.max(40, (win.height - height) / 2)
+        width: Math.min(430, win.width - 40)
+        height: 200
+        focus: true; modal: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle { color: win.colors.panel; radius: 14; border.color: win.stroke }
+        contentItem: Column {
+            padding: 14; spacing: 16
+            Text { text: "СБРОС ОФОРМЛЕНИЯ"; font.pixelSize: 16; font.bold: true; color: win.colors.text }
+            Text {
+                width: appearanceReset.width - 34; wrapMode: Text.WordWrap
+                text: "Вернуть красную тему, 100% масштаб и плавные анимации? Игровые настройки не изменятся."
+                color: win.muted; font.pixelSize: 12
+            }
+            Row {
+                width: appearanceReset.width - 34; spacing: 9
+                UiButton { width: (parent.width - 9) / 2; height: 36; label: "ОТМЕНА"; onClicked: appearanceReset.close() }
+                UiButton {
+                    width: (parent.width - 9) / 2; height: 36
+                    label: "СБРОСИТЬ"; primary: true
+                    onClicked: { backend.resetAppearance(); appearanceReset.close() }
                 }
             }
         }
