@@ -478,7 +478,7 @@ class QtBackendTests(unittest.TestCase):
         self.assertFalse(self.bridge.buildCustom("SURVIVOR", "invalid survivor", "", "", "", *perks))
 
     def test_future_updates_use_explicit_semver(self):
-        self.assertLess(qt_updater._key("v2.28.0-qt-beta.13"), qt_updater._key("v2.28.0-qt-beta.14"))
+        self.assertLess(qt_updater._key("v2.28.0-qt-beta.14"), qt_updater._key("v2.28.0-qt-beta.15"))
         self.assertIsNone(qt_updater._key("v2.28.0"))
         with self.assertRaises(ValueError):
             qt_updater._get("https://attacker.example/test")
