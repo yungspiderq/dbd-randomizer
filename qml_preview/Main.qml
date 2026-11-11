@@ -1403,7 +1403,7 @@ ApplicationWindow {
                                 font.bold: true
                             }
                             Text {
-                                text: "Выпадения из всех генераций с Qt Beta 9, в обоих режимах. Ранее сохранённая история ротации сюда не подмешивается."
+                                text: "Графики по персонажам, навыкам и аддонам в обоих режимах. Выбирай период для сравнения выпадений."
                                 width: parent.width
                                 wrapMode: Text.Wrap
                                 font.pixelSize: 11
@@ -1424,6 +1424,35 @@ ApplicationWindow {
                                     primary: backend.statisticsSide === "KILLER"
                                     onClicked: backend.setStatisticsSide("KILLER")
                                 }
+                            }
+                            Text { text: "ПЕРИОД СТАТИСТИКИ"; color: "#cad6e4"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
+                            Row {
+                                width: parent.width
+                                spacing: 7
+                                Repeater {
+                                    model: [
+                                        {days:0, label:"ВСЁ ВРЕМЯ"},
+                                        {days:1, label:"СЕГОДНЯ"},
+                                        {days:7, label:"7 ДНЕЙ"},
+                                        {days:30, label:"30 ДНЕЙ"}
+                                    ]
+                                    UiButton {
+                                        width: (parent.width - 21) / 4
+                                        height: 37
+                                        label: modelData.label
+                                        primary: backend.statisticsPeriod === modelData.days
+                                        onClicked: backend.setStatisticsPeriod(modelData.days)
+                                    }
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                text: backend.statisticsPeriod === 0 ?
+                                    "Полные счётчики с Beta 9. Ротация ведёт собственную историю отдельно." :
+                                    "Данные по датам собираются с Beta 10; более ранние генерации в периодные графики не входят."
+                                font.pixelSize: 10
+                                color: "#a5b2c4"
+                                wrapMode: Text.Wrap
                             }
                             GridLayout {
                                 width: parent.width
@@ -1522,7 +1551,7 @@ ApplicationWindow {
                                     anchors.centerIn: parent
                                     spacing: 7
                                     Text { text: "ПОКА НЕТ ГЕНЕРАЦИЙ"; font.pixelSize: 13; font.bold: true; color: "#e9edf3"; anchors.horizontalCenter: parent.horizontalCenter }
-                                    Text { text: "Сгенерируй первый билд — здесь появятся графики и история."; font.pixelSize: 11; color: "#9baabb"; anchors.horizontalCenter: parent.horizontalCenter }
+                                    Text { text: "Нет данных за выбранный период. Сгенерируй билд или переключи период."; font.pixelSize: 11; color: "#9baabb"; anchors.horizontalCenter: parent.horizontalCenter }
                                 }
                             }
                             Row {
@@ -1589,7 +1618,7 @@ ApplicationWindow {
                                     anchors.margins: 12
                                     spacing: 10
                                     Text { text: "ДАВНО НЕ ВЫПАДАЛИ"; font.pixelSize: 12; font.bold: true; color: "#e5ecf6" }
-                                    Text { text: "Только ранее встречавшиеся · количество действий с последнего выпадения"; font.pixelSize: 10; color: "#94a4b9" }
+                                    Text { text: "За всё время · количество действий с последнего выпадения"; font.pixelSize: 10; color: "#94a4b9" }
                                     Repeater {
                                         model: statsPage.stat.stale.slice(0, 5)
                                         Rectangle {
@@ -1633,7 +1662,7 @@ ApplicationWindow {
                                     anchors.margins: 12
                                     spacing: 10
                                     Text { text: "ИСТОРИЯ ВЫПАДЕНИЙ"; color: "#e5edf5"; font.pixelSize: 12; font.bold: true }
-                                    Text { text: "Последние 100 событий сохраняются после перезапуска"; color: "#92a4b7"; font.pixelSize: 10 }
+                                    Text { text: "Хранятся последние 100 событий, показаны до 28 за выбранный период"; color: "#92a4b7"; font.pixelSize: 10 }
                                     ListView {
                                         id: statsHistory
                                         width: recentCard.width - 24
