@@ -98,7 +98,7 @@ def main():
                 app.processEvents()
                 assert QMetaObject.invokeMethod(window, "evaluateBuilderDrag")
                 assert window.property("builderSmokeDragPassed"), (
-                    str(window.property("builderSmokeError"))
+                    str(window.property("builderSmokeError")) + " | events=" + str(window.property("builderSmokeTrace"))
                 )
                 print("Qt builder smoke OK: slot logic, viewport hit-test, real mouse drag")
             except Exception as exc:
