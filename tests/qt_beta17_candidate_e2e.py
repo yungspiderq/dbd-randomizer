@@ -101,7 +101,7 @@ def run(previous: Path, candidate: Path) -> None:
         assert retained["publish"]["nickname"] == "PERSIST-BETA16-TO-17"
         assert retained["options"]["side"] == "KILLER"
         assert retained["coords"]["slot1"]["x"] == "425"
-        print("PASS: real Beta16 portable → candidate Beta17 portable; both EXEs launched, "
+        print("PASS: real Beta16 portable -> candidate Beta17 portable; both EXEs launched, "
               "PowerShell install replaced both EXE/runtime, and settings survived", flush=True)
 
 
