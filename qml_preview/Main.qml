@@ -74,9 +74,9 @@ ApplicationWindow {
         width: pixels
         height: pixels
         radius: 10
-        color: "#252e39"
+        color: win.colors.button
         border.width: 1
-        border.color: "#435065"
+        border.color: win.colors.stroke
         clip: true
         Image {
             id: portrait
@@ -257,7 +257,8 @@ ApplicationWindow {
         property string keyName: ""
         height: 47
         width: parent.width
-        color: pointer.containsMouse ? "#232a35" : "transparent"
+        color: pointer.containsMouse ? win.colors.buttonHover : "transparent"
+        Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 130 : 0 } }
         radius: 8
         Text {
             x: 12
@@ -754,16 +755,18 @@ ApplicationWindow {
                                         radius: 14
                                         color: win.colors.panel
                                         border.width: 1
-                                        border.color: card.perkInfo.locked ? "#d6a667" : cardHover.containsMouse ? win.colors.stroke : win.colors.stroke
+                                        border.color: card.perkInfo.locked ? win.colors.accentSoft :
+                                                      cardHover.containsMouse ? win.accent : win.colors.stroke
+                                        Behavior on border.color { ColorAnimation { duration: backend.animationsEnabled ? 160 : 0 } }
                                         clip: true
 
                                         Rectangle {
                                             width: 4; height: parent.height
-                                            color: card.perkInfo.locked ? "#efbf7e" : win.accent
+                                            color: card.perkInfo.locked ? win.colors.accentSoft : win.accent
                                         }
                                         Rectangle {
                                             x: 4; y: 0; width: parent.width - 4; height: 35
-                                            color: "#222d3a"
+                                            color: win.colors.button
                                         }
                                         Text {
                                             x: 15; y: 11
@@ -788,8 +791,8 @@ ApplicationWindow {
                                             y: 41
                                             width: 102; height: 93
                                             radius: 13
-                                            color: "#28323e"
-                                            border.color: "#404e60"
+                                            color: win.colors.button
+                                            border.color: win.colors.stroke
                                             Image {
                                                 id: perkIcon
                                                 anchors.fill: parent
@@ -1450,9 +1453,19 @@ ApplicationWindow {
                                                 id: skinRow
                                                 width: skinsList.width
                                                 height: 67
-                                                radius: 9
-                                                color: skinPage.previewSkin && skinPage.previewSkin.id === modelData.id ? "#323140" : win.colors.panel
+                                                radius: 11
+                                                color: skinPage.previewSkin && skinPage.previewSkin.id === modelData.id
+                                                       ? win.colors.navActive
+                                                       : skinHover.containsMouse ? win.colors.buttonHover : win.colors.panel
                                                 border.color: skinPage.previewSkin && skinPage.previewSkin.id === modelData.id ? win.accent : win.colors.stroke
+                                                Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 150 : 0 } }
+                                                Behavior on border.color { ColorAnimation { duration: backend.animationsEnabled ? 150 : 0 } }
+                                                Rectangle {
+                                                    x: 0; y: 8; width: 3; height: parent.height - 16
+                                                    radius: 2
+                                                    visible: skinPage.previewSkin && skinPage.previewSkin.id === modelData.id
+                                                    color: win.accent
+                                                }
                                                 ArtThumb {
                                                     x: 7; y: 6; pixels: 55
                                                     iconKey: "skin:" + modelData.id
@@ -1633,7 +1646,10 @@ ApplicationWindow {
                                     height: 172
                                     radius: 13
                                     color: win.colors.panel
-                                    border.color: win.colors.stroke
+                                    border.color: favoriteHover.hovered ? win.accent : win.colors.stroke
+                                    Behavior on border.color { ColorAnimation { duration: backend.animationsEnabled ? 140 : 0 } }
+                                    HoverHandler { id: favoriteHover }
+                                    Rectangle { x: 0; y: 10; width: 3; height: parent.height - 20; radius: 2; color: win.accent }
                                     ArtThumb {
                                         x: 12
                                         y: 14
