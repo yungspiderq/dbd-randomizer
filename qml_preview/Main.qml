@@ -23,7 +23,6 @@ ApplicationWindow {
     property string builderSmokeExpectedA: ""
     property string builderSmokeExpectedB: ""
     property bool builderSmokeDragPassed: false
-    property string builderSmokeTrace: ""
     property real builderSmokeCatalogX: 0
     property real builderSmokeCatalogY: 0
     property real builderSmokeCatalogTargetX: 0
@@ -1016,7 +1015,6 @@ ApplicationWindow {
                             }
                             function beginPerkDrag(name, fromSlot, source, localX, localY) {
                                 if (!name) return;
-                                win.builderSmokeTrace += "begin:" + fromSlot + ";";
                                 draggedPerkName = name;
                                 dragFromSlot = fromSlot;
                                 draggingPerk = true;
@@ -1030,7 +1028,6 @@ ApplicationWindow {
                             }
                             function finishPerkDrag() {
                                 if (!draggingPerk) return;
-                                win.builderSmokeTrace += "finish:" + hoverSlot + ";";
                                 var name = draggedPerkName;
                                 var from = dragFromSlot;
                                 var to = hoverSlot;
@@ -1304,11 +1301,9 @@ ApplicationWindow {
                                                             pressX = mouse.x;
                                                             pressY = mouse.y;
                                                             moved = false;
-                                                            win.builderSmokeTrace += "press:" + slotHolder.slotIndex + ";";
                                                             makerPage.perkSlot = slotHolder.slotIndex;
                                                         }
                                                         onPositionChanged: function(mouse) {
-                                                            win.builderSmokeTrace += "move:" + slotHolder.slotIndex + ":" + pressed + ";";
                                                             if (!pressed || !slotVisual.dragName) return;
                                                             if (!moved && Math.abs(mouse.x - pressX) + Math.abs(mouse.y - pressY) >= 10) {
                                                                 moved = true;
@@ -1318,7 +1313,6 @@ ApplicationWindow {
                                                             if (moved) makerPage.updatePerkPointer(slotDrag, mouse.x, mouse.y);
                                                         }
                                                         onReleased: function(mouse) {
-                                                            win.builderSmokeTrace += "release:" + slotHolder.slotIndex + ":" + moved + ";";
                                                             if (moved) {
                                                                 makerPage.updatePerkPointer(slotDrag, mouse.x, mouse.y);
                                                                 makerPage.finishPerkDrag();
@@ -3154,7 +3148,6 @@ ApplicationWindow {
 
     // QML state transitions exercised by CI without using game input.
     function runBuilderSmoke() {
-        builderSmokeTrace = "";
         builderSmokeStatus = 0;
         builderSmokeError = "";
         try {
