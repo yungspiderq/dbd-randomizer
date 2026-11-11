@@ -7,12 +7,15 @@ balanced mode and don't provide reliable chronology for previous versions.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, date, timedelta
+from collections import Counter
 
 SIDES = ("KILLER", "SURVIVOR")
 GROUPS = ("characters", "perks", "addons", "items")
 MAX_HISTORY = 100
 MAX_NAMES = 2400
+MAX_DAYS = 400
+PERIODS = (0, 1, 7, 30)
 
 
 def _valid_count(value):
@@ -35,7 +38,7 @@ def _new_side():
             "classic": 0, "balanced": 0,
             "groups": {name: {} for name in GROUPS},
             "last": {name: {} for name in GROUPS},
-            "recent": []}
+            "recent": [], "daily": {}}
 
 
 class BuildStatistics:
@@ -57,6 +60,25 @@ class BuildStatistics:
             for group in GROUPS:
                 dst["groups"][group] = _safe_group(src_groups.get(group))
                 dst["last"][group] = _safe_group(src_last.get(group))
+            src_daily = src.get("daily")
+            if isinstance(src_daily, dict):
+                for day, original in sorted(src_daily.items())[-MAX_DAYS:]:
+                    if not isinstance(day, str) or not isinstance(original, dict):
+                        continue
+                    try:
+                        if date.fromisoformat(day).isoformat() != day:
+                            continue
+                    except ValueError:
+                        continue
+                    bucket = self._new_daily()
+                    for k in ("generated", "classic", "balanced", "rerolls"):
+                        if _valid_count(original.get(k)):
+                            bucket[k] = original[k]
+                    source = original.get("groups")
+                    if isinstance(source, dict):
+                        for k in GROUPS:
+                            bucket["groups"][k] = _safe_group(source.get(k))
+                    dst["daily"][day] = bucket
             src_recent = src.get("recent")
             if isinstance(src_recent, list):
                 for entry in src_recent[:MAX_HISTORY]:
@@ -73,7 +95,44 @@ class BuildStatistics:
                         "addons": [s for s in entry.get("addons", [])[:2] if _valid_name(s)]
                                   if isinstance(entry.get("addons"), list) else [],
                         "time": str(entry.get("time", ""))[:25],
+                        "day": entry.get("day", "") if isinstance(entry.get("day"), str)
+                               and len(entry.get("day")) == 10 else "",
                     })
+
+    @staticmethod
+    def _new_daily():
+        return {"generated": 0, "classic": 0, "balanced": 0, "rerolls": 0,
+                "groups": {group: {} for group in GROUPS}}
+
+    def _bucket(self, side, on_date=None):
+        if on_date is None:
+            day = datetime.now().astimezone().date().isoformat()
+        else:
+            day = on_date.isoformat() if isinstance(on_date, date) else str(on_date)
+            date.fromisoformat(day)
+        daily = self._data[side]["daily"]
+        if day not in daily:
+            if len(daily) >= MAX_DAYS:
+                del daily[sorted(daily)[0]]
+            daily[day] = self._new_daily()
+        return day, daily[day]
+
+    @staticmethod
+    def _daily_add(bucket, group, names):
+        counts = bucket["groups"][group]
+        for name in names:
+            if _valid_name(name) and (name in counts or len(counts) < MAX_NAMES):
+                counts[name] = min(10_000_000, counts.get(name, 0) + 1)
+
+    def _days(self, side, days, today=None):
+        if days not in PERIODS or days == 0:
+            raise ValueError("Invalid nonzero period")
+        end = today or datetime.now().astimezone().date()
+        if isinstance(end, str):
+            end = date.fromisoformat(end)
+        start = end - timedelta(days=days - 1)
+        return [b for key, b in self._data[side]["daily"].items()
+                if start <= date.fromisoformat(key) <= end]
 
     def _add(self, side, group, names):
         state = self._data[side]
