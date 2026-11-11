@@ -33,6 +33,15 @@ def _safe_group(data):
             if _valid_name(name) and _valid_count(count) and count > 0}
 
 
+def _parse_day(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def _new_side():
     return {"generated": 0, "rerolls": 0, "serial": 0,
             "classic": 0, "balanced": 0,
@@ -288,7 +297,8 @@ class BuildStatistics:
             end = date.fromisoformat(end)
         start = end - timedelta(days=days - 1)
         return [dict(row) for row in self._data[side]["recent"]
-                if row.get("day") and start <= date.fromisoformat(row["day"]) <= end][:count]
+                if _parse_day(row.get("day")) is not None
+                and start <= _parse_day(row["day"]) <= end][:count]
 
     def recent(self, side, count=30):
         return [dict(row) for row in self._data[side]["recent"][:count]]
