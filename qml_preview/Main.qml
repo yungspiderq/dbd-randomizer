@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt Beta 14"
+    title: "DBD Ultimate Search Randomizer | Qt Beta 15"
     property string page: "Билд"
     property color surface: colors.surface
     property color stroke: colors.stroke
@@ -325,7 +325,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 14"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 15"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -967,6 +967,44 @@ ApplicationWindow {
                             property string makerSide: "SURVIVOR"
                             property int perkSlot: 0
                             property int addonSlot: 0
+                            property string perkFilter: "all"
+                            property int hoverSlot: -1
+                            function perkFields() {
+                                return [makerPerk1, makerPerk2, makerPerk3, makerPerk4];
+                            }
+                            function perkNameAt(i) {
+                                var fields = perkFields();
+                                return i >= 0 && i < 4 ? fields[i].text : "";
+                            }
+                            function clearPerk(i) {
+                                if (i < 0 || i >= 4) return;
+                                perkFields()[i].text = "";
+                                perkSlot = i;
+                            }
+                            // Moving a chosen perk swaps destinations instead of duplicating it.
+                            function assignPerk(name, target) {
+                                if (!name || target < 0 || target >= 4) return;
+                                var fields = perkFields();
+                                var from = -1;
+                                for (var i = 0; i < 4; i++) {
+                                    if (fields[i].text === name) { from = i; break; }
+                                }
+                                if (from === target) { perkSlot = target; return; }
+                                var displaced = fields[target].text;
+                                fields[target].text = name;
+                                if (from >= 0) fields[from].text = displaced;
+                                perkSlot = target;
+                            }
+                            function movePerk(from, to) {
+                                if (from < 0 || from >= 4 || to < 0 || to >= 4 || from === to) return;
+                                var fields = perkFields();
+                                var moving = fields[from].text;
+                                if (!moving) return;
+                                var displaced = fields[to].text;
+                                fields[to].text = moving;
+                                fields[from].text = displaced;
+                                perkSlot = to;
+                            }
                             function changeSide(side) {
                                 if (makerSide === side) return;
                                 makerSide = side;
@@ -981,26 +1019,22 @@ ApplicationWindow {
                                 perkSearch.text = "";
                                 addonSearch.text = "";
                                 perkSlot = 0;
+                                perkFilter = "all";
+                                hoverSlot = -1;
                                 addonSlot = 0;
                             }
                             function pickPerk(name) {
-                                var fields = [makerPerk1, makerPerk2, makerPerk3, makerPerk4];
+                                var fields = perkFields();
                                 for (var i = 0; i < 4; i++) {
-                                    if (fields[i].text === name) {
-                                        perkSlot = i;
-                                        return;
-                                    }
+                                    if (fields[i].text === name) { perkSlot = i; return; }
                                 }
-                                fields[perkSlot].text = name;
-                                var next = (perkSlot + 1) % 4;
+                                var target = perkSlot;
+                                assignPerk(name, target);
+                                var next = (target + 1) % 4;
                                 for (var j = 0; j < 4; j++) {
                                     var slot = (next + j) % 4;
-                                    if (!fields[slot].text) {
-                                        perkSlot = slot;
-                                        return;
-                                    }
+                                    if (!fields[slot].text) { perkSlot = slot; return; }
                                 }
-                                perkSlot = next;
                             }
                             function pickAddon(name) {
                                 if (makerAddon1.text === name) { addonSlot = 0; return; }
@@ -1011,7 +1045,7 @@ ApplicationWindow {
                             }
                             Text { text: "Визуальный конструктор билдов"; color: "#f0f3f8"; font.pixelSize: 18; font.bold: true }
                             Text {
-                                text: "Выбирай настоящие навыки, аддоны и персонажей из базы — больше не нужно вводить названия вручную."
+                                text: "Нажми на навык для добавления или перетащи его в слот. Навыки в слотах можно переставлять перетаскиванием."
                                 width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 11; color: win.muted
                             }
                             Row {
@@ -1129,64 +1163,222 @@ ApplicationWindow {
                                 }
                             }
                             Rectangle {
-                                width: parent.width; height: 455; radius: 13; color: win.surface; border.color: win.stroke
+                                width: parent.width; height: 630; radius: 13
+                                color: win.surface; border.color: win.stroke
                                 Column {
                                     anchors.fill: parent; anchors.margins: 13; spacing: 8
-                                    Text { text: "03 · ЧЕТЫРЕ НАВЫКА"; font.pixelSize: 11; font.bold: true; color: win.colors.muted }
-                                    Row {
-                                        width: parent.width; spacing: 8
-                                        UiField { id: makerPerk1; width: (parent.width - 8) / 2; placeholderText: "Навык 1" }
-                                        UiField { id: makerPerk2; width: (parent.width - 8) / 2; placeholderText: "Навык 2" }
+                                    Text {
+                                        text: "03 · ЧЕТЫРЕ НАВЫКА · ПЕРЕТАСКИВАНИЕ"
+                                        font.pixelSize: 11; font.bold: true; color: win.colors.muted
                                     }
-                                    Row {
-                                        width: parent.width; spacing: 8
-                                        UiField { id: makerPerk3; width: (parent.width - 8) / 2; placeholderText: "Навык 3" }
-                                        UiField { id: makerPerk4; width: (parent.width - 8) / 2; placeholderText: "Навык 4" }
+                                    // Backing fields preserve the strict buildCustom validation contract.
+                                    Item {
+                                        width: 1; height: 0; visible: false
+                                        UiField { id: makerPerk1 }
+                                        UiField { id: makerPerk2 }
+                                        UiField { id: makerPerk3 }
+                                        UiField { id: makerPerk4 }
                                     }
-                                    Row {
-                                        width: parent.width; spacing: 6
+                                    Grid {
+                                        id: makerSlots
+                                        width: parent.width; height: 188
+                                        columns: 2; spacing: 8
                                         Repeater {
                                             model: 4
-                                            UiButton {
-                                                width: (parent.width - 18) / 4
-                                                height: 32
-                                                label: "СЛОТ " + (index + 1)
-                                                primary: makerPage.perkSlot === index
-                                                onClicked: makerPage.perkSlot = index
+                                            delegate: Item {
+                                                id: slotHolder
+                                                property int slotIndex: index
+                                                width: (makerSlots.width - 8) / 2; height: 90
+                                                DropArea {
+                                                    id: slotDrop
+                                                    anchors.fill: parent
+                                                    keys: ["dbd-builder-catalog", "dbd-builder-slot"]
+                                                    onEntered: makerPage.hoverSlot = slotHolder.slotIndex
+                                                    onExited: {
+                                                        if (makerPage.hoverSlot === slotHolder.slotIndex)
+                                                            makerPage.hoverSlot = -1;
+                                                    }
+                                                }
+                                                Rectangle {
+                                                    id: slotVisual
+                                                    x: 0; y: 0
+                                                    width: slotHolder.width; height: slotHolder.height
+                                                    property string dragName: makerPage.perkNameAt(slotHolder.slotIndex)
+                                                    property int dragSlot: slotHolder.slotIndex
+                                                    z: slotDrag.drag.active ? 50 : 0
+                                                    radius: 10
+                                                    color: slotDrop.containsDrag ? win.colors.navActive :
+                                                        (makerPage.perkSlot === slotHolder.slotIndex ? win.colors.buttonHover : win.colors.panel)
+                                                    border.width: 1
+                                                    border.color: slotDrop.containsDrag || makerPage.perkSlot === slotHolder.slotIndex
+                                                        ? win.accent : win.colors.stroke
+                                                    Drag.active: slotDrag.drag.active && dragName.length > 0
+                                                    Drag.source: slotVisual
+                                                    Drag.keys: ["dbd-builder-slot"]
+                                                    Drag.hotSpot.x: width / 2
+                                                    Drag.hotSpot.y: height / 2
+                                                    ArtThumb {
+                                                        x: 8; y: 25; pixels: 52
+                                                        iconKey: slotVisual.dragName
+                                                        placeholder: "0" + (slotHolder.slotIndex + 1)
+                                                    }
+                                                    Text {
+                                                        x: 8; y: 5
+                                                        text: "СЛОТ 0" + (slotHolder.slotIndex + 1)
+                                                        font.pixelSize: 10; font.bold: true; color: win.colors.muted
+                                                    }
+                                                    Text {
+                                                        x: 69; y: 33
+                                                        width: parent.width - 134
+                                                        text: slotVisual.dragName || "Перетащи навык сюда"
+                                                        elide: Text.ElideRight; font.pixelSize: 12
+                                                        color: slotVisual.dragName ? win.colors.text : win.colors.muted
+                                                    }
+                                                    MouseArea {
+                                                        id: slotDrag
+                                                        anchors.fill: parent
+                                                        cursorShape: slotVisual.dragName ? Qt.OpenHandCursor : Qt.PointingHandCursor
+                                                        drag.target: slotVisual.dragName ? slotVisual : null
+                                                        drag.threshold: 8
+                                                        property bool moved: false
+                                                        onPressed: {
+                                                            moved = false;
+                                                            makerPage.perkSlot = slotHolder.slotIndex;
+                                                        }
+                                                        onPositionChanged: { if (drag.active) moved = true; }
+                                                        onReleased: {
+                                                            if (moved && makerPage.hoverSlot >= 0)
+                                                                makerPage.movePerk(slotHolder.slotIndex, makerPage.hoverSlot);
+                                                            if (moved) Qt.callLater(function() { slotVisual.x = 0; slotVisual.y = 0; });
+                                                            makerPage.hoverSlot = -1;
+                                                            moved = false;
+                                                        }
+                                                        onCanceled: {
+                                                            Qt.callLater(function() { slotVisual.x = 0; slotVisual.y = 0; });
+                                                            makerPage.hoverSlot = -1;
+                                                            moved = false;
+                                                        }
+                                                    }
+                                                    UiButton {
+                                                        x: parent.width - 64; y: 30
+                                                        width: 56; height: 30
+                                                        label: "УБР."
+                                                        visible: !!slotVisual.dragName
+                                                        onClicked: makerPage.clearPerk(slotHolder.slotIndex)
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                     Text {
                                         width: parent.width
-                                        text: "Навыков выбрано: " +
-                                            [makerPerk1.text, makerPerk2.text, makerPerk3.text, makerPerk4.text].filter(Boolean).length +
+                                        text: "Выбрано: " + makerPage.perkFields().filter(function(f) { return !!f.text; }).length +
                                             " / 4 · повторные навыки не добавляются"
-                                        color: "#8fa1b4"; font.pixelSize: 10
+                                        color: win.colors.muted; font.pixelSize: 11
                                     }
-                                    UiField { id: perkSearch; width: parent.width; placeholderText: "Поиск навыков по названию..." }
+                                    Row {
+                                        width: parent.width; spacing: 6
+                                        Repeater {
+                                            model: [
+                                                {key:"all", label:"ВСЕ"},
+                                                {key:"common", label:"ОБЩИЕ"},
+                                                {key:"unique", label:"УНИКАЛЬНЫЕ"},
+                                                {key:"character", label:"ПЕРСОНАЖА"}
+                                            ]
+                                            UiButton {
+                                                width: (parent.width - 18) / 4; height: 32
+                                                label: modelData.label
+                                                primary: makerPage.perkFilter === modelData.key
+                                                onClicked: makerPage.perkFilter = modelData.key
+                                            }
+                                        }
+                                    }
+                                    UiField {
+                                        id: perkSearch; width: parent.width
+                                        placeholderText: "Поиск по названию навыка или персонажу..."
+                                    }
+                                    Text {
+                                        width: parent.width
+                                        height: makerPage.perkFilter === "character" && !makerChar.text ? 17 : 0
+                                        visible: height > 0
+                                        color: win.colors.muted; font.pixelSize: 11
+                                        text: "Сначала выбери персонажа в блоке 01."
+                                    }
                                     ListView {
                                         id: makerPerks
-                                        width: parent.width; height: 205
-                                        spacing: 5; clip: true
-                                        model: backend.searchPerks(makerPage.makerSide, perkSearch.text)
-                                        delegate: Rectangle {
-                                            width: makerPerks.width; height: 48; radius: 8
-                                            color: perkPickHover.containsMouse ? "#303b49" : win.colors.panel
-                                            border.color: win.colors.stroke
-                                            ArtThumb { x: 5; y: 4; pixels: 40; iconKey: modelData.name; placeholder: "PERK" }
-                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 145; font.pixelSize: 12; elide: Text.ElideRight; color: win.colors.text }
-                                            Text {
-                                                text: "ВЫБРАН"
-                                                visible: [makerPerk1.text, makerPerk2.text, makerPerk3.text, makerPerk4.text].indexOf(modelData.name) >= 0
-                                                anchors.right: parent.right
-                                                anchors.rightMargin: 11
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                font.pixelSize: 10
-                                                font.bold: true
-                                                color: "#ed9f96"
+                                        width: parent.width; height: 218
+                                        spacing: 6; clip: true
+                                        model: backend.searchPerks(makerPage.makerSide, perkSearch.text,
+                                                                    makerPage.perkFilter, makerChar.text)
+                                        delegate: Item {
+                                            width: makerPerks.width; height: 56
+                                            Rectangle {
+                                                id: perkTile
+                                                x: 0; y: 0
+                                                width: parent.width; height: parent.height
+                                                property string dragName: modelData.name
+                                                property int dragSlot: -1
+                                                z: perkPickHover.drag.active ? 50 : 0
+                                                radius: 9
+                                                color: perkPickHover.containsMouse ? win.colors.buttonHover : win.colors.panel
+                                                border.width: 1
+                                                border.color: win.colors.stroke
+                                                Drag.active: perkPickHover.drag.active
+                                                Drag.source: perkTile
+                                                Drag.keys: ["dbd-builder-catalog"]
+                                                Drag.hotSpot.x: 28
+                                                Drag.hotSpot.y: 28
+                                                ArtThumb { x: 6; y: 5; pixels: 46; iconKey: modelData.name; placeholder: "PERK" }
+                                                Text {
+                                                    x: 61; y: 8; width: parent.width - 146
+                                                    text: modelData.name; color: win.colors.text
+                                                    elide: Text.ElideRight; font.pixelSize: 12; font.bold: true
+                                                }
+                                                Text {
+                                                    x: 61; y: 31; width: parent.width - 146
+                                                    text: modelData.owner || modelData.kind
+                                                    color: win.colors.muted; elide: Text.ElideRight; font.pixelSize: 10
+                                                }
+                                                Text {
+                                                    anchors.right: parent.right; anchors.rightMargin: 11
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    text: "ВЫБРАН"
+                                                    visible: makerPage.perkFields().some(function(f) {
+                                                        return f.text === modelData.name;
+                                                    })
+                                                    color: win.colors.accentSoft; font.pixelSize: 10; font.bold: true
+                                                }
+                                                MouseArea {
+                                                    id: perkPickHover
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    drag.target: perkTile
+                                                    drag.threshold: 8
+                                                    property bool moved: false
+                                                    onPressed: moved = false
+                                                    onPositionChanged: { if (drag.active) moved = true; }
+                                                    onClicked: makerPage.pickPerk(modelData.name)
+                                                    onReleased: {
+                                                        if (moved && makerPage.hoverSlot >= 0)
+                                                            makerPage.assignPerk(modelData.name, makerPage.hoverSlot);
+                                                        if (moved) Qt.callLater(function() { perkTile.x = 0; perkTile.y = 0; });
+                                                        makerPage.hoverSlot = -1;
+                                                        moved = false;
+                                                    }
+                                                    onCanceled: {
+                                                        Qt.callLater(function() { perkTile.x = 0; perkTile.y = 0; });
+                                                        makerPage.hoverSlot = -1;
+                                                        moved = false;
+                                                    }
+                                                }
                                             }
-                                            MouseArea { id: perkPickHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: makerPage.pickPerk(modelData.name) }
                                         }
+                                    }
+                                    Text {
+                                        visible: makerPerks.count === 0
+                                        text: "Навыки не найдены — измени фильтр или поисковый запрос."
+                                        font.pixelSize: 11; color: win.colors.muted
                                     }
                                 }
                             }
