@@ -29,7 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r qml_preview/requirements.txt pyinstaller
       - name: Python syntax check
-        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/stats_engine.py qml_preview/icon_queue.py qml_preview/perk_cards.py qml_preview/favorites.py qml_preview/build_icon.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
+        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/stats_engine.py qml_preview/icon_queue.py qml_preview/perk_cards.py qml_preview/favorites.py qml_preview/appearance.py qml_preview/build_icon.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
       - name: Targeted core generation checks
         run: |
           python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
@@ -38,7 +38,7 @@ jobs:
       - name: Native Qt backend regression tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m unittest qml_preview/test_favorites.py qml_preview/test_qt_updater.py qml_preview/test_rotation_engine.py qml_preview/test_icon_queue.py qml_preview/test_stats_engine.py qml_preview/test_perk_cards.py qml_preview/test_native_backend.py -v
+        run: python -m unittest qml_preview/test_appearance.py qml_preview/test_favorites.py qml_preview/test_qt_updater.py qml_preview/test_rotation_engine.py qml_preview/test_icon_queue.py qml_preview/test_stats_engine.py qml_preview/test_perk_cards.py qml_preview/test_native_backend.py -v
       - name: Generate icon files for Windows and QML
         run: |
           python qml_preview/build_icon.py
@@ -49,6 +49,8 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           python qml_preview/main.py --smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python qml_preview/main.py --smoke-appearance
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build Windows portable directory
         shell: pwsh
@@ -86,7 +88,7 @@ jobs:
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DBDRandomizerQtBeta12-Portable-Windows
+          name: DBDRandomizerQtBeta13-Portable-Windows
           path: |
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
@@ -96,9 +98,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.12"
+          $tag = "v2.28.0-qt-beta.13"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 12 — Favorites Library" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 13 — Appearance Update" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }
