@@ -69,6 +69,8 @@ class QtBridge(QObject):
         self._statistics = BuildStatistics(self.cfg["options"].get("statistics_v1"))
         self._statistics_side = self._role
         self._statistics_group = "characters"
+        self._statistics_period = 0
+        self._stats_population_cache = {}
         self._locks = [False] * 4
         self._build_revision = 0
         self._history = []
@@ -186,9 +188,29 @@ class QtBridge(QObject):
     def statisticsGroup(self):
         return self._statistics_group
 
+    @Property(int, notify=statisticsChanged)
+    def statisticsPeriod(self):
+        return self._statistics_period
+
+    @Slot(int)
+    def setStatisticsPeriod(self, days):
+        if days not in (0, 1, 7, 30):
+            return
+        if self._statistics_period != days:
+            self._statistics_period = days
+            self.statisticsChanged.emit()
+
     def _statistics_population(self):
         side = self._statistics_side
         group = self._statistics_group
+        key = (side, group)
+        if key in self._stats_population_cache:
+            return self._stats_population_cache[key]
+        result = self._build_statistics_population(side, group)
+        self._stats_population_cache[key] = result
+        return result
+
+    def _build_statistics_population(self, side, group):
         if group == "characters":
             return list(self.db["killers" if side == "KILLER" else "survivors"])
         if group == "perks":
@@ -210,14 +232,19 @@ class QtBridge(QObject):
         side = self._statistics_side
         pool = self._statistics_population()
         population = list(self.db["killers" if side == "KILLER" else "survivors"])
+        days = self._statistics_period
         return {
-            "overview": self._statistics.overview(side, population),
-            "top": self._statistics.summary(side, self._statistics_group, pool, limit=12, order="top"),
-            "least": self._statistics.summary(side, self._statistics_group, pool, limit=12, order="least"),
-            "stale": self._statistics.summary(side, self._statistics_group, pool, limit=12, order="stale"),
-            "recent": self._statistics.recent(side, 28),
+            "overview": self._statistics.overview_period(side, population, days),
+            "top": self._statistics.summary_period(side, self._statistics_group, pool,
+                                                    days=days, limit=12, order="top"),
+            "least": self._statistics.summary_period(side, self._statistics_group, pool,
+                                                      days=days, limit=12, order="least"),
+            "stale": self._statistics.summary(side, self._statistics_group, pool,
+                                               limit=12, order="stale"),
+            "recent": self._statistics.recent_period(side, days, 28),
             "group": self._statistics_group,
             "side": side,
+            "period": days,
             "sampleSize": len(pool)
         }
 
@@ -253,8 +280,10 @@ class QtBridge(QObject):
         view = self.statistics
         overview = view["overview"]
         labels = {"characters":"Персонажи", "perks":"Навыки", "addons":"Аддоны", "items":"Предметы"}
+        periods = {0: "Всё время", 1: "Сегодня", 7: "7 дней", 30: "30 дней"}
         lines = [
             "Статистика DBD Randomizer — " + ("Маньяки" if view["side"] == "KILLER" else "Выжившие"),
+            "Период: " + periods.get(view["period"], "Всё время"),
             "Генераций: " + str(overview["generated"]) + " (обычный " +
             str(overview["classic"]) + ", ротация " + str(overview["balanced"]) + ")",
             "Разных персонажей: " + str(overview["seen"]) + " / " + str(overview["total"]),
