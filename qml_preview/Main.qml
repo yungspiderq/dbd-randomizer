@@ -16,6 +16,13 @@ ApplicationWindow {
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
+    property real builderSmokeStartX: 0
+    property real builderSmokeStartY: 0
+    property real builderSmokeTargetX: 0
+    property real builderSmokeTargetY: 0
+    property string builderSmokeExpectedA: ""
+    property string builderSmokeExpectedB: ""
+    property bool builderSmokeDragPassed: false
     property color surface: colors.surface
     property color stroke: colors.stroke
     property color muted: colors.muted
@@ -3173,10 +3180,30 @@ ApplicationWindow {
                 throw new Error("Visible slot hit test failed");
             if (makerPage.slotFromPointer(-100, -100) !== -1)
                 throw new Error("Outside viewport must reject drop");
+            var secondSlot = makerSlotRepeater.itemAt(1);
+            if (!secondSlot) throw new Error("No second slot delegate");
+            var start = firstSlot.mapToItem(win.contentItem, 105, 43);
+            var target = secondSlot.mapToItem(win.contentItem, 105, 43);
+            builderSmokeStartX = start.x;
+            builderSmokeStartY = start.y;
+            builderSmokeTargetX = target.x;
+            builderSmokeTargetY = target.y;
+            builderSmokeExpectedA = a;
+            builderSmokeExpectedB = b;
             builderSmokeStatus = 1;
         } catch (e) {
             builderSmokeError = "" + e;
             builderSmokeStatus = -1;
+        }
+    }
+
+    function evaluateBuilderDrag() {
+        builderSmokeDragPassed =
+            makerPage.perkNameAt(0) === builderSmokeExpectedB &&
+            makerPage.perkNameAt(1) === builderSmokeExpectedA;
+        if (!builderSmokeDragPassed) {
+            builderSmokeError = "Pointer swap failed: " +
+                makerPage.perkNameAt(0) + " | " + makerPage.perkNameAt(1);
         }
     }
 
