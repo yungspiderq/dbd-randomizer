@@ -1375,11 +1375,16 @@ class QtBridge(QObject):
             return core.TIMING_DEFAULTS[k][0]
 
     def _sleep(self,seconds):
+        # A zero-second pause is still a cancellation checkpoint.
+        if self._stop.is_set():
+            raise core.AbortError()
         end=time.monotonic()+max(0.0,seconds)
         while time.monotonic()<end:
             if self._stop.is_set():
                 raise core.AbortError()
             time.sleep(min(0.04,max(0.0,end-time.monotonic())))
+        if self._stop.is_set():
+            raise core.AbortError()
 
     def _game_is_foreground(self):
         """Fail closed: only send input when the actual DBD window owns focus."""
@@ -1387,7 +1392,11 @@ class QtBridge(QObject):
             return False
         try:
             game = core.INPUT.find_game_window()
-            return bool(game and int(game[0]) == int(ctypes.windll.user32.GetForegroundWindow()))
+            if not game:
+                return False
+            get_foreground = ctypes.windll.user32.GetForegroundWindow
+            get_foreground.restype = ctypes.c_void_p  # HWND is pointer-sized on Win64
+            return int(game[0]) == int(get_foreground() or 0)
         except Exception:
             return False
 
