@@ -18,6 +18,56 @@ def mock_build(side="KILLER", char="Охотник", perks=None, addons=None, **
 
 
 class StatisticsTests(unittest.TestCase):
+    def test_today_week_month_filters_without_mixing_legacy_totals(self):
+        t = BuildStatistics()
+        t.record_build(mock_build(char="Охотник"), on_date="2026-11-01")
+        t.record_build(mock_build(char="Призрак"), balanced=True, on_date="2026-11-05")
+        t.record_build(mock_build(char="Охотник"), on_date="2026-11-10")
+        t.record_build(mock_build(char="Дух"), on_date="2026-11-11")
+        t.record_perk_reroll("KILLER", "Дух", "Переброшенный", on_date="2026-11-11")
+        population = ["Охотник", "Призрак", "Дух"]
+        all_time = t.overview_period("KILLER", population, 0)
+        today = t.overview_period("KILLER", population, 1, today="2026-11-11")
+        week = t.overview_period("KILLER", population, 7, today="2026-11-11")
+        month = t.overview_period("KILLER", population, 30, today="2026-11-11")
+        self.assertEqual(all_time["generated"], 4)
+        self.assertEqual(today["generated"], 1)
+        self.assertEqual(today["rerolls"], 1)
+        self.assertEqual(today["seen"], 1)
+        self.assertEqual(week["generated"], 3)
+        self.assertEqual(week["balanced"], 1)
+        self.assertEqual(month["generated"], 4)
+        recent = t.recent_period("KILLER", 1, today="2026-11-11")
+        self.assertEqual(len(recent), 2)
+        self.assertEqual(t.summary_period("KILLER", "characters", population,
+                                          days=1, today="2026-11-11", order="top")[0]["name"], "Дух")
+        self.assertEqual(t.summary_period("KILLER", "characters", population,
+                                          days=7, today="2026-11-11", order="least")[0]["count"], 1)
+
+    def test_daily_storage_preserves_old_statistics_and_reset(self):
+        t = BuildStatistics()
+        t.record_build(mock_build(), on_date="2026-11-11")
+        saved = t.serialize()
+        restored = BuildStatistics(saved)
+        self.assertEqual(restored.overview_period("KILLER", [], 1, today="2026-11-11")["generated"], 1)
+        old = BuildStatistics({"KILLER": {"generated": 14, "classic": 14,
+                               "groups": {"characters": {"Охотник": 14}}}})
+        self.assertEqual(old.overview("KILLER", ["Охотник"])["generated"], 14)
+        self.assertEqual(old.overview_period("KILLER", ["Охотник"], 1, today="2026-11-11")["generated"], 0)
+        old.record_build(mock_build(), on_date="2026-11-11")
+        self.assertEqual(old.overview("KILLER", ["Охотник"])["generated"], 15)
+        self.assertEqual(old.overview_period("KILLER", ["Охотник"], 1, today="2026-11-11")["generated"], 1)
+        old.reset("KILLER")
+        self.assertEqual(old.overview_period("KILLER", [], 1, today="2026-11-11")["generated"], 0)
+
+    def test_malformed_persisted_dates_do_not_crash_filters(self):
+        t = BuildStatistics({"KILLER":{"recent":[{"character":"Охотник", "day":"not-a-date"}],
+                                         "daily":{"2026-99-99":{"generated":20},
+                                                  "2026-11-11":{"generated":3}}}})
+        self.assertEqual(t.overview_period("KILLER", [], 1, today="2026-11-11")["generated"], 3)
+        self.assertEqual(t.recent_period("KILLER", 1, today="2026-11-11"), [])
+        self.assertEqual(t.recent("KILLER")[0]["character"], "Охотник")
+
     def test_empty_has_no_fake_history(self):
         t = BuildStatistics()
         o = t.overview("KILLER", ["Охотник", "Призрак"])
