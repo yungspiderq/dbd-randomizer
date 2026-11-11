@@ -66,7 +66,11 @@ def run(previous: Path, candidate: Path) -> None:
         staged = updater._unpack_verified(candidate, candidate_dir)
         candidate_exe_hash = sha256(staged / updater.APP_EXE)
         candidate_dll_hash = sha256(staged / "_internal" / "python312.dll")
-        assert candidate_exe_hash != sha256(previous_exe), "Same EXE before/after candidate update"
+        # PyInstaller bootloader bytes and python312.dll can stay unchanged
+        # across builds: check the visible QML version resource as well.
+        qml = (staged / "_internal" / "qml_preview" / "Main.qml").read_text(
+            encoding="utf-8")
+        assert "Qt Beta 17" in qml, "Candidate QML still advertises an old version"
 
         install_script = root / "apply_beta17.ps1"
         install_script.write_text(updater.UPGRADE_SCRIPT, encoding="utf-8-sig")
