@@ -62,7 +62,7 @@ class UpdaterTests(unittest.TestCase):
             self.assertTrue((unpacked / u.APP_EXE).is_file())
             self.assertTrue((unpacked / "_internal/python312.dll").is_file())
             self.assertEqual(config.read_text(encoding="utf-8"), '{"retain":true}')
-            self.assertEqual(unpacked.parent.parent, target.parent)
+            self.assertEqual(unpacked.parent.parent.resolve(), target.parent.resolve())
             self.assertFalse((unpacked.parent / u.ASSET).exists())
             shutil.rmtree(unpacked.parent)
 
