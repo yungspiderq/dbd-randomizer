@@ -129,7 +129,27 @@ def main():
                 assert window.property("builderSmokeDragPassed"), (
                     str(window.property("builderSmokeError")) + " | events=" + str(window.property("builderSmokeTrace"))
                 )
-                print("Qt builder smoke OK: slot logic, viewport hit-test, real mouse drag")
+                assert QMetaObject.invokeMethod(window, "captureBuilderCatalogDrag")
+                app.processEvents()
+                assert window.property("builderSmokeStatus") == 1, (
+                    "Builder catalog geometry: " + str(window.property("builderSmokeError"))
+                )
+                source = QPoint(round(window.property("builderSmokeCatalogX")),
+                                round(window.property("builderSmokeCatalogY")))
+                destination = QPoint(round(window.property("builderSmokeCatalogTargetX")),
+                                     round(window.property("builderSmokeCatalogTargetY")))
+                QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, source)
+                QTest.mouseMove(window, source + QPoint((destination.x() - source.x()) // 4,
+                                                        (destination.y() - source.y()) // 4), 35)
+                QTest.mouseMove(window, destination, 40)
+                QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, destination, 40)
+                app.processEvents()
+                assert QMetaObject.invokeMethod(window, "evaluateBuilderCatalogDrag")
+                assert window.property("builderSmokeCatalogPassed"), (
+                    "Catalog mouse drag: " + str(window.property("builderSmokeError")) +
+                    " | events=" + str(window.property("builderSmokeTrace"))
+                )
+                print("Qt builder smoke OK: slot swaps and catalog-to-slot mouse drag")
             except Exception as exc:
                 print("Qt builder smoke FAILED: " + repr(exc), file=sys.stderr)
                 appearance_check["ok"] = False
