@@ -403,6 +403,29 @@ class QtBackendTests(unittest.TestCase):
         self.assertFalse(matches("DeadByDaylight-Win64-Shipping.exe.log"))
         self.assertFalse(matches("DeadByDaylight Crash Reporter.exe"))
 
+    @unittest.skipUnless(sys.platform == "win32", "Win32 process API required")
+    def test_window_owner_executable_uses_real_pid_and_queryfullprocessimagename(self):
+        from unittest.mock import MagicMock
+        u32 = MagicMock()
+        k32 = MagicMock()
+        def pid_for_hwnd(_hwnd, pidptr):
+            core.ctypes.cast(
+                pidptr, core.ctypes.POINTER(core.ctypes.c_ulong)
+            ).contents.value = 4242
+            return 1
+        def process_name(_handle, _flags, buffer, _lengthptr):
+            buffer.value = r"C:\Games\DeadByDaylight-Win64-Shipping.exe"
+            return 1
+        u32.GetWindowThreadProcessId.side_effect = pid_for_hwnd
+        k32.OpenProcess.return_value = 12345
+        k32.QueryFullProcessImageNameW.side_effect = process_name
+        with patch.object(core.ctypes.windll, "user32", u32), \
+             patch.object(core.ctypes.windll, "kernel32", k32):
+            self.assertTrue(core.INPUT._is_game_executable(
+                core.INPUT._window_process_name(720)))
+        k32.OpenProcess.assert_called_once_with(0x1000, False, 4242)
+        k32.CloseHandle.assert_called_once_with(12345)
+
     @unittest.skipUnless(sys.platform == "win32", "Win32 user32 required")
     def test_foreground_process_match_ignores_window_caption(self):
         from unittest.mock import MagicMock
