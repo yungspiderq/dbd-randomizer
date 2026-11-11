@@ -2667,7 +2667,7 @@ ApplicationWindow {
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Text { text: "ОБНОВЛЕНИЯ"; color: "#d8dfe8"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
                         UiButton { width: parent.width; label: backend.updateBusy ? "ПОДОЖДИТЕ..." : "ПРОВЕРИТЬ ОБНОВЛЕНИЯ"; onClicked: backend.checkUpdate() }
-                        Text { width: parent.width; text: backend.updateText || "Версия v2.28.0-qt-beta.12"; wrapMode: Text.Wrap; color: win.muted; font.pixelSize: 11 }
+                        Text { width: parent.width; text: backend.updateText || ("Версия " + backend.installedVersion); wrapMode: Text.Wrap; color: win.muted; font.pixelSize: 11 }
                         UiButton { visible: backend.updateAvailable; width: parent.width; label: "СКАЧАТЬ И УСТАНОВИТЬ"; primary: true; onClicked: backend.installUpdate() }
 
                         Rectangle {
