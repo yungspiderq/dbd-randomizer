@@ -213,6 +213,57 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual(self.bridge.rotationStats["seen"], 1)
         self.assertTrue(self.bridge.rotationEnabled)
 
+    def test_favorites_save_restore_does_not_count_as_new_roll(self):
+        self.bridge.generate()
+        build = self.bridge.build
+        self.assertTrue(self.bridge.saveFavorite("Сильный билд", "Тестовая коллекция", "Заметка"))
+        self.assertEqual(self.bridge.favoriteCount, 1)
+        self.assertIn("favorite_builds_v1", self.cfg["options"])
+        ident = self.bridge.favorites[0]["id"]
+        self.bridge.setRotationEnabled(True)
+        self.bridge.generate()
+        before_stats = self.bridge.statistics["overview"]["generated"]
+        before_rotate = self.bridge.rotationStats["generated"]
+        self.bridge.setAllPerkLocks(True)
+        self.assertTrue(self.bridge.loadFavorite(ident))
+        self.assertEqual(self.bridge.build["perks"], build["perks"])
+        self.assertEqual(self.bridge.build["addons"], build["addons"])
+        self.assertEqual(self.bridge.lockedCount, 0)
+        self.assertEqual(self.bridge.statistics["overview"]["generated"], before_stats)
+        self.assertEqual(self.bridge.rotationStats["generated"], before_rotate)
+
+    def test_favorites_filter_edit_and_remove(self):
+        self.bridge.generate()
+        self.assertTrue(self.bridge.saveFavorite("Мои перки", "Сборки", "На ремонт"))
+        self.assertTrue(self.bridge.saveFavorite("Второй билд", "Проверка", "Что-то"))
+        self.assertEqual(self.bridge.favoriteCount, 2)
+        self.bridge.setFavoriteSearch("ремонт")
+        self.assertEqual(len(self.bridge.favorites), 1)
+        self.bridge.setFavoriteSearch("")
+        self.bridge.setFavoriteSide("KILLER")
+        self.assertEqual(len(self.bridge.favorites), 0)
+        self.bridge.setFavoriteSide("SURVIVOR")
+        self.assertEqual(len(self.bridge.favorites), 2)
+        self.bridge.setFavoriteCollection("Сборки")
+        self.assertEqual(len(self.bridge.favorites), 1)
+        ident = self.bridge.favorites[0]["id"]
+        self.assertTrue(self.bridge.editFavorite(ident, "Новое имя", "Любимые", "Описание"))
+        self.assertEqual(self.bridge.favoriteCollection, "Все коллекции")
+        self.assertTrue(self.bridge.deleteFavorite(ident))
+        self.assertEqual(self.bridge.favoriteCount, 1)
+        self.assertFalse(self.bridge.loadFavorite(ident))
+
+    def test_favorites_validation_rejects_missing_character_without_modifying_build(self):
+        self.bridge.generate()
+        self.assertTrue(self.bridge.saveFavorite("Для теста", "", ""))
+        ident = self.bridge.favorites[0]["id"]
+        original = self.bridge.build
+        import copy
+        self.bridge.db = copy.deepcopy(self.bridge.db)
+        del self.bridge.db["survivors"][original["char"]]
+        self.assertFalse(self.bridge.loadFavorite(ident))
+        self.assertIs(self.bridge.build, original)
+
     def test_lock_and_reroll(self):
         self.bridge.generate()
         self.bridge.toggleLock(0)
