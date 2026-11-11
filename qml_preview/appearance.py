@@ -46,7 +46,7 @@ THEMES = {
 def normalize(options=None):
     options = options if isinstance(options, dict) else {}
     theme = options.get("qt_theme", DEFAULT_THEME)
-    if theme not in THEMES:
+    if not isinstance(theme, str) or theme not in THEMES:
         theme = DEFAULT_THEME
     raw_scale = options.get("qt_scale", 1.0)
     if type(raw_scale) not in (float, int) or not math.isfinite(raw_scale):
