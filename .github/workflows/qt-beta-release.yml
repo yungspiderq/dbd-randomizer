@@ -2,7 +2,7 @@ name: Qt beta - verify, build and publish prerelease
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10"]
+    branches: ["preview/qml-redesign-2026-11-10", "feature/qt-beta15-build-creator"]
     paths: ["qml_preview/**", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
 
@@ -96,6 +96,7 @@ jobs:
             dist/DBDRandomizerQtBeta.zip.sha256
 
       - name: Publish or update GitHub prerelease
+        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
