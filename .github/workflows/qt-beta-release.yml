@@ -2,7 +2,7 @@ name: Qt beta - verify, build and publish prerelease
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-stability-phase1"]
+    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-stability-phase1", "fix/qt-automation-phase3"]
     paths: ["qml_preview/**", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
 

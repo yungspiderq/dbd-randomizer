@@ -5,6 +5,7 @@ backend handles state, persistence, background networking and game UI automation
 """
 from __future__ import annotations
 
+import ctypes
 import os
 import queue
 import random
@@ -1374,13 +1375,39 @@ class QtBridge(QObject):
             return core.TIMING_DEFAULTS[k][0]
 
     def _sleep(self,seconds):
+        # A zero-second pause is still a cancellation checkpoint.
+        if self._stop.is_set():
+            raise core.AbortError()
         end=time.monotonic()+max(0.0,seconds)
         while time.monotonic()<end:
             if self._stop.is_set():
                 raise core.AbortError()
             time.sleep(min(0.04,max(0.0,end-time.monotonic())))
+        if self._stop.is_set():
+            raise core.AbortError()
+
+    def _game_is_foreground(self):
+        """Fail closed: only send input when the actual DBD window owns focus."""
+        if sys.platform != "win32":
+            return False
+        try:
+            game = core.INPUT.find_game_window()
+            if not game:
+                return False
+            get_foreground = ctypes.windll.user32.GetForegroundWindow
+            get_foreground.restype = ctypes.c_void_p  # HWND is pointer-sized on Win64
+            return int(game[0]) == int(get_foreground() or 0)
+        except Exception:
+            return False
+
+    def _assert_input_ready(self):
+        if self._stop.is_set():
+            raise core.AbortError()
+        if not self._option("dry_run") and not self._game_is_foreground():
+            raise RuntimeError("Окно Dead by Daylight не активно — автоэкипировка остановлена.")
 
     def _click(self,coord,label):
+        self._assert_input_ready()
         if self._option("dry_run"):
             self._notify("DRY: клик "+label+" "+str(coord))
             return True
@@ -1390,12 +1417,14 @@ class QtBridge(QObject):
         if core.INPUT.click(coord[0],coord[1],**params):
             return True
         if self._option("hover_retry"):
+            self._assert_input_ready()
             params["steps"]=max(params["steps"],12)
             params["settle"]=max(params["settle"],0.25)
             return core.INPUT.click(coord[0],coord[1],**params)
         return False
 
     def _paste(self,text):
+        self._assert_input_ready()
         if self._option("dry_run"):
             self._notify("DRY: ввод "+text)
             return True
@@ -1410,6 +1439,10 @@ class QtBridge(QObject):
         idx=max(1,min(9,int(self._option("result_index") or 1)))
         step=int(self._timing("result_step"))
         dest=(result[0]+(idx-1)*step,result[1])
+        verify_ocr = bool(self._option("ocr_verify")) and not self._option("dry_run")
+        region = self._ocr_region() if verify_ocr else None
+        if verify_ocr and region is None:
+            raise ValueError("Включена OCR-проверка, но область OCR не настроена.")
         for attempt in range(1+int(self._timing("retries"))):
             self._sleep(0)
             if not self._click(search,"search"):
@@ -1425,15 +1458,20 @@ class QtBridge(QObject):
                         continue
                     self._sleep(0.08)
             if not self._option("dry_run"):
+                self._assert_input_ready()
                 core.INPUT.hotkey("ctrl","a")
                 self._sleep(0.03)
             if not self._paste(target):
                 continue
             self._sleep(self._timing("search_settle")*(1.6 if attempt else 1.0))
-            region=self._ocr_region()
-            if self._option("ocr_verify") and region and not self._option("dry_run"):
+            if verify_ocr:
+                self._assert_input_ready()
                 ocr=core.ocr_read(*region)
-                if ocr and core._norm(target) not in core._norm(ocr):
+                self._sleep(0)  # F9 may have been pressed during slow OCR
+                if not ocr:
+                    self._notify("OCR: текст не распознан для "+target)
+                    continue
+                if core._norm(target) not in core._norm(ocr):
                     self._notify("OCR: результат не совпал для "+target)
                     continue
             if not self._click(dest,"result"):
@@ -1503,11 +1541,16 @@ class QtBridge(QObject):
     def _automate(self,steps):
         try:
             for i in range(int(self._timing("countdown")),0,-1):
-                self._notify("Старт через "+str(i)+" сек. Стоп: F9")
+                self._notify("Старт через "+str(i)+" сек. Стоп: "+str(self._option("abort_key") or "F9").upper())
                 self._sleep(1)
             if not self._option("dry_run") and self._option("focus_game"):
                 ok,why=core.INPUT.focus_game()
                 self._notify("Фокус игры: "+str(why))
+                if not ok:
+                    raise RuntimeError("Не удалось активировать окно игры: "+str(why))
+            # Even if the focus command returned success, verify the foreground
+            # HWND. If the player Alt-Tabs later, every input is checked again.
+            self._assert_input_ready()
             for i,(key,name,label) in enumerate(steps,1):
                 self._sleep(0)
                 self._notify("Экипировка "+str(i)+"/"+str(len(steps))+": "+label+" / "+name)
@@ -1527,7 +1570,7 @@ class QtBridge(QObject):
                 # game equipped the item. Never cache an unverified screen state.
                 self.cfg.setdefault("last_equipped",{})[self.build["side"]]=None
                 self._save()
-            self._notify("Экипировка завершена. Проверьте результат в игре.")
+            self._notify("Команды отправлены. Подтвердите результат в игре; состояние не сохранено как проверенное.")
         except core.AbortError:
             self._notify("Автоматизация остановлена.")
             if not self._option("dry_run"):
