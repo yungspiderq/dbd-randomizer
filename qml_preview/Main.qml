@@ -209,7 +209,14 @@ ApplicationWindow {
             Layout.fillHeight: true
             color: "#11151c"
             border.color: "#202734"
-            Column {
+            Flickable {
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: sidebarContents.implicitHeight + 50
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                Column {
+                id: sidebarContents
                 x: 18
                 y: 25
                 width: parent.width - 36
@@ -248,6 +255,7 @@ ApplicationWindow {
                         Text { text: "QT ИНТЕРФЕЙС"; color: "#f2b2a7"; font.pixelSize: 10; font.weight: Font.Bold }
                         Text { text: "Оригинальные игровые данные\nи Qt-интерфейс"; color: "#c1b9bc"; font.pixelSize: 11 }
                     }
+                }
                 }
             }
         }
