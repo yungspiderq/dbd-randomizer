@@ -1,0 +1,45 @@
+name: Qt updater - real Beta 15 to Beta 16 upgrade
+
+on:
+  push:
+    branches: ["test/qt-release-upgrade-e2e", "preview/qml-redesign-2026-11-10"]
+    paths:
+      - ".github/workflows/qt-release-upgrade-e2e.yml"
+      - "tests/qt_release_upgrade_e2e.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  published-release-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout updater test
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download the actual published Beta 15 and Beta 16 portable ZIPs
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $old = Join-Path $env:RUNNER_TEMP 'dbd-published-beta15'
+          $new = Join-Path $env:RUNNER_TEMP 'dbd-published-beta16'
+          New-Item -ItemType Directory -Force -Path $old,$new | Out-Null
+          gh release download v2.28.0-qt-beta.15 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download the actual Beta 15 portable release" }
+          gh release download v2.28.0-qt-beta.16 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $new
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download the actual Beta 16 portable release" }
+          "OLD_ZIP=$old/DBDRandomizerQtBeta.zip" >> $env:GITHUB_ENV
+          "NEW_ZIP=$new/DBDRandomizerQtBeta.zip" >> $env:GITHUB_ENV
+      - name: Upgrade real published Beta 15 installation to Beta 16
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python tests/qt_release_upgrade_e2e.py --old-zip "$env:OLD_ZIP" --new-zip "$env:NEW_ZIP"
+          if ($LASTEXITCODE -ne 0) { throw "Release-to-release updater regression failed" }
