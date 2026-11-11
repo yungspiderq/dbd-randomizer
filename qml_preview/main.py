@@ -21,7 +21,7 @@ def main():
     # The native Windows style does not permit the customized QML controls.
     # Basic respects our fully custom buttons, fields, themes, and popups.
     QQuickStyle.setStyle("Basic")
-    app.setApplicationName("DBD Randomizer Qt Beta 14")
+    app.setApplicationName("DBD Randomizer Qt Beta 15")
     frozen = bool(getattr(sys, "frozen", False))
     packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
     icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
@@ -52,7 +52,7 @@ def main():
 
         def verify_catalogs():
             try:
-                pages = ("Персонажи", "Внешность", "Избранное", "Билд")
+                pages = ("Персонажи", "Внешность", "Избранное", "Конструктор", "Билд")
                 assert len(backend.characters) > 0, "The character catalog is empty"
                 for page in pages:
                     window.setProperty("page", page)
@@ -60,7 +60,7 @@ def main():
                     assert window.property("page") == page, (
                         "Qt failed to navigate to " + page
                     )
-                print("Qt catalog smoke OK: character, outfit, favorites and build pages")
+                print("Qt catalog smoke OK: character, outfit, favorites, builder and build pages")
             except Exception as exc:
                 print("Qt catalog smoke FAILED: " + repr(exc), file=sys.stderr)
                 appearance_check["ok"] = False
