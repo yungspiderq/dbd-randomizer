@@ -126,7 +126,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_newer_release_requires_portable_asset(self):
         base = {
-            "draft": False, "tag_name": "v2.28.0-qt-beta.13",
+            "draft": False, "tag_name": "v2.28.0-qt-beta.14",
             "name": "New Version",
             "html_url": "https://github.com/" + u.REPO + "/releases/tag/new",
             "assets": [
@@ -139,7 +139,7 @@ class UpdaterTests(unittest.TestCase):
             ]
         }
         latest = dict(base)
-        latest["tag_name"] = "v2.28.0-qt-beta.14"
+        latest["tag_name"] = "v2.28.0-qt-beta.15"
         latest["assets"] = [{"name": "DBDRandomizerQtBeta.exe", "size": 20000000}]
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([base, latest]).encode())):
