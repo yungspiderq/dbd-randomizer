@@ -413,59 +413,126 @@ class _Input:
         pdi.mouseUp()
         return landed
 
-    # -- фокус на окне игры ----------------------------------------------------
+    # -- распознавание настоящего процесса Dead by Daylight -------------------
+    @staticmethod
+    def _is_game_executable(path):
+        """Exact executable match; never mistake launcher/crash reporter for DBD."""
+        filename = str(path or "").replace("\\", "/").rsplit("/", 1)[-1].casefold()
+        return filename in {
+            "deadbydaylight-win64-shipping.exe",
+            "deadbydaylight-wingdk-shipping.exe",
+        }
+
+    def _window_process_name(self, hwnd):
+        """Read the executable image of the process owning a HWND (Windows API)."""
+        if os.name != "nt":
+            return ""
+        try:
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            user32.GetWindowThreadProcessId.argtypes = [
+                ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+            user32.GetWindowThreadProcessId.restype = ctypes.c_ulong
+            kernel32.OpenProcess.argtypes = [
+                ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+            kernel32.OpenProcess.restype = ctypes.c_void_p
+            kernel32.QueryFullProcessImageNameW.argtypes = [
+                ctypes.c_void_p, ctypes.c_ulong, ctypes.c_wchar_p,
+                ctypes.POINTER(ctypes.c_ulong)]
+            kernel32.QueryFullProcessImageNameW.restype = ctypes.c_int
+            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel32.CloseHandle.restype = ctypes.c_int
+
+            pid = ctypes.c_ulong(0)
+            if not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)) or not pid.value:
+                return ""
+            handle = kernel32.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return ""
+            try:
+                length = ctypes.c_ulong(32768)
+                buffer = ctypes.create_unicode_buffer(length.value)
+                if kernel32.QueryFullProcessImageNameW(
+                        handle, 0, buffer, ctypes.byref(length)):
+                    return buffer.value
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:
+            pass
+        return ""
+
+    def game_is_foreground(self):
+        """Require the focused process to be DBD; its window caption may vary."""
+        if os.name != "nt":
+            return False
+        try:
+            get_foreground = ctypes.windll.user32.GetForegroundWindow
+            get_foreground.argtypes = []
+            get_foreground.restype = ctypes.c_void_p
+            hwnd = get_foreground()
+            return bool(hwnd and self._is_game_executable(self._window_process_name(hwnd)))
+        except Exception:
+            return False
+
     def find_game_window(self, title_part="Dead by Daylight"):
-        """HWND окна игры (ищем по вхождению в заголовок). None, если не найдено."""
+        """Find a visible DBD HWND by exact executable, not by translated title.
+
+        The old title_part parameter is kept for compatibility, but window
+        titles can change across launchers, language versions and fullscreen.
+        """
         if os.name != "nt":
             return None
         user32 = ctypes.windll.user32
         user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
-        user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+        user32.GetWindowTextW.argtypes = [
+            ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+        user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
+        user32.IsWindowVisible.restype = ctypes.c_int
         found = []
         EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
         def _cb(hwnd, _lparam):
             if not user32.IsWindowVisible(hwnd):
                 return True
-            length = user32.GetWindowTextLengthW(hwnd)
-            if not length:
+            if not self._is_game_executable(self._window_process_name(hwnd)):
                 return True
-            buf = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buf, length + 1)
-            title = buf.value or ""
-            if title_part.lower() in title.lower():
-                found.append((hwnd, title))
-            return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            buffer = ctypes.create_unicode_buffer(length + 1)
+            if length:
+                user32.GetWindowTextW(hwnd, buffer, length + 1)
+            # EnumWindows lists topmost-first, so keep the first matching HWND.
+            found.append((hwnd, buffer.value or "Dead by Daylight"))
+            return False
 
         try:
             user32.EnumWindows(EnumProc(_cb), 0)
         except Exception:
             return None
-        if not found:
-            return None
-        # если окон несколько — берём то, что ближе к переднему плану
-        return found[0]
+        return found[0] if found else None
 
     def focus_game(self, title_part="Dead by Daylight"):
-        """Поднимает окно игры на передний план. Возвращает (ok, заголовок/причину)."""
+        """Bring the real DBD process window forward, then verify foreground."""
         if os.name != "nt":
             return False, "не Windows"
         hit = self.find_game_window(title_part)
         if not hit:
-            return False, f"окно «{title_part}» не найдено"
+            return False, ("Окно процесса DeadByDaylight-Win64-Shipping.exe "
+                           "не найдено (игра может быть закрыта)")
         hwnd, title = hit
         user32 = ctypes.windll.user32
         try:
-            if user32.IsIconic(hwnd):                     # свёрнуто — разворачиваем
-                user32.ShowWindow(hwnd, 9)                # SW_RESTORE
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
                 time.sleep(0.25)
             user32.BringWindowToTop(hwnd)
-            # SetForegroundWindow капризничает, если фокус у нашего окна:
-            # «отпускаем» его через ALT-трюк.
-            user32.keybd_event(0x12, 0, 0, 0)            # ALT down
-            user32.SetForegroundWindow(hwnd)
-            user32.keybd_event(0x12, 0, 2, 0)            # ALT up
+            user32.keybd_event(0x12, 0, 0, 0)  # ALT down
+            try:
+                user32.SetForegroundWindow(hwnd)
+            finally:
+                user32.keybd_event(0x12, 0, 2, 0)  # ALT up
             time.sleep(0.15)
+            if not self.game_is_foreground():
+                return False, "Windows не передала фокус процессу Dead by Daylight"
             return True, title
         except Exception as exc:
             return False, f"{title}: {exc}"
