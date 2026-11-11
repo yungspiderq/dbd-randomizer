@@ -1354,6 +1354,7 @@ ApplicationWindow {
                                     }
                                     ListView {
                                         id: makerPerks
+                                        objectName: "builderPerkList"
                                         width: parent.width; height: 218
                                         spacing: 6; clip: true
                                         model: backend.searchPerks(makerPage.makerSide, perkSearch.text,
@@ -1362,20 +1363,14 @@ ApplicationWindow {
                                             width: makerPerks.width; height: 56
                                             Rectangle {
                                                 id: perkTile
+                                                objectName: "builderPerkTile" + index
                                                 x: 0; y: 0
                                                 width: parent.width; height: parent.height
                                                 property string dragName: modelData.name
-                                                property int dragSlot: -1
-                                                z: perkPickHover.drag.active ? 50 : 0
                                                 radius: 9
                                                 color: perkPickHover.containsMouse ? win.colors.buttonHover : win.colors.panel
                                                 border.width: 1
                                                 border.color: win.colors.stroke
-                                                Drag.active: perkPickHover.drag.active
-                                                Drag.source: perkTile
-                                                Drag.keys: ["dbd-builder-catalog"]
-                                                Drag.hotSpot.x: 28
-                                                Drag.hotSpot.y: 28
                                                 ArtThumb { x: 6; y: 5; pixels: 46; iconKey: modelData.name; placeholder: "PERK" }
                                                 Text {
                                                     x: 61; y: 8; width: parent.width - 146
@@ -1398,27 +1393,36 @@ ApplicationWindow {
                                                 }
                                                 MouseArea {
                                                     id: perkPickHover
+                                                    objectName: "builderPerkArea" + index
                                                     anchors.fill: parent
                                                     hoverEnabled: true
+                                                    preventStealing: true
                                                     cursorShape: Qt.PointingHandCursor
-                                                    drag.target: perkTile
-                                                    drag.threshold: 8
+                                                    property real pressX: 0
+                                                    property real pressY: 0
                                                     property bool moved: false
-                                                    onPressed: moved = false
-                                                    onPositionChanged: { if (drag.active) moved = true; }
-                                                    onClicked: makerPage.pickPerk(modelData.name)
-                                                    onReleased: {
-                                                        if (moved && makerPage.hoverSlot >= 0)
-                                                            makerPage.assignPerk(modelData.name, makerPage.hoverSlot);
-                                                        if (moved) Qt.callLater(function() { perkTile.x = 0; perkTile.y = 0; });
-                                                        makerPage.hoverSlot = -1;
+                                                    onPressed: function(mouse) {
+                                                        pressX = mouse.x;
+                                                        pressY = mouse.y;
                                                         moved = false;
                                                     }
-                                                    onCanceled: {
-                                                        Qt.callLater(function() { perkTile.x = 0; perkTile.y = 0; });
-                                                        makerPage.hoverSlot = -1;
-                                                        moved = false;
+                                                    onPositionChanged: function(mouse) {
+                                                        if (!pressed) return;
+                                                        if (!moved && Math.abs(mouse.x - pressX) + Math.abs(mouse.y - pressY) >= 10) {
+                                                            moved = true;
+                                                            makerPage.beginPerkDrag(modelData.name, -1,
+                                                                perkPickHover, mouse.x, mouse.y);
+                                                        }
+                                                        if (moved) makerPage.updatePerkPointer(perkPickHover, mouse.x, mouse.y);
                                                     }
+                                                    onClicked: { if (!moved) makerPage.pickPerk(modelData.name); }
+                                                    onReleased: function(mouse) {
+                                                        if (moved) {
+                                                            makerPage.updatePerkPointer(perkPickHover, mouse.x, mouse.y);
+                                                            makerPage.finishPerkDrag();
+                                                        }
+                                                    }
+                                                    onCanceled: makerPage.cancelPerkDrag()
                                                 }
                                             }
                                         }
@@ -3094,6 +3098,73 @@ ApplicationWindow {
                     onClicked: { backend.resetAppearance(); appearanceReset.close() }
                 }
             }
+        }
+    }
+
+
+    // Preview stays above the clipped catalog and scrollable workspace.
+    // No MouseArea here: the actual source keeps pointer grab until release.
+    Item {
+        id: builderDragOverlay
+        anchors.fill: parent
+        z: 1000
+        visible: makerPage.visible && makerPage.draggingPerk
+        Rectangle {
+            x: Math.max(0, Math.min(parent.width - width,
+                                   makerPage.dragPointerX + 14))
+            y: Math.max(0, Math.min(parent.height - height,
+                                   makerPage.dragPointerY + 14))
+            width: 245
+            height: 56
+            radius: 10
+            color: win.colors.panel
+            border.color: win.accent
+            border.width: 2
+            opacity: 0.95
+            ArtThumb { x: 6; y: 5; pixels: 46; iconKey: makerPage.draggedPerkName; placeholder: "PERK" }
+            Text {
+                x: 61; anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - 70
+                text: makerPage.draggedPerkName
+                font.pixelSize: 12
+                color: win.colors.text
+                elide: Text.ElideRight
+            }
+        }
+    }
+
+    // QML state transitions exercised by CI without using game input.
+    function runBuilderSmoke() {
+        builderSmokeStatus = 0;
+        builderSmokeError = "";
+        try {
+            makerPage.changeSide("SURVIVOR");
+            var rows = backend.searchPerks("SURVIVOR", "");
+            if (rows.length < 4) throw new Error("Too few perks");
+            var a = rows[0].name, b = rows[1].name, c = rows[2].name;
+            makerPage.assignPerk(a, 0);
+            makerPage.assignPerk(b, 1);
+            makerPage.assignPerk(c, 2);
+            makerPage.movePerk(0, 1);
+            if (makerPage.perkNameAt(0) !== b || makerPage.perkNameAt(1) !== a)
+                throw new Error("Perk swap failed");
+            makerPage.assignPerk(a, 2);
+            if (makerPage.perkNameAt(2) !== a || makerPage.perkNameAt(1) !== c)
+                throw new Error("Move must swap, not duplicate");
+            makerPage.clearPerk(0);
+            if (makerPage.perkNameAt(0) !== "")
+                throw new Error("Clear slot failed");
+            makerPage.cancelPerkDrag();
+            if (makerPage.draggingPerk || makerPage.hoverSlot !== -1)
+                throw new Error("Drag cancellation failed");
+            makerPage.changeSide("KILLER");
+            if (makerPage.perkNameAt(1) !== "" || makerPage.perkNameAt(2) !== "")
+                throw new Error("Side change did not clear selected perks");
+            makerPage.changeSide("SURVIVOR");
+            builderSmokeStatus = 1;
+        } catch (e) {
+            builderSmokeError = "" + e;
+            builderSmokeStatus = -1;
         }
     }
 
