@@ -413,129 +413,34 @@ class _Input:
         pdi.mouseUp()
         return landed
 
-    # -- распознавание настоящего процесса Dead by Daylight -------------------
-    @staticmethod
-    def _is_game_executable(path):
-        """Exact executable match; never mistake launcher/crash reporter for DBD."""
-        filename = str(path or "").replace("\\", "/").rsplit("/", 1)[-1].casefold()
-        return filename in {
-            "deadbydaylight-win64-shipping.exe",
-            "deadbydaylight-wingdk-shipping.exe",
-        }
-
-    def _window_process_name(self, hwnd):
-        """Read the executable image of the process owning a HWND (Windows API)."""
+    # -- безопасная привязка к выбранному окну без поиска игры ---------------
+    def foreground_window(self):
+        """Foreground HWND; no executable or window-title checks."""
         if os.name != "nt":
-            return ""
+            return None
+        try:
+            api = ctypes.windll.user32.GetForegroundWindow
+            api.argtypes = []
+            api.restype = ctypes.c_void_p
+            return int(api() or 0) or None
+        except Exception:
+            return None
+
+    def is_own_window(self, hwnd):
+        """Reject the randomizer's own window as an input target."""
+        if os.name != "nt" or not hwnd:
+            return True
         try:
             user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
             user32.GetWindowThreadProcessId.argtypes = [
                 ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
             user32.GetWindowThreadProcessId.restype = ctypes.c_ulong
-            kernel32.OpenProcess.argtypes = [
-                ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
-            kernel32.OpenProcess.restype = ctypes.c_void_p
-            kernel32.QueryFullProcessImageNameW.argtypes = [
-                ctypes.c_void_p, ctypes.c_ulong, ctypes.c_wchar_p,
-                ctypes.POINTER(ctypes.c_ulong)]
-            kernel32.QueryFullProcessImageNameW.restype = ctypes.c_int
-            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
-            kernel32.CloseHandle.restype = ctypes.c_int
-
             pid = ctypes.c_ulong(0)
             if not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)) or not pid.value:
-                return ""
-            handle = kernel32.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
-            if not handle:
-                return ""
-            try:
-                length = ctypes.c_ulong(32768)
-                buffer = ctypes.create_unicode_buffer(length.value)
-                if kernel32.QueryFullProcessImageNameW(
-                        handle, 0, buffer, ctypes.byref(length)):
-                    return buffer.value
-            finally:
-                kernel32.CloseHandle(handle)
-        except Exception:
-            pass
-        return ""
-
-    def game_is_foreground(self):
-        """Require the focused process to be DBD; its window caption may vary."""
-        if os.name != "nt":
-            return False
-        try:
-            get_foreground = ctypes.windll.user32.GetForegroundWindow
-            get_foreground.argtypes = []
-            get_foreground.restype = ctypes.c_void_p
-            hwnd = get_foreground()
-            return bool(hwnd and self._is_game_executable(self._window_process_name(hwnd)))
-        except Exception:
-            return False
-
-    def find_game_window(self, title_part="Dead by Daylight"):
-        """Find a visible DBD HWND by exact executable, not by translated title.
-
-        The old title_part parameter is kept for compatibility, but window
-        titles can change across launchers, language versions and fullscreen.
-        """
-        if os.name != "nt":
-            return None
-        user32 = ctypes.windll.user32
-        user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
-        user32.GetWindowTextW.argtypes = [
-            ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
-        user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
-        user32.IsWindowVisible.restype = ctypes.c_int
-        found = []
-        EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-        def _cb(hwnd, _lparam):
-            if not user32.IsWindowVisible(hwnd):
                 return True
-            if not self._is_game_executable(self._window_process_name(hwnd)):
-                return True
-            length = user32.GetWindowTextLengthW(hwnd)
-            buffer = ctypes.create_unicode_buffer(length + 1)
-            if length:
-                user32.GetWindowTextW(hwnd, buffer, length + 1)
-            # EnumWindows lists topmost-first, so keep the first matching HWND.
-            found.append((hwnd, buffer.value or "Dead by Daylight"))
-            return False
-
-        try:
-            user32.EnumWindows(EnumProc(_cb), 0)
+            return pid.value == os.getpid()
         except Exception:
-            return None
-        return found[0] if found else None
-
-    def focus_game(self, title_part="Dead by Daylight"):
-        """Bring the real DBD process window forward, then verify foreground."""
-        if os.name != "nt":
-            return False, "не Windows"
-        hit = self.find_game_window(title_part)
-        if not hit:
-            return False, ("Окно процесса DeadByDaylight-Win64-Shipping.exe "
-                           "не найдено (игра может быть закрыта)")
-        hwnd, title = hit
-        user32 = ctypes.windll.user32
-        try:
-            if user32.IsIconic(hwnd):
-                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                time.sleep(0.25)
-            user32.BringWindowToTop(hwnd)
-            user32.keybd_event(0x12, 0, 0, 0)  # ALT down
-            try:
-                user32.SetForegroundWindow(hwnd)
-            finally:
-                user32.keybd_event(0x12, 0, 2, 0)  # ALT up
-            time.sleep(0.15)
-            if not self.game_is_foreground():
-                return False, "Windows не передала фокус процессу Dead by Daylight"
-            return True, title
-        except Exception as exc:
-            return False, f"{title}: {exc}"
+            return True
 
     def key(self, name, hold=0.02):
         if not self.available:
@@ -651,7 +556,6 @@ OPTION_DEFAULTS = {
     "class_enabled":   False,       # добавлять к билду случайный класс «2 против 8»
     "challenge_enabled": False,     # добавлять к билду случайный челендж
     "challenge_diff":  "any",       # any | easy | medium | hard — пул сложности
-    "focus_game":      True,        # поднимать окно игры на передний план перед стартом
     "hover_verify":    True,        # сверять фактическую позицию курсора с целевой
     "hover_retry":     True,        # повторно наводить, если курсор не долетел до слота
 }
@@ -3264,7 +3168,6 @@ class App:
         self._add_option(of, "use_clear_button", "Кликать «×» очистки перед поиском")
         self._add_option(of, "verify_clipboard", "Проверять буфер обмена перед вставкой")
         self._add_option(of, "restore_clipboard", "Восстанавливать буфер обмена после")
-        self._add_option(of, "focus_game", "Поднимать окно игры на передний план перед стартом")
         self._add_option(of, "hover_verify", "Сверять, что курсор реально встал на слот")
         self._add_option(of, "hover_retry", "Наводить заново, если курсор не долетел до слота")
         row = ttk.Frame(of)
@@ -4839,13 +4742,9 @@ class App:
                 self.ui_q.put(("progress", (countdown - i) / max(1, total) * 100))
                 time.sleep(1)
 
-            if not self.dry_var.get() and self.option("focus_game"):
-                ok, info = INPUT.focus_game()
-                if ok:
-                    self.log(f"Окно игры на переднем плане: «{info}».")
-                else:
-                    self.log(f"⚠ Не смог поднять окно игры ({info}). Если фокус не на игре, "
-                             f"наведение и клики до неё не дойдут.")
+            if not self.dry_var.get():
+                self.log("Переключитесь в DBD вручную во время отсчёта. "
+                         "Поиск процесса игры отключён.")
 
             mode = "СУХОЙ ПРОГОН" if self.dry_var.get() else "АВТО"
             self.log(f"=== {mode}: {total - 1} шаг(ов) ===")
