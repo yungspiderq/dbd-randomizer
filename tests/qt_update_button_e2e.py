@@ -153,6 +153,10 @@ def run_worker(target: Path, new_zip: Path, releases_json: Path):
         raise AssertionError("Unable to load real Qt settings page")
     window = engine.rootObjects()[0]
     window.setProperty("page", "Клики и тайминги")
+    # An offscreen Windows test window can be taller than the screen; this
+    # exposes the real QML buttons without tying their click test to Flickable
+    # wheel-scrolling behavior (tested separately by UI smoke).
+    window.resize(1360, 3100)
     app.processEvents()
 
     errors = []
