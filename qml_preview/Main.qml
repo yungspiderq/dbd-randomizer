@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt Beta 17"
+    title: "DBD Ultimate Search Randomizer | Qt Beta 18"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -342,7 +342,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 17"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 18"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -2623,8 +2623,7 @@ ApplicationWindow {
                                 { key: "clear", title: "Кликать кнопку очистки" },
                                 { key: "verifyclipboard", title: "Проверять буфер обмена" },
                                 { key: "restoreclipboard", title: "Восстанавливать буфер" },
-                                { key: "focusgame", title: "Переключаться на процесс DBD при запуске" },
-                                { key: "hoververify", title: "Проверять точность курсора" },
+                                                                { key: "hoververify", title: "Проверять точность курсора" },
                                 { key: "hoverretry", title: "Повторять наведение" }
                             ]
                             Rectangle {
@@ -2672,7 +2671,7 @@ ApplicationWindow {
 
                         Rectangle {
                             width: parent.width; height: 83; color: "#251f24"; radius: 10; border.color: "#49353e"
-                            Text { anchors.fill: parent; anchors.margins: 13; wrapMode: Text.WordWrap; text: "Сначала проверь координаты в сухом прогоне. При потере фокуса DBD действия прекращаются. OCR проверяет текст результата поиска, но не подтверждает установку перка. Стоп: " + backend.advanced.abortKey.toUpperCase() + "."; color: "#dec0bf"; font.pixelSize: 11 }
+                            Text { anchors.fill: parent; anchors.margins: 13; wrapMode: Text.WordWrap; text: "Нажми «Экипировать» и вручную переключись в DBD во время отсчёта (не меньше 3 секунд). Поиск процесса игры отключён. При переключении в другое окно клики остановятся. Стоп: " + backend.advanced.abortKey.toUpperCase() + "."; color: "#dec0bf"; font.pixelSize: 11 }
                         }
                     }
                     }
