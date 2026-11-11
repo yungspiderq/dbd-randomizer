@@ -2,7 +2,7 @@ name: Qt beta - verify, build and publish prerelease
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "release/qt-beta17-updater-progress"]
+    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-beta18-manual-target-window"]
     paths: ["qml_preview/**", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
 
@@ -117,7 +117,7 @@ jobs:
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DBDRandomizerQtBeta17-Portable-Windows
+          name: DBDRandomizerQtBeta18-Portable-Windows
           path: |
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
@@ -128,9 +128,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.17"
+          $tag = "v2.28.0-qt-beta.18"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 17 — Updater Reliability" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 18 — Manual Window Selection" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }
