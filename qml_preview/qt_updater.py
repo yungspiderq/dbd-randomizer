@@ -275,6 +275,20 @@ try {
 '''
 
 
+def last_install_error(target_dir):
+    """Surface a failed installer attempt when the application next opens."""
+    path = Path(target_dir) / "dbd_update_error.log"
+    try:
+        if path.is_file():
+            lines = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
+            if lines:
+                return ("Предыдущее обновление не установилось: " + lines[-1][:440] +
+                        " (подробнее в dbd_update_error.log)")
+    except OSError:
+        pass
+    return ""
+
+
 def install_staged(staged):
     if not getattr(sys, "frozen", False) or sys.platform != "win32":
         raise RuntimeError("Automatic installation requires the Windows portable EXE")
