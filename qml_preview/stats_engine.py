@@ -145,7 +145,7 @@ class BuildStatistics:
             counts[value] = min(10_000_000, counts.get(value, 0) + 1)
             last[value] = state["serial"]
 
-    def record_build(self, build, *, balanced=False, empty="", no_addons=""):
+    def record_build(self, build, *, balanced=False, empty="", no_addons="", on_date=None):
         side = build.get("side")
         if side not in SIDES:
             raise ValueError("Invalid statistics side")
@@ -153,22 +153,29 @@ class BuildStatistics:
         s["serial"] += 1
         s["generated"] += 1
         s["balanced" if balanced else "classic"] += 1
+        day, daily = self._bucket(side, on_date)
+        daily["generated"] += 1
+        daily["balanced" if balanced else "classic"] += 1
         char = build.get("char", "")
+        self._daily_add(daily, "characters", [char])
         self._add(side, "characters", [char])
         forbidden = build.get("forbidden") or {}
         perks = [x for x in build.get("perks", []) if x not in (empty, "", None)]
         addons = [x for x in build.get("addons", []) if x not in (empty, no_addons, "", None)]
         if not forbidden.get("perks"):
             self._add(side, "perks", perks)
+            self._daily_add(daily, "perks", perks)
         if not forbidden.get("addons"):
             self._add(side, "addons", addons)
+            self._daily_add(daily, "addons", addons)
         if side == "SURVIVOR" and not forbidden.get("item"):
             self._add(side, "items", [build.get("power_or_item", "")])
+            self._daily_add(daily, "items", [build.get("power_or_item", "")])
         self._insert_recent(side, char, "build", balanced,
                             perks if not forbidden.get("perks") else [],
-                            addons if not forbidden.get("addons") else [])
+                            addons if not forbidden.get("addons") else [], day)
 
-    def record_perk_reroll(self, side, char, perk, *, balanced=False, empty=""):
+    def record_perk_reroll(self, side, char, perk, *, balanced=False, empty="", on_date=None):
         if side not in SIDES:
             raise ValueError("Invalid statistics side")
         if perk in ("", empty, None):
@@ -176,16 +183,20 @@ class BuildStatistics:
         s = self._data[side]
         s["serial"] += 1
         s["rerolls"] += 1
+        day, daily = self._bucket(side, on_date)
+        daily["rerolls"] += 1
         self._add(side, "perks", [perk])
-        self._insert_recent(side, char, "reroll", balanced, [perk], [])
+        self._daily_add(daily, "perks", [perk])
+        self._insert_recent(side, char, "reroll", balanced, [perk], [], day)
 
-    def _insert_recent(self, side, character, kind, balanced, perks, addons):
+    def _insert_recent(self, side, character, kind, balanced, perks, addons, day):
         self._data[side]["recent"].insert(0, {
             "character": str(character or "")[:180],
             "kind": kind, "mode": "balanced" if balanced else "classic",
             "perks": [str(x)[:180] for x in perks][:4],
             "addons": [str(x)[:180] for x in addons][:2],
             "time": datetime.now().astimezone().strftime("%d.%m %H:%M"),
+            "day": day,
         })
         del self._data[side]["recent"][MAX_HISTORY:]
 
