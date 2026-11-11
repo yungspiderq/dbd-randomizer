@@ -2623,7 +2623,7 @@ ApplicationWindow {
                                 { key: "clear", title: "Кликать кнопку очистки" },
                                 { key: "verifyclipboard", title: "Проверять буфер обмена" },
                                 { key: "restoreclipboard", title: "Восстанавливать буфер" },
-                                { key: "focusgame", title: "Поднимать окно игры" },
+                                { key: "focusgame", title: "Переключаться на процесс DBD при запуске" },
                                 { key: "hoververify", title: "Проверять точность курсора" },
                                 { key: "hoverretry", title: "Повторять наведение" }
                             ]
