@@ -168,7 +168,10 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual(self.bridge._icon_queue.worker_count, 3)
         self.assertEqual(self.bridge._icon_queue.pending_count, 0)
         self.assertEqual(self.bridge.iconPath(""), "")
-        self.assertEqual(self.bridge.iconPath("a deliberately unknown nonexistent icon"), "")
+        with patch.object(self.bridge._icons, "local_path", return_value=None), \
+             patch.object(self.bridge._icons, "is_cached", return_value=False), \
+             patch.object(self.bridge._icons, "filename", return_value=None):
+            self.assertEqual(self.bridge.iconPath("a deliberately unknown nonexistent icon"), "")
 
     def test_statistics_tracks_both_modes_and_perk_rerolls(self):
         self.bridge.generate()
