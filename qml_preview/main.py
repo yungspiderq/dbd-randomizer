@@ -68,6 +68,50 @@ def main():
                 app.quit()
 
         QTimer.singleShot(350, verify_catalogs)
+    elif "--smoke-builder" in sys.argv:
+        window = engine.rootObjects()[0]
+
+        def verify_builder():
+            try:
+                from PySide6.QtCore import QObject, QMetaObject, QPointF, Qt
+                from PySide6.QtTest import QTest
+
+                window.setProperty("page", "Конструктор")
+                app.processEvents()
+                assert QMetaObject.invokeMethod(window, "runBuilderSmoke")
+                app.processEvents()
+                assert window.property("builderSmokeStatus") == 1, (
+                    "QML builder logic: " + str(window.property("builderSmokeError"))
+                )
+                first = window.findChild(QObject, "builderSlotArea0")
+                second = window.findChild(QObject, "builderSlotArea1")
+                val0 = window.findChild(QObject, "builderValue0")
+                val1 = window.findChild(QObject, "builderValue1")
+                assert first and second and val0 and val1, "Missing live builder slot objects"
+                a, b = val0.property("text"), val1.property("text")
+                assert a and b and a != b, "Builder smoke setup is incomplete"
+
+                # Exercise actual Qt mouse press/move/release, rather than only
+                # calling the JavaScript slot functions.
+                start = first.mapToScene(QPointF(105, 43)).toPoint()
+                target = second.mapToScene(QPointF(105, 43)).toPoint()
+                QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start)
+                QTest.mouseMove(window, start + (target - start) / 4, 35)
+                QTest.mouseMove(window, target, 40)
+                QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, target, 40)
+                app.processEvents()
+                assert val0.property("text") == b and val1.property("text") == a, (
+                    "Pointer drag did not swap occupied slots: "
+                    + str((val0.property("text"), val1.property("text")))
+                )
+                print("Qt builder smoke OK: slot logic, viewport hit-test, real mouse drag")
+            except Exception as exc:
+                print("Qt builder smoke FAILED: " + repr(exc), file=sys.stderr)
+                appearance_check["ok"] = False
+            finally:
+                app.quit()
+
+        QTimer.singleShot(500, verify_builder)
     elif "--smoke-appearance" in sys.argv:
         window = engine.rootObjects()[0]
 
