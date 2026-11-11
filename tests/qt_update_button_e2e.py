@@ -84,19 +84,24 @@ def _click_qml_button(window, label: str):
     viewport = work.property("contentItem")
     if viewport is None:
         raise AssertionError("Qt Flickable has no contentItem property")
-    local = button.mapToItem(viewport, QPointF(button.width() / 2, button.height() / 2))
+    # Some settings buttons are wider than the viewport in the legacy QML
+    # layout. Clicking near the left edge stays in the actual visible area.
+    hit = QPointF(min(35, button.width() / 2), button.height() / 2)
+    local = button.mapToItem(viewport, hit)
     target_y = max(0, local.y() - work.height() / 2)
     # Qt Quick reports layout height differently for hidden pages; exercise a
     # programmatic scroll to the actual item rather than assuming max contentY.
     work.setProperty("contentY", target_y)
     QTest.qWait(160)  # settle Flickable and dynamic settings layout
-    pos = button.mapToItem(window.contentItem(), QPointF(button.width()/2, button.height()/2))
+    pos = button.mapToItem(window.contentItem(), hit)
     in_view = work.mapFromItem(window.contentItem(), pos)
     print("QML scroll diagnostics:", {
         "button": label, "target_y": round(target_y),
+        "viewport_width": round(work.width()),
         "viewport_height": round(work.height()),
         "reported_content_height": work.property("contentHeight"),
         "effective_contentY": work.property("contentY"),
+        "button_viewport_x": round(in_view.x()),
         "button_viewport_y": round(in_view.y()),
     }, flush=True)
     if not (0 <= in_view.x() < work.width() and 0 <= in_view.y() < work.height()):
