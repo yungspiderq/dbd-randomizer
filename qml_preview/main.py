@@ -73,7 +73,7 @@ def main():
 
         def verify_builder():
             try:
-                from PySide6.QtCore import QObject, QMetaObject, QPointF, Qt
+                from PySide6.QtCore import QObject, QMetaObject, QPoint, QPointF, Qt
                 from PySide6.QtTest import QTest
 
                 window.setProperty("page", "Конструктор")
@@ -96,7 +96,8 @@ def main():
                 start = first.mapToScene(QPointF(105, 43)).toPoint()
                 target = second.mapToScene(QPointF(105, 43)).toPoint()
                 QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start)
-                QTest.mouseMove(window, start + (target - start) / 4, 35)
+                QTest.mouseMove(window, start + QPoint((target.x() - start.x()) // 4,
+                                                        (target.y() - start.y()) // 4), 35)
                 QTest.mouseMove(window, target, 40)
                 QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, target, 40)
                 app.processEvents()
