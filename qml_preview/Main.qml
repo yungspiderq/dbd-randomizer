@@ -14,6 +14,8 @@ ApplicationWindow {
     color: colors.background
     title: "DBD Ultimate Search Randomizer | Qt Beta 16"
     property string page: "Билд"
+    property int builderSmokeStatus: 0
+    property string builderSmokeError: ""
     property color surface: colors.surface
     property color stroke: colors.stroke
     property color muted: colors.muted
@@ -365,6 +367,7 @@ ApplicationWindow {
                 spacing: 0
                 Flickable {
                     id: work
+                    objectName: "workScroll"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     contentWidth: width
@@ -961,6 +964,7 @@ ApplicationWindow {
                         }
                         Column {
                             id: makerPage
+                            objectName: "builderPage"
                             visible: win.page === "Конструктор"
                             width: parent.width
                             spacing: 14
@@ -969,6 +973,56 @@ ApplicationWindow {
                             property int addonSlot: 0
                             property string perkFilter: "all"
                             property int hoverSlot: -1
+                            property bool draggingPerk: false
+                            property string draggedPerkName: ""
+                            property int dragFromSlot: -1
+                            property real dragPointerX: 0
+                            property real dragPointerY: 0
+                            onVisibleChanged: { if (!visible) cancelPerkDrag(); }
+                            function slotFromPointer(x, y) {
+                                // Reject offscreen slots before accepting a drop.
+                                var local = work.mapFromItem(win.contentItem, x, y);
+                                if (local.x < 0 || local.y < 0 ||
+                                        local.x >= work.width || local.y >= work.height) return -1;
+                                for (var i = 0; i < 4; i++) {
+                                    var slot = makerSlotRepeater.itemAt(i);
+                                    if (!slot) continue;
+                                    var p = slot.mapFromItem(win.contentItem, x, y);
+                                    if (p.x >= 0 && p.x < slot.width &&
+                                            p.y >= 0 && p.y < slot.height) return i;
+                                }
+                                return -1;
+                            }
+                            function updatePerkPointer(source, localX, localY) {
+                                if (!draggingPerk) return;
+                                var p = source.mapToItem(win.contentItem, localX, localY);
+                                dragPointerX = p.x;
+                                dragPointerY = p.y;
+                                hoverSlot = slotFromPointer(p.x, p.y);
+                            }
+                            function beginPerkDrag(name, fromSlot, source, localX, localY) {
+                                if (!name) return;
+                                draggedPerkName = name;
+                                dragFromSlot = fromSlot;
+                                draggingPerk = true;
+                                updatePerkPointer(source, localX, localY);
+                            }
+                            function cancelPerkDrag() {
+                                draggingPerk = false;
+                                draggedPerkName = "";
+                                dragFromSlot = -1;
+                                hoverSlot = -1;
+                            }
+                            function finishPerkDrag() {
+                                if (!draggingPerk) return;
+                                var name = draggedPerkName;
+                                var from = dragFromSlot;
+                                var to = hoverSlot;
+                                cancelPerkDrag();
+                                if (to < 0) return;
+                                if (from >= 0) movePerk(from, to);
+                                else assignPerk(name, to);
+                            }
                             function perkFields() {
                                 return [makerPerk1, makerPerk2, makerPerk3, makerPerk4];
                             }
@@ -1020,7 +1074,7 @@ ApplicationWindow {
                                 addonSearch.text = "";
                                 perkSlot = 0;
                                 perkFilter = "all";
-                                hoverSlot = -1;
+                                cancelPerkDrag();
                                 addonSlot = 0;
                             }
                             function pickPerk(name) {
@@ -1181,42 +1235,29 @@ ApplicationWindow {
                                     }
                                     Grid {
                                         id: makerSlots
+                                        objectName: "builderSlots"
                                         width: parent.width; height: 188
                                         columns: 2; spacing: 8
                                         Repeater {
+                                            id: makerSlotRepeater
                                             model: 4
                                             delegate: Item {
                                                 id: slotHolder
+                                                objectName: "builderSlot" + index
                                                 property int slotIndex: index
                                                 width: (makerSlots.width - 8) / 2; height: 90
-                                                DropArea {
-                                                    id: slotDrop
-                                                    anchors.fill: parent
-                                                    keys: ["dbd-builder-catalog", "dbd-builder-slot"]
-                                                    onEntered: makerPage.hoverSlot = slotHolder.slotIndex
-                                                    onExited: {
-                                                        if (makerPage.hoverSlot === slotHolder.slotIndex)
-                                                            makerPage.hoverSlot = -1;
-                                                    }
-                                                }
                                                 Rectangle {
                                                     id: slotVisual
                                                     x: 0; y: 0
                                                     width: slotHolder.width; height: slotHolder.height
                                                     property string dragName: makerPage.perkNameAt(slotHolder.slotIndex)
-                                                    property int dragSlot: slotHolder.slotIndex
-                                                    z: slotDrag.drag.active ? 50 : 0
                                                     radius: 10
-                                                    color: slotDrop.containsDrag ? win.colors.navActive :
+                                                    color: makerPage.hoverSlot === slotHolder.slotIndex ?
+                                                        win.colors.navActive :
                                                         (makerPage.perkSlot === slotHolder.slotIndex ? win.colors.buttonHover : win.colors.panel)
                                                     border.width: 1
-                                                    border.color: slotDrop.containsDrag || makerPage.perkSlot === slotHolder.slotIndex
-                                                        ? win.accent : win.colors.stroke
-                                                    Drag.active: slotDrag.drag.active && dragName.length > 0
-                                                    Drag.source: slotVisual
-                                                    Drag.keys: ["dbd-builder-slot"]
-                                                    Drag.hotSpot.x: width / 2
-                                                    Drag.hotSpot.y: height / 2
+                                                    border.color: makerPage.hoverSlot === slotHolder.slotIndex ||
+                                                        makerPage.perkSlot === slotHolder.slotIndex ? win.accent : win.colors.stroke
                                                     ArtThumb {
                                                         x: 8; y: 25; pixels: 52
                                                         iconKey: slotVisual.dragName
@@ -1236,28 +1277,35 @@ ApplicationWindow {
                                                     }
                                                     MouseArea {
                                                         id: slotDrag
+                                                        objectName: "builderSlotArea" + slotHolder.slotIndex
                                                         anchors.fill: parent
+                                                        preventStealing: true
                                                         cursorShape: slotVisual.dragName ? Qt.OpenHandCursor : Qt.PointingHandCursor
-                                                        drag.target: slotVisual.dragName ? slotVisual : null
-                                                        drag.threshold: 8
+                                                        property real pressX: 0
+                                                        property real pressY: 0
                                                         property bool moved: false
-                                                        onPressed: {
+                                                        onPressed: function(mouse) {
+                                                            pressX = mouse.x;
+                                                            pressY = mouse.y;
                                                             moved = false;
                                                             makerPage.perkSlot = slotHolder.slotIndex;
                                                         }
-                                                        onPositionChanged: { if (drag.active) moved = true; }
-                                                        onReleased: {
-                                                            if (moved && makerPage.hoverSlot >= 0)
-                                                                makerPage.movePerk(slotHolder.slotIndex, makerPage.hoverSlot);
-                                                            if (moved) Qt.callLater(function() { slotVisual.x = 0; slotVisual.y = 0; });
-                                                            makerPage.hoverSlot = -1;
-                                                            moved = false;
+                                                        onPositionChanged: function(mouse) {
+                                                            if (!pressed || !slotVisual.dragName) return;
+                                                            if (!moved && Math.abs(mouse.x - pressX) + Math.abs(mouse.y - pressY) >= 10) {
+                                                                moved = true;
+                                                                makerPage.beginPerkDrag(slotVisual.dragName,
+                                                                    slotHolder.slotIndex, slotDrag, mouse.x, mouse.y);
+                                                            }
+                                                            if (moved) makerPage.updatePerkPointer(slotDrag, mouse.x, mouse.y);
                                                         }
-                                                        onCanceled: {
-                                                            Qt.callLater(function() { slotVisual.x = 0; slotVisual.y = 0; });
-                                                            makerPage.hoverSlot = -1;
-                                                            moved = false;
+                                                        onReleased: function(mouse) {
+                                                            if (moved) {
+                                                                makerPage.updatePerkPointer(slotDrag, mouse.x, mouse.y);
+                                                                makerPage.finishPerkDrag();
+                                                            }
                                                         }
+                                                        onCanceled: makerPage.cancelPerkDrag()
                                                     }
                                                     UiButton {
                                                         x: parent.width - 64; y: 30
