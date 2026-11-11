@@ -219,6 +219,12 @@ class QtBridge(QObject):
         self._save()
         self.appearanceChanged.emit()
 
+    @Slot()
+    def resetAppearance(self):
+        self._appearance = normalize_appearance({})
+        self._save()
+        self.appearanceChanged.emit()
+
     @Slot(bool)
     def setAnimationsEnabled(self, enabled):
         if enabled == self._appearance["animations"]:
