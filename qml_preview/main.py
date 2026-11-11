@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 
-from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtCore import QObject, QTimer, QUrl
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
@@ -17,7 +17,7 @@ from native_backend import QtBridge
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("DBD Randomizer Qt Beta 13")
+    app.setApplicationName("DBD Randomizer Qt Beta 14")
     frozen = bool(getattr(sys, "frozen", False))
     packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
     icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
@@ -40,7 +40,34 @@ def main():
         if hasattr(window, "setIcon"):
             window.setIcon(QIcon(str(icon)))
     appearance_check = {"ok": True}
-    if "--smoke-appearance" in sys.argv:
+    if "--smoke-catalogs" in sys.argv:
+        window = engine.rootObjects()[0]
+
+        def verify_catalogs():
+            try:
+                pages = [
+                    ("Персонажи", "charactersCatalog"),
+                    ("Внешность", "outfitCharactersCatalog"),
+                    ("Внешность", "outfitsCatalog"),
+                    ("Избранное", "favoritesCatalog"),
+                    ("Билд", None),
+                ]
+                for page, object_name in pages:
+                    window.setProperty("page", page)
+                    app.processEvents()
+                    if object_name:
+                        view = window.findChild(QObject, object_name)
+                        assert view is not None, object_name + " not present in QML"
+                        assert view.property("count") is not None, object_name + " has no data model"
+                print("Qt catalog smoke OK: character, outfit, favorites and build pages")
+            except Exception as exc:
+                print("Qt catalog smoke FAILED: " + repr(exc), file=sys.stderr)
+                appearance_check["ok"] = False
+            finally:
+                app.quit()
+
+        QTimer.singleShot(350, verify_catalogs)
+    elif "--smoke-appearance" in sys.argv:
         window = engine.rootObjects()[0]
 
         def verify_live_appearance():
