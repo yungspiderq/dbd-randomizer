@@ -2,7 +2,7 @@ name: Qt beta - verify, build and publish prerelease
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-stability-phase1"]
+    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-stability-phase1", "fix/qt-updater-install-and-version"]
     paths: ["qml_preview/**", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
 
@@ -46,6 +46,11 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m unittest qml_preview/test_appearance.py qml_preview/test_favorites.py qml_preview/test_qt_updater.py qml_preview/test_rotation_engine.py qml_preview/test_icon_queue.py qml_preview/test_stats_engine.py qml_preview/test_perk_cards.py qml_preview/test_native_backend.py -v
+      - name: Verify real PowerShell update in an isolated Windows folder
+        shell: pwsh
+        run: |
+          python qml_preview/test_updater_windows.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Generate icon files for Windows and QML
         run: |
           python qml_preview/build_icon.py

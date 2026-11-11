@@ -39,6 +39,13 @@ class UpdaterTests(unittest.TestCase):
                 z.writestr(member, b"outside")
         return data.getvalue()
 
+    def test_installer_error_message_can_be_read_after_relaunch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "dbd_update_error.log"
+            self.assertEqual(u.last_install_error(folder), "")
+            path.write_text("2026-11-11 first failure\n2026-11-11 Move-Item failed: Access denied\n", encoding="utf-8")
+            self.assertIn("Access denied", u.last_install_error(folder))
+
     def test_version_parsing_requires_our_beta_tags(self):
         self.assertLess(u._key("v2.28.0-qt-beta.10"), u._key(u.CURRENT_TAG))
         self.assertIsNone(u._key("v999.0.0-malicious"))

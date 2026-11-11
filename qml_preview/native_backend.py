@@ -111,7 +111,9 @@ class QtBridge(QObject):
         self._hotkey_handle = None
         self._planned_equipped = None
         self._update_info = None
-        self._update_text = ""
+        self._update_text = qt_updater.last_install_error(
+            os.path.dirname(sys.executable)
+        ) or ("Установлена версия " + qt_updater.CURRENT_TAG)
         self._update_busy = False
         self._owned = {}
         for side, key in (("K", "killers"), ("S", "survivors")):
@@ -1606,6 +1608,10 @@ class QtBridge(QObject):
             self.equip()
         else:
             self._notify("Действие пока недоступно: "+action)
+
+    @Property(str, constant=True)
+    def installedVersion(self):
+        return qt_updater.CURRENT_TAG
 
     @Property(str, notify=updateChanged)
     def updateText(self):

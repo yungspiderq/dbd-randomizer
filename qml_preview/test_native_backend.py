@@ -48,6 +48,19 @@ class QtBackendTests(unittest.TestCase):
         for p in reversed(self.patches):
             p.stop()
 
+    def test_installed_version_is_not_stuck_at_beta12(self):
+        self.assertEqual(self.bridge.installedVersion, qt_updater.CURRENT_TAG)
+        self.assertIn(qt_updater.CURRENT_TAG, self.bridge.updateText)
+
+    def test_installer_error_is_shown_at_startup(self):
+        with patch.object(qt_updater, "last_install_error",
+                          return_value="Предыдущее обновление не установилось: Access denied"):
+            another = native_backend.QtBridge()
+            try:
+                self.assertIn("Access denied", another.updateText)
+            finally:
+                another.close()
+
     def test_native_backend_no_tk_and_both_roles(self):
         self.assertEqual(self.bridge.role, "survivor")
         self.bridge.generate()
