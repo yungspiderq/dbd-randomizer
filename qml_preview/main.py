@@ -87,7 +87,12 @@ def main():
                 second = window.findChild(QObject, "builderSlotArea1")
                 val0 = window.findChild(QObject, "builderValue0")
                 val1 = window.findChild(QObject, "builderValue1")
-                assert first and second and val0 and val1, "Missing live builder slot objects"
+                assert all((first, second, val0, val1)), (
+                    "Missing builder objects: " + str({
+                        "slot0": bool(first), "slot1": bool(second),
+                        "value0": bool(val0), "value1": bool(val1)
+                    })
+                )
                 a, b = val0.property("text"), val1.property("text")
                 assert a and b and a != b, "Builder smoke setup is incomplete"
 
