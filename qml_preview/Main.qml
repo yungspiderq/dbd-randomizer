@@ -1288,6 +1288,7 @@ ApplicationWindow {
                                             Rectangle { width: parent.width; height: 1; color: "#2f3947" }
                                             ListView {
                                                 id: characterList
+                                                objectName: "charactersCatalog"
                                                 width: parent.width
                                                 height: sideCard.height - 128
                                                 model: sideCard.filtered
@@ -1303,7 +1304,14 @@ ApplicationWindow {
                                                     subtitle: modelData.owned ? "ВКЛЮЧЁН В РАНДОМ" : "НЕ ВЫБРАН"
                                                     selected: modelData.owned
                                                     onActivated: backend.setCharacter(modelData.name, sideCard.sideKey)
-                                            }
+                                                }
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    visible: characterList.count === 0
+                                                    text: "Ничего не найдено"
+                                                    color: win.muted
+                                                    font.pixelSize: 12
+                                                }
                                         }
                                     }
                                 }
@@ -1357,6 +1365,7 @@ ApplicationWindow {
                                         UiField { id: skinCharSearch; width: parent.width; placeholderText: "Поиск героя" }
                                         ListView {
                                             id: skinCharList
+                                            objectName: "outfitCharactersCatalog"
                                             width: parent.width
                                             height: skinCharactersCard.height - 78
                                             clip: true
@@ -1444,6 +1453,7 @@ ApplicationWindow {
                                         UiField { id: skinSearch; width: parent.width; placeholderText: "Поиск по RU/EN названию, редкости, дате"; onTextChanged: backend.filterSkins(text) }
                                         ListView {
                                             id: skinsList
+                                            objectName: "outfitsCatalog"
                                             width: parent.width
                                             height: skinContent.height - 330
                                             clip: true
@@ -1632,6 +1642,7 @@ ApplicationWindow {
                             }
                             ListView {
                                 id: favoriteList
+                                objectName: "favoritesCatalog"
                                 width: parent.width
                                 height: Math.min(600, Math.max(120, backend.favorites.length * 182))
                                 visible: backend.favorites.length > 0
