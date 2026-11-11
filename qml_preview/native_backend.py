@@ -26,6 +26,7 @@ from rotation_engine import RotationState, make_rotated_build
 from perk_cards import perk_info, reconcile_pins
 from stats_engine import BuildStatistics
 from favorites import FavoriteBuilds
+from appearance import SCALES, THEMES, normalize as normalize_appearance, palette as appearance_palette, write_to_options
 from dbd_icons_store import IconStore
 from icon_queue import IconDownloadQueue
 
@@ -46,6 +47,7 @@ class QtBridge(QObject):
     historyChanged = Signal()
     statisticsChanged = Signal()
     favoritesChanged = Signal()
+    appearanceChanged = Signal()
     detailChanged = Signal()
     charactersChanged = Signal()
     skinsChanged = Signal()
@@ -60,6 +62,7 @@ class QtBridge(QObject):
     def __init__(self):
         super().__init__()
         self.cfg, migrated = core.load_config()
+        self._appearance = normalize_appearance(self.cfg.get("options", {}))
         self.db = core.load_db()
         self.build = None
         self._role = self.cfg["options"].get("side", "SURVIVOR")
@@ -173,12 +176,56 @@ class QtBridge(QObject):
         self.cfg["options"]["rotation_state"] = self._rotation.serialize()
         self.cfg["options"]["statistics_v1"] = self._statistics.serialize()
         self.cfg["options"]["favorite_builds_v1"] = self._favorites.serialize()
+        write_to_options(self.cfg["options"], self._appearance)
         self.cfg.setdefault("owned", {})["killers"] = sorted(self._owned["K"]) or ["__none__"]
         self.cfg["owned"]["survivors"] = sorted(self._owned["S"]) or ["__none__"]
         core.save_config(self.cfg)
 
     def _option(self, key):
         return self.cfg["options"].get(key, core.OPTION_DEFAULTS.get(key))
+
+    @Property(str, notify=appearanceChanged)
+    def appearanceTheme(self):
+        return self._appearance["theme"]
+
+    @Property(float, notify=appearanceChanged)
+    def appearanceScale(self):
+        return self._appearance["scale"]
+
+    @Property(bool, notify=appearanceChanged)
+    def animationsEnabled(self):
+        return self._appearance["animations"]
+
+    @Property("QVariantMap", notify=appearanceChanged)
+    def appearancePalette(self):
+        return appearance_palette(self._appearance["theme"])
+
+    @Slot(str)
+    def setAppearanceTheme(self, value):
+        if value not in THEMES or value == self._appearance["theme"]:
+            return
+        self._appearance["theme"] = value
+        self._save()
+        self.appearanceChanged.emit()
+
+    @Slot(float)
+    def setAppearanceScale(self, value):
+        if not any(abs(value - permitted) < 0.001 for permitted in SCALES):
+            return
+        value = min(SCALES, key=lambda x: abs(x - value))
+        if value == self._appearance["scale"]:
+            return
+        self._appearance["scale"] = value
+        self._save()
+        self.appearanceChanged.emit()
+
+    @Slot(bool)
+    def setAnimationsEnabled(self, enabled):
+        if enabled == self._appearance["animations"]:
+            return
+        self._appearance["animations"] = enabled
+        self._save()
+        self.appearanceChanged.emit()
 
     @Property(str, notify=roleChanged)
     def role(self):
