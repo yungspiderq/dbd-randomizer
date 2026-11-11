@@ -87,9 +87,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.9"
+          $tag = "v2.28.0-qt-beta.10"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.exe dist/DBDRandomizerQtBeta.exe.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.exe dist/DBDRandomizerQtBeta.exe.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 9" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.exe dist/DBDRandomizerQtBeta.exe.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 10" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }
