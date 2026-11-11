@@ -2,7 +2,7 @@ name: Qt beta - verify, build and publish prerelease
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-stability-phase1"]
+    branches: ["preview/qml-redesign-2026-11-10", "fix/qt-stability-phase1", "fix/qt-builder-phase2"]
     paths: ["qml_preview/**", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
 
@@ -60,6 +60,8 @@ jobs:
           python qml_preview/main.py --smoke-appearance
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python qml_preview/main.py --smoke-catalogs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python qml_preview/main.py --smoke-builder
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build Windows portable directory
         shell: pwsh
