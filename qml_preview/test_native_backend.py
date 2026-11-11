@@ -387,6 +387,26 @@ class QtBackendTests(unittest.TestCase):
         self.assertTrue(all(x["name"] in playable for x in result))
         self.assertFalse(self.bridge.searchPerks("UNKNOWN", ""))
 
+    def test_perk_builder_catalog_filters_and_owners(self):
+        killer = next(iter(self.bridge.db["killers"]))
+        owned = set(self.bridge.db["killers"][killer]["perks"])
+        by_hero = self.bridge.searchPerks("KILLER", "", "character", killer)
+        self.assertTrue(by_hero)
+        self.assertTrue(all(row["name"] in owned for row in by_hero))
+        self.assertTrue(all(key in by_hero[0] for key in ("name", "owner", "kind", "common")))
+        self.assertEqual(self.bridge.searchPerks("KILLER", "", "character", "invalid"), [])
+        self.assertEqual(self.bridge.searchPerks("KILLER", "", "invalid", killer), [])
+        common = self.bridge.searchPerks("SURVIVOR", "", "common", "")
+        self.assertTrue(common)
+        self.assertTrue(all(row["common"] for row in common))
+        unique = self.bridge.searchPerks("SURVIVOR", "", "unique", "")
+        self.assertTrue(unique)
+        self.assertTrue(all(not row["common"] for row in unique))
+        name = unique[0]["name"]
+        result = self.bridge.searchPerks("SURVIVOR", name, "unique", "")
+        self.assertIn(name, [row["name"] for row in result])
+        self.assertFalse(self.bridge.searchPerks("UNKNOWN", "", "all", ""))
+
     def test_item_picker_and_addon_compatibility(self):
         items = self.bridge.searchItems("")
         self.assertTrue(items)
