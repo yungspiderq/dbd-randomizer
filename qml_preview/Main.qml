@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt Beta 19"
+    title: "DBD Ultimate Search Randomizer | Qt Beta 20"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -42,6 +42,7 @@ ApplicationWindow {
         property bool primary: false
         signal clicked()
         implicitHeight: 44
+        opacity: enabled ? 1 : 0.55
         radius: 10
         color: primary ? (over.containsMouse ? win.colors.accentHover : win.accent) :
                          (over.containsMouse ? win.colors.buttonHover : win.colors.button)
@@ -59,7 +60,8 @@ ApplicationWindow {
             id: over
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: button.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            enabled: button.enabled
             onClicked: button.clicked()
         }
     }
@@ -342,7 +344,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 19"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 20"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -2661,13 +2663,13 @@ ApplicationWindow {
                         }
 
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
-                        UiButton { width: parent.width; label: backend.running ? "ЭКИПИРОВКА ВЫПОЛНЯЕТСЯ..." : "ЭКИПИРОВАТЬ В ИГРЕ"; onClicked: { if (!backend.running) backend.equip() } }
+                        UiButton { width: parent.width; enabled: !backend.running; label: backend.running ? "ЭКИПИРОВКА ВЫПОЛНЯЕТСЯ..." : "ЭКИПИРОВАТЬ В ИГРЕ"; onClicked: backend.equip() }
                         UiButton { width: parent.width; label: "СТОП АВТОМАТИЗАЦИИ (" + backend.advanced.abortKey.toUpperCase() + ")"; onClicked: backend.stop() }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Text { text: "ОБНОВЛЕНИЯ"; color: "#d8dfe8"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
-                        UiButton { width: parent.width; label: backend.updateBusy ? "ПОДОЖДИТЕ..." : "ПРОВЕРИТЬ ОБНОВЛЕНИЯ"; onClicked: backend.checkUpdate() }
+                        UiButton { width: parent.width; enabled: !backend.updateBusy; label: backend.updateBusy ? "ПОДОЖДИТЕ..." : "ПРОВЕРИТЬ ОБНОВЛЕНИЯ"; onClicked: backend.checkUpdate() }
                         Text { width: parent.width; text: backend.updateText || ("Версия " + backend.installedVersion); wrapMode: Text.Wrap; color: win.muted; font.pixelSize: 11 }
-                        UiButton { visible: backend.updateAvailable; width: parent.width; label: "СКАЧАТЬ И УСТАНОВИТЬ"; primary: true; onClicked: backend.installUpdate() }
+                        UiButton { visible: backend.updateAvailable; enabled: !backend.updateBusy; width: parent.width; label: "СКАЧАТЬ И УСТАНОВИТЬ"; primary: true; onClicked: backend.installUpdate() }
 
                         Rectangle {
                             width: parent.width; height: 83; color: "#251f24"; radius: 10; border.color: "#49353e"

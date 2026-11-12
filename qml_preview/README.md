@@ -1,4 +1,4 @@
-# DBD Ultimate Search Randomizer — Qt Beta 19 (candidate)
+# DBD Ultimate Search Randomizer — Qt Beta 20 (candidate)
 
 Windows-версия рандомизатора Dead by Daylight на **PySide6 / Qt Quick**.
 

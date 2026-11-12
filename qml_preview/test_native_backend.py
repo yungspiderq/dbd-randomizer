@@ -90,6 +90,73 @@ class QtBackendTests(unittest.TestCase):
         QTest.qWait(175)
         self.assertEqual(spy.count(), 2)
 
+    def test_status_burst_emits_one_qml_refresh(self):
+        status_spy = QSignalSpy(self.bridge.statusChanged)
+        update_spy = QSignalSpy(self.bridge.updateChanged)
+        for i in range(25):
+            self.bridge._messages.put(("status", "status-" + str(i), True))
+            self.bridge._messages.put(("update_progress", str(i) + "%"))
+        self.bridge._drain()
+        self.assertEqual(status_spy.count(), 1)
+        self.assertEqual(update_spy.count(), 1)
+        self.assertEqual(self.bridge.status, "status-24")
+        self.assertEqual(self.bridge.updateText, "24%")
+        self.assertEqual(len(self.bridge._log), 25)
+
+    def test_generating_and_rerolling_do_not_reload_all_catalog_icons(self):
+        icon_spy = QSignalSpy(self.bridge.iconVersionChanged)
+        build_spy = QSignalSpy(self.bridge.buildRevisionChanged)
+        self.bridge.generate()
+        self.assertEqual(icon_spy.count(), 0)
+        self.assertGreaterEqual(build_spy.count(), 1)
+        self.bridge.rerollPerks()
+        self.assertEqual(icon_spy.count(), 0)
+        self.assertGreater(build_spy.count(), 1)
+
+    def test_selected_result_is_preflight_checked_before_input(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["result_index"] = 9
+        self.bridge.cfg["timings"]["result_step"] = 84
+        self.assertEqual(self.bridge._result_target(), (772, 100))
+        def fake_desktop(keys, extra=()):
+            self.assertIn("first_result", keys)
+            self.assertEqual(extra, [("result_index", (772, 100))])
+            return ["result_index"]
+        with patch.object(self.bridge, "_outside_desktop", side_effect=fake_desktop), \
+             patch.object(core.INPUT, "available", True), \
+             patch.object(self.bridge, "_automate") as automate:
+            self.bridge.equip()
+            automate.assert_not_called()
+            self.assertFalse(self.bridge.running)
+
+    def test_ocr_without_region_aborts_before_countdown(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = True
+        self.bridge.cfg["coords"]["ocr_region"] = {"x": "", "y": "", "w": "", "h": ""}
+        with patch.object(self.bridge, "_outside_desktop", return_value=[]), \
+             patch.object(core.INPUT, "available", True), \
+             patch.object(self.bridge, "_automate") as automate:
+            self.bridge.equip()
+            automate.assert_not_called()
+            self.assertFalse(self.bridge.running)
+
+    def test_equip_side_is_snapshot_even_if_current_build_changes(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge._equip_side = "KILLER"
+        self.bridge.build["side"] = "SURVIVOR"
+        with patch.object(self.bridge, "_sleep"), \
+             patch.object(self.bridge, "_click", return_value=True), \
+             patch.object(self.bridge, "_search_and_select", return_value=True), \
+             patch.object(core.INPUT, "foreground_window", return_value=501), \
+             patch.object(core.INPUT, "is_own_window", return_value=False):
+            self.bridge._automate([("slot1", "sample", "perk")])
+        self.assertIn("KILLER", self.bridge.cfg["last_equipped"])
+        self.assertNotIn("SURVIVOR", self.bridge.cfg["last_equipped"])
+        self.assertIsNone(self.bridge._equip_side)
+
     def test_settings_mode_and_character_filter(self):
         self.bridge.setMode("any")
         self.assertEqual(self.bridge.mode, "any")
