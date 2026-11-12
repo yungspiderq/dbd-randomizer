@@ -335,10 +335,12 @@ class _Input:
             pass
         return False
 
-    def _settle_on(self, x, y, tries=3, tol=2, delay=0.01):
+    def _settle_on(self, x, y, tries=3, tol=2, delay=0.01, guard=None):
         """Доводит курсор до (x, y), сверяясь с его фактическим положением."""
         pdi = self.pydirectinput
         for _ in range(max(1, tries)):
+            if guard:
+                guard()
             try:
                 cx, cy = self.position()
             except Exception:
@@ -357,13 +359,15 @@ class _Input:
             return False
 
     def move(self, x, y, steps=6, step_delay=0.006, wiggle=2, settle=0.12,
-             verify=True):
+             verify=True, guard=None):
         """Наводит курсор на (x, y) так, чтобы игра это наведение увидела.
 
         Возвращает True, если курсор встал в точку (или проверка недоступна).
         """
         if not self.available:
             raise InputUnavailable(self.reason)
+        if guard:
+            guard()
         x, y = int(x), int(y)
         pdi = self.pydirectinput
         steps = max(1, int(steps))
@@ -373,99 +377,89 @@ class _Input:
         except Exception:
             cx, cy = x, y
         if steps <= 1 or not hasattr(pdi, "moveTo"):
+            if guard:
+                guard()
             if hasattr(pdi, "moveTo"):
                 pdi.moveTo(x, y)
             time.sleep(step_delay)
         else:
             for i in range(1, steps + 1):
+                if guard:
+                    guard()
                 t = i / steps
                 pdi.moveTo(int(cx + (x - cx) * t), int(cy + (y - cy) * t))
                 time.sleep(step_delay)
         landed = True
         if verify:
-            landed = self._settle_on(x, y)
+            landed = self._settle_on(x, y, guard=guard)
         # микро-сдвиг: два коротких движения рядом с целью -> игра точно получит
         # событие «курсор здесь» и подсветит слот до клика
         wiggle = int(wiggle or 0)
         if wiggle > 0 and hasattr(pdi, "moveTo"):
             for dx, dy in ((wiggle, 0), (-wiggle, 0), (0, 0)):
+                if guard:
+                    guard()
                 pdi.moveTo(x + dx, y + dy)
                 time.sleep(max(step_delay, 0.008))
             if verify:
-                landed = self._settle_on(x, y) and landed
+                landed = self._settle_on(x, y, guard=guard) and landed
         if settle:
             time.sleep(max(0.0, float(settle)))
+        if guard:
+            guard()
         return landed
 
     def click(self, x, y, hold=0.06, steps=6, step_delay=0.006, wiggle=2,
-              settle=0.12, verify=True):
+              settle=0.12, verify=True, guard=None):
         """Клик с честным наведением. Возвращает True, если курсор был в точке."""
         if not self.available:
             raise InputUnavailable(self.reason)
         pdi = self.pydirectinput
         landed = self.move(x, y, steps=steps, step_delay=step_delay, wiggle=wiggle,
-                           settle=settle, verify=verify)
+                           settle=settle, verify=verify, guard=guard)
+        if not landed:
+            # Never send a click to a position the cursor failed to reach.
+            return False
+        if guard:
+            guard()
         pdi.mouseDown()
-        time.sleep(max(0.02, hold))
-        pdi.mouseUp()
+        try:
+            time.sleep(max(0.02, hold))
+            if guard:
+                guard()
+        finally:
+            # Always release the button, including after F9 / focus loss.
+            pdi.mouseUp()
         return landed
 
-    # -- фокус на окне игры ----------------------------------------------------
-    def find_game_window(self, title_part="Dead by Daylight"):
-        """HWND окна игры (ищем по вхождению в заголовок). None, если не найдено."""
+    # -- безопасная привязка к выбранному окну без поиска игры ---------------
+    def foreground_window(self):
+        """Foreground HWND; no executable or window-title checks."""
         if os.name != "nt":
             return None
-        user32 = ctypes.windll.user32
-        user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
-        user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
-        found = []
-        EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-        def _cb(hwnd, _lparam):
-            if not user32.IsWindowVisible(hwnd):
-                return True
-            length = user32.GetWindowTextLengthW(hwnd)
-            if not length:
-                return True
-            buf = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buf, length + 1)
-            title = buf.value or ""
-            if title_part.lower() in title.lower():
-                found.append((hwnd, title))
-            return True
-
         try:
-            user32.EnumWindows(EnumProc(_cb), 0)
+            api = ctypes.windll.user32.GetForegroundWindow
+            api.argtypes = []
+            api.restype = ctypes.c_void_p
+            return int(api() or 0) or None
         except Exception:
             return None
-        if not found:
-            return None
-        # если окон несколько — берём то, что ближе к переднему плану
-        return found[0]
 
-    def focus_game(self, title_part="Dead by Daylight"):
-        """Поднимает окно игры на передний план. Возвращает (ok, заголовок/причину)."""
-        if os.name != "nt":
-            return False, "не Windows"
-        hit = self.find_game_window(title_part)
-        if not hit:
-            return False, f"окно «{title_part}» не найдено"
-        hwnd, title = hit
-        user32 = ctypes.windll.user32
+    def is_own_window(self, hwnd):
+        """Reject the randomizer's own window as an input target."""
+        if os.name != "nt" or not hwnd:
+            return True
         try:
-            if user32.IsIconic(hwnd):                     # свёрнуто — разворачиваем
-                user32.ShowWindow(hwnd, 9)                # SW_RESTORE
-                time.sleep(0.25)
-            user32.BringWindowToTop(hwnd)
-            # SetForegroundWindow капризничает, если фокус у нашего окна:
-            # «отпускаем» его через ALT-трюк.
-            user32.keybd_event(0x12, 0, 0, 0)            # ALT down
-            user32.SetForegroundWindow(hwnd)
-            user32.keybd_event(0x12, 0, 2, 0)            # ALT up
-            time.sleep(0.15)
-            return True, title
-        except Exception as exc:
-            return False, f"{title}: {exc}"
+            user32 = ctypes.windll.user32
+            user32.GetWindowThreadProcessId.argtypes = [
+                ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+            user32.GetWindowThreadProcessId.restype = ctypes.c_ulong
+            pid = ctypes.c_ulong(0)
+            if not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)) or not pid.value:
+                return True
+            return pid.value == os.getpid()
+        except Exception:
+            return True
 
     def key(self, name, hold=0.02):
         if not self.available:
@@ -478,22 +472,33 @@ class _Input:
             time.sleep(hold)
             pdi.keyUp(name)
 
-    def hotkey(self, *keys, hold=0.02):
+    def hotkey(self, *keys, hold=0.02, guard=None):
         if not self.available:
             raise InputUnavailable(self.reason)
         pdi = self.pydirectinput
-        for k in keys:
-            pdi.keyDown(k)
+        pressed = []
+        try:
+            for k in keys:
+                if guard:
+                    guard()
+                pdi.keyDown(k)
+                pressed.append(k)
+                time.sleep(hold)
+            if guard:
+                guard()
             time.sleep(hold)
-        time.sleep(hold)
-        for k in reversed(keys):
-            pdi.keyUp(k)
-            time.sleep(hold)
+        finally:
+            # Do not leave Ctrl/Shift held if the target changes mid-shortcut.
+            for k in reversed(pressed):
+                pdi.keyUp(k)
+                time.sleep(hold)
 
-    def paste(self, text, verify=True, retries=6, restore=False):
+    def paste(self, text, verify=True, retries=6, restore=False, guard=None):
         """Копирует текст в буфер и вставляет Ctrl+V. Возвращает True при успехе."""
         if not self.available:
             raise InputUnavailable(self.reason)
+        if guard:
+            guard()
         old = None
         if restore:
             try:
@@ -518,7 +523,7 @@ class _Input:
             except Exception:
                 ok = False
         if ok:
-            self.hotkey("ctrl", "v")
+            self.hotkey("ctrl", "v", guard=guard)
         if restore and ok:
             # даём игре забрать текст из буфера, прежде чем вернуть прежнее содержимое
             time.sleep(0.12)
@@ -581,7 +586,7 @@ OPTION_DEFAULTS = {
     "class_enabled":   False,       # добавлять к билду случайный класс «2 против 8»
     "challenge_enabled": False,     # добавлять к билду случайный челендж
     "challenge_diff":  "any",       # any | easy | medium | hard — пул сложности
-    "focus_game":      True,        # поднимать окно игры на передний план перед стартом
+    "challenge_type": "mixed",      # mixed | general | power (power only for killers)
     "hover_verify":    True,        # сверять фактическую позицию курсора с целевой
     "hover_retry":     True,        # повторно наводить, если курсор не долетел до слота
 }
@@ -913,6 +918,29 @@ def load_db():
             dump_db(db)
         except Exception:
             pass
+    # Fifth repair: a legacy Doctor catalog contained only the two iridescent
+    # add-ons. It is nonempty, so the generic empty-pool repair above never
+    # runs. Only recover this exact known-bad signature; preserve deliberate
+    # custom short lists for other killers, and back up the original file.
+    doctor = db["killers"].get("Доктор")
+    if isinstance(doctor, dict):
+        current = doctor.get("addons")
+        legacy = {"Радужный король", "Радужный ферзь"}
+        canonical = list(DATA.KILLERS["Доктор"]["addons"])
+        if (isinstance(current, list) and len(current) == 2
+                and set(current) == legacy
+                and len(canonical) > 2):
+            if os.path.isfile(DB_FILE):
+                try:
+                    shutil.copy2(DB_FILE, DB_FILE + ".doctor-addons.bak")
+                except OSError:
+                    pass
+            doctor["addons"] = canonical
+            db["_db_doctor_addons_repaired"] = True
+            try:
+                dump_db(db)
+            except OSError:
+                pass
     return db
 
 
@@ -1069,19 +1097,34 @@ CLASS_SIDES = (("SURVIVOR", "Выживший"), ("KILLER", "Убийца"))
 CHALLENGE_DIFFS = (("any", "any"), ("easy", 1), ("medium", 2), ("hard", 3))
 
 
-def pick_challenge(side, diff="any", avoid=None):
-    """Случайный челендж для стороны и сложности (None, если пул пуст).
+def challenge_candidates(side, diff="any", character=None, kind="general"):
+    """Eligible trials for role, difficulty and the *actual* selected killer.
 
-    `side` — SURVIVOR/KILLER: берутся челенджи этой стороны и общие (ANY).
-    `diff` — "any" или 1/2/3 (лёгкий/средний/тяжёлый).
-    `avoid` — имя или коллекция имён, которые не нужно предлагать (история
-    последних выпадений): при непустом остатке пула они исключаются.
+    'general' (default) stays backward-compatible with old Tk and API callers.
+    'power' requires a killer name to avoid an impossible challenge.
+    'all' includes both kinds, but still filters by actual killer.
     """
-    if side not in ("SURVIVOR", "KILLER"):
-        return None
-    pool = [c for c in (getattr(DATA, "CHALLENGES", []) or [])
-            if c.get("side") in (side, "ANY")
-            and (diff == "any" or c.get("diff") == diff)]
+    if side not in ("SURVIVOR", "KILLER") or kind not in ("general", "power", "all"):
+        return []
+    pool = []
+    for challenge in (getattr(DATA, "CHALLENGES", []) or []):
+        if challenge.get("side") not in (side, "ANY"):
+            continue
+        if diff != "any" and challenge.get("diff") != diff:
+            continue
+        target = challenge.get("killer")
+        if target:
+            if side != "KILLER" or target != character or kind == "general":
+                continue
+        elif kind == "power":
+            continue
+        pool.append(challenge)
+    return pool
+
+
+def pick_challenge(side, diff="any", avoid=None, character=None, kind="general"):
+    """Random valid challenge, excluding recent names when alternatives exist."""
+    pool = challenge_candidates(side, diff, character, kind)
     if avoid:
         bad = {avoid} if isinstance(avoid, str) else set(avoid)
         fresh = [c for c in pool if c.get("ru") not in bad]
@@ -1099,18 +1142,13 @@ def challenge_text(c):
     return f"{name} ({diff})" if diff else name
 
 
-def reroll_challenge(side, diff="any", avoid=None):
-    """Челендж, отличный от предыдущего (если в пуле больше одного)."""
-    if side not in ("SURVIVOR", "KILLER"):
-        return None
-    pool = [c for c in (getattr(DATA, "CHALLENGES", []) or [])
-            if c.get("side") in (side, "ANY")
-            and (diff == "any" or c.get("diff") == diff)
-            and (avoid is None or c.get("ru") not in
-                 ({avoid} if isinstance(avoid, str) else set(avoid)))]
-    if not pool:
-        return pick_challenge(side, diff)
-    return random.choice(pool)
+def reroll_challenge(side, diff="any", avoid=None, character=None, kind="general"):
+    """Try another eligible trial; never fall back to a different killer."""
+    pool = challenge_candidates(side, diff, character, kind)
+    if avoid:
+        bad = {avoid} if isinstance(avoid, str) else set(avoid)
+        pool = [c for c in pool if c.get("ru") not in bad]
+    return random.choice(pool) if pool else None
 
 
 def pick_class(side):
@@ -3194,7 +3232,6 @@ class App:
         self._add_option(of, "use_clear_button", "Кликать «×» очистки перед поиском")
         self._add_option(of, "verify_clipboard", "Проверять буфер обмена перед вставкой")
         self._add_option(of, "restore_clipboard", "Восстанавливать буфер обмена после")
-        self._add_option(of, "focus_game", "Поднимать окно игры на передний план перед стартом")
         self._add_option(of, "hover_verify", "Сверять, что курсор реально встал на слот")
         self._add_option(of, "hover_retry", "Наводить заново, если курсор не долетел до слота")
         row = ttk.Frame(of)
@@ -4769,13 +4806,9 @@ class App:
                 self.ui_q.put(("progress", (countdown - i) / max(1, total) * 100))
                 time.sleep(1)
 
-            if not self.dry_var.get() and self.option("focus_game"):
-                ok, info = INPUT.focus_game()
-                if ok:
-                    self.log(f"Окно игры на переднем плане: «{info}».")
-                else:
-                    self.log(f"⚠ Не смог поднять окно игры ({info}). Если фокус не на игре, "
-                             f"наведение и клики до неё не дойдут.")
+            if not self.dry_var.get():
+                self.log("Переключитесь в DBD вручную во время отсчёта. "
+                         "Поиск процесса игры отключён.")
 
             mode = "СУХОЙ ПРОГОН" if self.dry_var.get() else "АВТО"
             self.log(f"=== {mode}: {total - 1} шаг(ов) ===")

@@ -1,0 +1,83 @@
+name: RU catalog refresh and verification
+
+# Audit external wiki data on a dedicated review branch only.
+on:
+  push:
+    branches: ["feature/qt-beta21-ru-catalog-audit"]
+    paths:
+      - "tools/fetch_ru_skins.py"
+      - "tools/catalog_audit.py"
+      - "tools/test_catalog_audit.py"
+      - ".github/workflows/ru-catalog-refresh.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ru-catalog-verification
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Keep a baseline of confirmed RU names and skin IDs
+        run: |
+          python tools/catalog_audit.py --export-baseline "${{ runner.temp }}/catalog_baseline.json" --strict
+          python -m unittest tools.test_catalog_audit -v
+
+      - name: Fetch Russian outfit names (best effort)
+        id: names
+        continue-on-error: true
+        run: |
+          python tools/fetch_ru_skins.py --refresh
+
+      - name: Rebuild cosmetics from current public wiki.gg data
+        id: cosmetics
+        continue-on-error: true
+        run: |
+          python tools/resolve_skins.py --force
+
+      - name: Cross-check every skin, perk and add-on record
+        run: |
+          python tools/catalog_audit.py \
+            --baseline "${{ runner.temp }}/catalog_baseline.json" \
+            --json tools/catalog_audit.json \
+            --markdown tools/catalog_audit.md \
+            --strict
+          python -m unittest tools.test_catalog_audit -v
+
+      # Legacy GUI tests run in the existing Windows Qt CI, which already
+      # installs Windows input dependencies. Ubuntu checks only data and names.
+      - name: Upload verified audit and candidate databases
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbd-ru-catalog-review
+          path: |
+            tools/catalog_audit.json
+            tools/catalog_audit.md
+            tools/skin_names_ru.py
+            dbd_skins.py
+          if-no-files-found: error
+
+      - name: Commit audited data only when cosmetics refresh succeeded
+        if: steps.cosmetics.outcome == 'success' && github.ref == 'refs/heads/feature/qt-beta21-ru-catalog-audit'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dbd_skins.py tools/skin_names_ru.py tools/catalog_audit.json tools/catalog_audit.md
+          if ! git diff --cached --quiet; then
+            git commit -m "data: refresh confirmed RU cosmetics and audit perk/add-on name coverage"
+            git push
+          else
+            echo "Catalog already matches verified source data."
+          fi

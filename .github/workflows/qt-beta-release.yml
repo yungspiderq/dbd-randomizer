@@ -1,0 +1,154 @@
+name: Qt Stable v3.0.0 - verify Windows and publish release
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_data.py", "dbd_killer_challenges.py", "dbd_icons.py", "smoke_test.py", "tools/addon_names_ru_en.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_rc2_candidate_e2e.py", ".github/workflows/qt-beta-release.yml"]
+  workflow_dispatch:
+    inputs:
+      publish_stable:
+        description: "Publish full v3.0.0 Stable release after all Windows checks pass"
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qt-beta-release
+  cancel-in-progress: true
+
+jobs:
+  windows-qt-beta:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout preview branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install project and build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r qml_preview/requirements.txt pyinstaller
+      - name: Verify release and updater version match
+        shell: pwsh
+        run: |
+          $releaseTag = (Select-String -Path ".github/workflows/qt-beta-release.yml" -Pattern '^\s*\$tag = "([^"]+)"').Matches.Groups[1].Value
+          $installedTag = python -c "import sys; sys.path.insert(0, 'qml_preview'); import qt_updater; print(qt_updater.CURRENT_TAG)"
+          if ($LASTEXITCODE -ne 0 -or $releaseTag -ne $installedTag) { throw "Release tag does not match updater version: $releaseTag / $installedTag" }
+          Write-Host "Release and updater version match: $installedTag"
+      - name: Python syntax check
+        run: python -m py_compile qml_preview/main.py qml_preview/native_backend.py qml_preview/rotation_engine.py qml_preview/stats_engine.py qml_preview/icon_queue.py qml_preview/perk_cards.py qml_preview/favorites.py qml_preview/appearance.py qml_preview/build_icon.py qml_preview/addon_effects.py qml_preview/qt_updater.py dbd_randomizer.py dbd_github.py dbd_icons_store.py
+      - name: Targeted core generation checks
+        run: |
+          python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
+      - name: Targeted legacy regression tests
+        run: python -m unittest smoke_test.TestConfig smoke_test.TestGeneration smoke_test.TestAutomation -q
+      - name: Verify complete Doctor add-on pool and killer power challenge selection
+        run: |
+          python -m unittest smoke_test.TestDoctorAddonPool smoke_test.TestKillerPowerChallenges -v
+      - name: Verify Russian catalog and persistent cosmetic IDs
+        run: |
+          python tools/catalog_audit.py --strict
+          python -m unittest tools.test_catalog_audit -v
+      - name: Native Qt backend regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest qml_preview/test_appearance.py qml_preview/test_favorites.py qml_preview/test_qt_updater.py qml_preview/test_rotation_engine.py qml_preview/test_icon_queue.py qml_preview/test_stats_engine.py qml_preview/test_perk_cards.py qml_preview/test_native_backend.py -v
+      - name: Verify real PowerShell update and shortcut repair on Windows
+        shell: pwsh
+        run: |
+          python qml_preview/test_updater_windows.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python qml_preview/test_shortcut_windows.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Generate icon files for Windows and QML
+        run: |
+          python qml_preview/build_icon.py
+          python -c "from PIL import Image; from pathlib import Path; p=Path('qml_preview/assets'); assert (p/'app_icon.ico').is_file() and (p/'app_icon.png').is_file(); im=Image.open(p/'app_icon.png'); assert im.size==(256,256); print('Native icon OK')"
+      - name: QML smoke launch with the real engine
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python qml_preview/main.py --smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python qml_preview/main.py --smoke-appearance
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python qml_preview/main.py --smoke-catalogs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python qml_preview/main.py --smoke-builder
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build Windows portable directory
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --contents-directory _internal --windowed --name DBDRandomizerQtBeta --paths . --add-data "qml_preview/Main.qml;qml_preview" --add-data "qml_preview/assets/app_icon.png;qml_preview/assets" --icon "qml_preview/assets/app_icon.ico" --hidden-import pydirectinput --hidden-import pyautogui --hidden-import keyboard --hidden-import PIL --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtQuickLayouts qml_preview/main.py
+          $app = Join-Path $PWD "dist/DBDRandomizerQtBeta"
+          if (-not (Test-Path "$app/DBDRandomizerQtBeta.exe" -PathType Leaf)) { throw "Missing portable EXE" }
+          if (-not (Test-Path "$app/_internal/python312.dll" -PathType Leaf)) { throw "Missing persistent Python 3.12 DLL in _internal" }
+          Copy-Item -LiteralPath "qml_preview/Repair DBD Randomizer Shortcut.ps1" -Destination $app -Force
+          Copy-Item -LiteralPath "qml_preview/Update DBD Randomizer Shortcut.cmd" -Destination $app -Force
+          if (-not (Test-Path "$app/Repair DBD Randomizer Shortcut.ps1" -PathType Leaf) -or -not (Test-Path "$app/Update DBD Randomizer Shortcut.cmd" -PathType Leaf)) { throw "Missing desktop shortcut repair files" }
+          Write-Host "Portable EXE: $([math]::Round((Get-Item "$app/DBDRandomizerQtBeta.exe").Length / 1MB, 2)) MiB"
+          Write-Host "Portable runtime: $([math]::Round(((Get-ChildItem "$app/_internal" -Recurse -File | Measure-Object -Property Length -Sum).Sum) / 1MB, 2)) MiB"
+
+      - name: Test unpacked EXE launch
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $exe = Join-Path $PWD "dist/DBDRandomizerQtBeta/DBDRandomizerQtBeta.exe"
+          $watch = [System.Diagnostics.Stopwatch]::StartNew()
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke" -PassThru -Wait
+          $watch.Stop()
+          Write-Host "Portable EXE smoke time: $([math]::Round($watch.Elapsed.TotalSeconds, 2)) seconds"
+          if ($p.ExitCode -ne 0) { throw "Portable Qt startup failed with exit $($p.ExitCode)" }
+
+      - name: Create portable ZIP and SHA-256 checksum
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/DBDRandomizerQtBeta" -DestinationPath "dist/DBDRandomizerQtBeta.zip" -CompressionLevel Optimal -Force
+          if (-not (Test-Path "dist/DBDRandomizerQtBeta.zip" -PathType Leaf)) { throw "Missing portable ZIP" }
+          python -c "import sys; sys.path.insert(0, 'qml_preview'); import qt_updater as u; from pathlib import Path; import tempfile; import shutil; z=Path('dist/DBDRandomizerQtBeta.zip'); d=Path(tempfile.mkdtemp()); p=u._unpack_verified(z,d); assert (p/'DBDRandomizerQtBeta.exe').is_file() and (p/'_internal'/'python312.dll').is_file(); print('Safe ZIP validation OK'); shutil.rmtree(d)"
+          if ($LASTEXITCODE -ne 0) { throw "ZIP did not pass safe extraction and DLL check" }
+          $hash = (Get-FileHash "dist/DBDRandomizerQtBeta.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  DBDRandomizerQtBeta.zip" | Set-Content -Path "dist/DBDRandomizerQtBeta.zip.sha256" -Encoding ascii
+          Write-Host "Portable ZIP size: $([math]::Round((Get-Item 'dist/DBDRandomizerQtBeta.zip').Length / 1MB, 2)) MiB"
+
+      - name: Verify upgrade from published RC1 to v3.0.0 Stable ZIP
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $old = Join-Path $env:RUNNER_TEMP "qt-rc1-original"
+          New-Item -ItemType Directory -Force -Path $old | Out-Null
+          gh release download v3.0.0-qt-rc.1 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published RC1 release" }
+          python tests/qt_rc2_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
+          if ($LASTEXITCODE -ne 0) { throw "RC1 to Stable updater E2E failed" }
+
+      - name: Upload verified Windows portable ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DBDRandomizerQtStable-Portable-Windows
+          path: |
+            dist/DBDRandomizerQtBeta.zip
+            dist/DBDRandomizerQtBeta.zip.sha256
+
+      - name: Publish GitHub Stable v3.0.0 (only after every validation above)
+        if: github.ref == 'refs/heads/main' && ((github.event_name == 'push' && contains(github.event.head_commit.message, '[publish stable v3.0.0]')) || (github.event_name == 'workflow_dispatch' && inputs.publish_stable == true))
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v3.0.0"
+          if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
+            throw "Stable $tag exists; refusing to overwrite published release assets"
+          } else {
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt v3.0.0 — Stable Release" --notes-file "qml_preview/RELEASE_NOTES.md" --latest
+          }

@@ -8,7 +8,7 @@ on:
         required: false
         default: ""
   push:
-    tags: ["v*"]
+    tags: ["v2*"]    # Legacy Tk EXE only; Qt Stable v3 uses Qt workflow
 
 permissions:
   contents: write          # нужно для gh release upload

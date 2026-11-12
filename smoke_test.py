@@ -290,11 +290,167 @@ class TestGeneration(unittest.TestCase):
                 R.dump_db(fresh)
                 db = R.load_db()
             self.assertNotIn("Палитра", db["killers"]["Художница"]["addons"])
-            self.assertNotIn("«Порядок» — заметки Картера", db["killers"]["Доктор"]["addons"])
+            self.assertIn('"Порядок" - заметки Картера', db["killers"]["Доктор"]["addons"])
+            self.assertEqual(len(db["killers"]["Доктор"]["addons"]), 20)
             self.assertTrue(db.get("_db_dropped_removed"))
             for info in db["killers"].values():
                 offered = set(R._playable_addons(info.get("addons", [])))
                 self.assertFalse(set(D.REMOVED_FROM_GAME) & offered)
+
+
+class TestDoctorAddonPool(unittest.TestCase):
+    """Regression: outdated Doctor data left exactly 2 iridescent add-ons."""
+
+    def test_all_twenty_addons_remain_playable_and_mapped(self):
+        import dbd_data as D
+        import dbd_icons as I
+        from tools.addon_names_ru_en import ADDON_RU_EN
+
+        addons = D.KILLERS["Доктор"]["addons"]
+        self.assertEqual(len(addons), 20)
+        self.assertEqual(len(set(addons)), 20)
+        self.assertEqual(len(R._playable_addons(addons)), 20)
+        self.assertFalse(set(addons) & set(D.REMOVED_FROM_GAME))
+        self.assertTrue(all(a in ADDON_RU_EN["Доктор"] for a in addons))
+        for name in addons:
+            self.assertIn(name, I.ADDON_ICONS, "Нет иконки для " + name)
+            self.assertTrue(I.ADDON_ICONS[name].startswith("IconAddon_"))
+            self.assertTrue(I.ADDON_ICONS[name].endswith(".png"))
+
+    def test_doctor_generation_not_locked_to_two_iridescents(self):
+        doctor = R.db_defaults()
+        seen = set()
+        for _ in range(300):
+            build = R.make_killer_build(
+                doctor, ["Доктор"], addons_enabled=True, skin_enabled=False
+            )
+            self.assertEqual(build["char"], "Доктор")
+            self.assertEqual(len(set(build["addons"])), 2)
+            seen.update(build["addons"])
+        self.assertEqual(seen, set(doctor["killers"]["Доктор"]["addons"]))
+
+    def test_current_revision_two_red_only_saved_doctor_pool_recovers(self):
+        import dbd_data as D
+        legacy = ["Радужный король", "Радужный ферзь"]
+        with tempfile.TemporaryDirectory() as directory:
+            file = os.path.join(directory, "dbd_database.json")
+            saved = R.db_defaults()   # current revision, so no full reset
+            saved["killers"]["Доктор"]["addons"] = legacy[:]
+            with open(file, "w", encoding="utf-8") as out:
+                json.dump(saved, out, ensure_ascii=False)
+            with mock.patch.object(R, "DB_FILE", file):
+                recovered = R.load_db()
+            self.assertTrue(recovered.get("_db_doctor_addons_repaired"))
+            self.assertEqual(recovered["killers"]["Доктор"]["addons"],
+                             D.KILLERS["Доктор"]["addons"])
+            self.assertTrue(os.path.isfile(file + ".doctor-addons.bak"))
+            with open(file, encoding="utf-8") as inp:
+                self.assertEqual(
+                    json.load(inp)["killers"]["Доктор"]["addons"],
+                    D.KILLERS["Доктор"]["addons"])
+            seen = set()
+            for _ in range(180):
+                build = R.make_killer_build(
+                    recovered, ["Доктор"], addons_enabled=True, skin_enabled=False)
+                seen.update(build["addons"])
+            self.assertGreater(len(seen), 10)
+            self.assertTrue(seen - set(legacy))
+
+    def test_doctor_custom_subset_and_other_killers_are_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = os.path.join(directory, "dbd_database.json")
+            saved = R.db_defaults()
+            saved["killers"]["Доктор"]["addons"] = [
+                '"Дисциплина" - класс II', "Радужный король"]
+            saved["killers"]["Правосудие"]["addons"] = ["Череп искателя"]
+            with open(file, "w", encoding="utf-8") as out:
+                json.dump(saved, out, ensure_ascii=False)
+            with mock.patch.object(R, "DB_FILE", file):
+                loaded = R.load_db()
+            self.assertNotIn("_db_doctor_addons_repaired", loaded)
+            self.assertEqual(loaded["killers"]["Доктор"]["addons"],
+                             saved["killers"]["Доктор"]["addons"])
+            self.assertEqual(loaded["killers"]["Правосудие"]["addons"],
+                             ["Череп искателя"])
+
+    def test_doctor_owned_whitelist_is_explained_not_silently_bypassed(self):
+        db = R.db_defaults()
+        db["owned"]["killer_addons"] = ["Радужный король", "Радужный ферзь"]
+        limited = R.make_killer_build(
+            db, ["Доктор"], respect_owned=True, skin_enabled=False)
+        self.assertEqual(set(limited["addons"]),
+                         {"Радужный король", "Радужный ферзь"})
+        full = set()
+        for _ in range(160):
+            full.update(R.make_killer_build(
+                db, ["Доктор"], respect_owned=False, skin_enabled=False)["addons"])
+        self.assertGreater(len(full), 10)
+
+    def test_saved_old_db_and_owned_list_migrate(self):
+        import dbd_data as D
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "dbd_database.json")
+            old = R.db_defaults()
+            old["db_revision"] = 2
+            old["killers"]["Доктор"]["addons"] = [
+                "Радужный король", "Радужный ферзь",
+                "«Дисциплина» — заметки Картера",
+            ]
+            old["owned"]["killer_addons"] = [
+                "Радужный король", "«Дисциплина» — заметки Картера",
+            ]
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(old, fh, ensure_ascii=False)
+            with mock.patch.object(R, "DB_FILE", path):
+                migrated = R.load_db()
+            self.assertEqual(migrated["db_revision"], D.DB_REVISION)
+            self.assertEqual(len(migrated["killers"]["Доктор"]["addons"]), 20)
+            self.assertIn('"Дисциплина" - заметки Картера',
+                          migrated["owned"]["killer_addons"])
+            self.assertTrue(os.path.exists(path + ".bak"))
+
+
+class TestKillerPowerChallenges(unittest.TestCase):
+    """No impossible power challenge should be given to another killer."""
+
+    def test_all_killers_have_three_unique_power_trials(self):
+        from collections import Counter
+        import dbd_data as D
+        powers = [c for c in D.CHALLENGES if c.get("kind") == "power"]
+        self.assertEqual(len(powers), len(D.KILLERS) * 3)
+        names = [c["ru"] for c in powers]
+        self.assertEqual(len(names), len(set(names)))
+        counts = Counter(c["killer"] for c in powers)
+        self.assertEqual(set(counts), set(D.KILLERS))
+        self.assertTrue(all(n == 3 for n in counts.values()))
+        for name, info in D.KILLERS.items():
+            related = [c for c in powers if c["killer"] == name]
+            self.assertEqual({c["diff"] for c in related}, {1, 2, 3})
+            self.assertTrue(all(c["power"] == info["power"] for c in related))
+
+    def test_power_pools_match_only_chosen_killer(self):
+        import dbd_data as D
+        for killer in D.KILLERS:
+            for difficulty in (1, 2, 3, "any"):
+                pool = R.challenge_candidates("KILLER", difficulty,
+                                               character=killer, kind="power")
+                self.assertTrue(pool)
+                self.assertTrue(all(c["killer"] == killer for c in pool))
+                for _ in range(5):
+                    c = R.pick_challenge("KILLER", difficulty,
+                                         character=killer, kind="power")
+                    self.assertEqual(c["killer"], killer)
+            self.assertFalse(R.challenge_candidates("SURVIVOR", "any",
+                                                     character=killer, kind="power"))
+        self.assertFalse(R.challenge_candidates("KILLER", "any", kind="power"))
+        self.assertFalse(any(c.get("killer") for c in
+                             R.challenge_candidates("KILLER", "any", kind="general")))
+
+    def test_general_reroll_never_assigns_wrong_character_trial(self):
+        for _ in range(40):
+            c = R.reroll_challenge("KILLER", "any")
+            self.assertFalse(c.get("killer"))
+        self.assertIsNone(R.reroll_challenge("SURVIVOR", "any", kind="power"))
 
 
 class TestAddonRenameMigration(unittest.TestCase):
@@ -1689,7 +1845,7 @@ class TestHover(unittest.TestCase):
         inp._force_pos = lambda x, y: False
         self.assertFalse(inp.click(10, 10, hold=0.02, steps=1, step_delay=0, wiggle=0,
                                    settle=0))
-        self.assertIn("down", [c[0] for c in pdi.calls])   # клик всё равно выполнен
+        self.assertNotIn("down", [c[0] for c in pdi.calls])  # промах: запрещаем опасный клик
 
 
 class TestHoverInApp(unittest.TestCase):
@@ -1740,14 +1896,14 @@ class TestHoverInApp(unittest.TestCase):
         self.assertFalse(self.app._click((120, 400), "slot1"))
         self.assertEqual(len([c for c in self.fake.calls if c[0] == "click"]), 1)
 
-    def test_automation_focuses_game_window(self):
+    def test_automation_does_not_search_game_window(self):
         self.app.timing = lambda key: 0.0 if key != "retries" else 1
         self.app.build = {"side": "KILLER", "char": "Охотник", "power_or_item": "Капкан",
                           "power_is_item": False, "addons": [R.EMPTY, R.EMPTY],
                           "perks": ["А", R.EMPTY, R.EMPTY, R.EMPTY]}
         self.app.search_and_select = lambda name: True
         self.app._run_automation(self.app._equip_steps())
-        self.assertEqual(self.fake.focus_calls, 1)
+        self.assertEqual(self.fake.focus_calls, 0)
 
     def test_no_focus_in_dry_run(self):
         self.app.dry_var.set(True)
@@ -2432,7 +2588,9 @@ class TestChallenges(unittest.TestCase):
         self.assertEqual(dup, [])
 
     def test_pick_challenge_avoids_history(self):
-        names = {c["ru"] for c in R.DATA.CHALLENGES if c["side"] in ("KILLER", "ANY")}
+        # Calls without a selected killer must not include character-only tasks.
+        names = {c["ru"] for c in R.DATA.CHALLENGES
+                 if c["side"] in ("KILLER", "ANY") and not c.get("killer")}
         almost = set(list(names)[:-1])
         ch = R.pick_challenge("KILLER", "any", avoid=almost)
         self.assertIn(ch["ru"], names - almost, "история не исключила повторы")
