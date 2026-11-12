@@ -84,7 +84,7 @@ class QtBridge(QObject):
         self._locks = [False] * 4
         self._build_revision = 0
         self._history = []
-        self._status = "Загружены игровые данные v" + core.APP_VERSION
+        self._status = ("Ядро " + core.APP_VERSION + " · Qt " + qt_updater.CURRENT_TAG)
         self._log = []
         self._messages = queue.SimpleQueue()
         self._icon_version = 0

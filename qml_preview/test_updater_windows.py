@@ -32,6 +32,10 @@ class WindowsInstallTests(unittest.TestCase):
         (self.target / "_internal" / "python312.dll").write_bytes(b"OLD_DLL")
         (self.staged / u.APP_EXE).write_bytes(b"NEW_EXE")
         (self.staged / "_internal" / "python312.dll").write_bytes(b"NEW_DLL")
+        (self.staged / "Repair DBD Randomizer Shortcut.ps1").write_text(
+            "Write-Output 'test helper'", encoding="utf-8")
+        (self.staged / "Update DBD Randomizer Shortcut.cmd").write_text(
+            "@echo off\n", encoding="ascii")
         (self.target / "dbd_randomizer_config.json").write_text('{"private":"keep"}', encoding="utf-8")
         (self.target / "my_mod_data.json").write_text("keep", encoding="utf-8")
         self.script = self.parent / "installer.ps1"
@@ -50,6 +54,8 @@ class WindowsInstallTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual((self.target / u.APP_EXE).read_bytes(), b"NEW_EXE")
         self.assertEqual((self.target / "_internal" / "python312.dll").read_bytes(), b"NEW_DLL")
+        self.assertTrue((self.target / "Repair DBD Randomizer Shortcut.ps1").is_file())
+        self.assertTrue((self.target / "Update DBD Randomizer Shortcut.cmd").is_file())
         self.assertEqual((self.target / "dbd_randomizer_config.json").read_text(encoding="utf-8"),
                          '{"private":"keep"}')
         self.assertEqual((self.target / "my_mod_data.json").read_text(encoding="utf-8"), "keep")

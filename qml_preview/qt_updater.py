@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 
 REPO = "yungspiderq/dbd-randomizer"
 BASE = f"https://api.github.com/repos/{REPO}/releases"
-CURRENT_TAG = "v2.28.0-qt-beta.22"
+CURRENT_TAG = "v3.0.0-qt-rc.1"
 ASSET = "DBDRandomizerQtBeta.zip"
 APP_EXE = "DBDRandomizerQtBeta.exe"
 PACKAGE_ROOT = "DBDRandomizerQtBeta"
@@ -49,8 +49,24 @@ def _get(url, timeout=30):
 
 
 def _key(tag):
-    match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)-qt-beta\.(\d+)", str(tag))
-    return tuple(map(int, match.groups())) if match else None
+    """Order old beta, new Qt RC and stable tags without accepting unknown channels.
+
+    Numeric components are always compared as numbers:
+    beta.22 < rc.1 < final for the same major/minor/patch.
+    The stable tag is vMAJOR.MINOR.PATCH (without an extra Qt suffix).
+    """
+    match = re.fullmatch(
+        r"v(\d+)\.(\d+)\.(\d+)(?:-qt-(beta|rc)\.(\d+))?", str(tag)
+    )
+    if not match:
+        return None
+    major, minor, patch, channel, sequence = match.groups()
+    # Historic v2.x Stable releases use the legacy Tk UI, not the Qt portable
+    # installation. Never offer them as updates for the Qt channel.
+    if channel is None and int(major) < 3:
+        return None
+    rank = {"beta": 0, "rc": 1, None: 2}[channel]
+    return (int(major), int(minor), int(patch), rank, int(sequence or 0))
 
 
 def check():
@@ -76,6 +92,17 @@ def check():
                         and isinstance(a.get("size"), int)
                         and 1_000_000 < a["size"] <= MAX_DOWNLOAD), None)
         if not archive:
+            continue
+        # Never advertise an incomplete upload that cannot pass stage()'s
+        # mandatory SHA-256 verification. Without this gate, the UI shows
+        # "Update available" but installation immediately fails.
+        checksum = next(
+            (a.get("browser_download_url") for a in assets
+             if isinstance(a, dict) and a.get("name") == ASSET + ".sha256"
+             and isinstance(a.get("browser_download_url"), str)), ""
+        )
+        digest = str(archive.get("digest") or "")
+        if not (re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest) or checksum):
             continue
         if newest is None or version > _key(newest["tag_name"]):
             newest = release
@@ -298,9 +325,33 @@ try {
     Move-WithRetry $sourceExe $exe
     $newExeMoved = $true
 
+    # Optional shortcut tools never affect the transactional EXE/runtime swap.
+    # Preserve them in the installed portable folder for a manually repaired
+    # desktop shortcut after extracting RC1 in a fresh directory.
+    foreach ($helper in @("Repair DBD Randomizer Shortcut.ps1", "Update DBD Randomizer Shortcut.cmd")) {
+        $from = Join-Path $StagedDir $helper
+        if (Test-Path -LiteralPath $from -PathType Leaf) {
+            try {
+                Copy-Item -LiteralPath $from -Destination (Join-Path $TargetDir $helper) -Force -ErrorAction Stop
+            } catch {
+                Write-Progress ("Shortcut helper copy failed: " + $_.Exception.Message)
+            }
+        }
+    }
     $phase = "launching updated application"
     Write-Progress $phase
     if (-not $SkipLaunch) {
+        # An in-place update may retain an old shortcut targeting pythonw or
+        # a removed Tk script. Repair it after EXE validation, without failing
+        # the program installation if Windows denies shortcut access.
+        $repair = Join-Path $TargetDir "Repair DBD Randomizer Shortcut.ps1"
+        if (Test-Path -LiteralPath $repair -PathType Leaf) {
+            try {
+                & $repair -InstallDir $TargetDir | Out-Null
+            } catch {
+                Write-Progress ("Shortcut repair failed: " + $_.Exception.Message)
+            }
+        }
         Start-Process -FilePath $exe -WorkingDirectory $TargetDir -ErrorAction Stop
     }
     $success = $true
