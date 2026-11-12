@@ -109,6 +109,7 @@ class QtBridge(QObject):
         self._stop = threading.Event()
         self._hotkey_handle = None
         self._target_window = None
+        self._equip_side = None
         self._planned_equipped = None
         self._update_info = None
         self._update_text = qt_updater.last_install_error(
@@ -135,6 +136,9 @@ class QtBridge(QObject):
 
     def _drain(self):
         needs_icons = False
+        # Coalesce burst notifications to avoid redundant QML bindings.
+        status_dirty = False
+        update_dirty = False
         for _ in range(80):
             try:
                 item = self._messages.get_nowait()
@@ -143,11 +147,10 @@ class QtBridge(QObject):
             kind = item[0]
             if kind == "status":
                 self._status = item[1]
-                self.statusChanged.emit()
+                status_dirty = True
                 if item[2]:
                     self._log.append(time.strftime("%H:%M:%S") + "  " + item[1])
                     self._log = self._log[-250:]
-                    self.statusChanged.emit()
             elif kind == "running":
                 self._running = item[1]
                 self.runningChanged.emit()
@@ -163,12 +166,12 @@ class QtBridge(QObject):
                 # Progress is not a terminal result: do not clear _update_busy
                 # or _update_info before the verified archive is installed.
                 self._update_text = item[1]
-                self.updateChanged.emit()
+                update_dirty = True
             elif kind == "update":
                 self._update_info = item[1]
                 self._update_text = item[2]
                 self._update_busy = False
-                self.updateChanged.emit()
+                update_dirty = True
             elif kind == "install":
                 try:
                     qt_updater.install_staged(item[1])
@@ -180,6 +183,10 @@ class QtBridge(QObject):
                     self._notify("Не удалось запустить установку: " + str(e))
                     self._update_busy = False
                     self.updateChanged.emit()
+        if status_dirty:
+            self.statusChanged.emit()
+        if update_dirty:
+            self.updateChanged.emit()
         if needs_icons and not self._icon_refresh.isActive():
             self._icon_refresh.start()
 
@@ -900,7 +907,7 @@ class QtBridge(QObject):
     def _sync(self):
         self.perksChanged.emit()
         self.detailChanged.emit()
-        self.iconVersionChanged.emit()
+        # Perk QML bindings update separately; avoid reloading every icon.
         self._build_revision += 1
         self.buildRevisionChanged.emit()
 
@@ -1380,7 +1387,7 @@ class QtBridge(QObject):
         except (KeyError,ValueError,TypeError):
             return None
 
-    def _outside_desktop(self, keys):
+    def _outside_desktop(self, keys, extra=()):
         """Report impossible physical coordinates, supporting multi-monitor layouts."""
         if sys.platform != "win32":
             return []
@@ -1391,8 +1398,9 @@ class QtBridge(QObject):
             if width <= 0 or height <= 0:
                 return []
             invalid = []
-            for key in dict.fromkeys(keys):
-                point = self._coord(key)
+            points = [(key, self._coord(key)) for key in dict.fromkeys(keys)]
+            points.extend(extra)
+            for key, point in points:
                 if point is not None and not (
                     left <= point[0] < left + width and top <= point[1] < top + height
                 ):
@@ -1478,14 +1486,21 @@ class QtBridge(QObject):
                                 restore=self._option("restore_clipboard"),
                                 guard=self._assert_input_ready)
 
+    def _result_target(self):
+        """Physical position of the selected search result icon."""
+        first = self._coord("first_result")
+        if first is None:
+            return None
+        index = max(1, min(9, int(self._option("result_index") or 1)))
+        step = int(self._timing("result_step"))
+        return first[0] + (index - 1) * step, first[1]
+
     def _search_and_select(self,target):
         search=self._coord("search")
-        result=self._coord("first_result")
+        result=self._result_target()
         if not search or not result:
             raise ValueError("Координаты поиска не заданы.")
-        idx=max(1,min(9,int(self._option("result_index") or 1)))
-        step=int(self._timing("result_step"))
-        dest=(result[0]+(idx-1)*step,result[1])
+        dest=result
         verify_ocr = bool(self._option("ocr_verify")) and not self._option("dry_run")
         region = self._ocr_region() if verify_ocr else None
         if verify_ocr and region is None:
@@ -1579,11 +1594,15 @@ class QtBridge(QObject):
                 self._notify("Ввод недоступен: "+core.INPUT.reason)
                 return
             if not self._option("dry_run"):
-                outside = self._outside_desktop(needed)
+                outside = self._outside_desktop(needed, extra=[("result_index", self._result_target())])
                 if outside:
                     self._notify("Координаты вне границ экрана: " + ", ".join(outside) +
                                  ". Проверьте разрешение и настройте позиции заново.")
                     return
+                if self._option("ocr_verify") and self._ocr_region() is None:
+                    self._notify("OCR включён, но область распознавания не задана.")
+                    return
+            self._equip_side = self.build["side"]
             self._stop.clear()
             self._running = True
             self.runningChanged.emit()
@@ -1595,6 +1614,8 @@ class QtBridge(QObject):
             self._notify("Подготовка экипировки: "+str(e))
 
     def _automate(self,steps):
+        # Preserve the initiating build side if the UI changes during countdown.
+        side = self._equip_side or (self.build or {}).get("side")
         try:
             self._target_window = None
             dry_run = bool(self._option("dry_run"))
@@ -1627,21 +1648,22 @@ class QtBridge(QObject):
             if not self._option("dry_run"):
                 # A successful click only proves that input was sent, NOT that the
                 # game equipped the item. Never cache an unverified screen state.
-                self.cfg.setdefault("last_equipped",{})[self.build["side"]]=None
+                self.cfg.setdefault("last_equipped",{})[side]=None
                 self._save()
             self._notify("Команды отправлены. Подтвердите результат в игре; состояние не сохранено как проверенное.")
         except core.AbortError:
             self._notify("Автоматизация остановлена.")
             if not self._option("dry_run"):
-                self.cfg.setdefault("last_equipped",{})[self.build["side"]]=None
+                self.cfg.setdefault("last_equipped",{})[side]=None
                 self._save()
         except Exception as e:
             self._notify("Ошибка экипировки: "+str(e))
             if not self._option("dry_run") and self.build:
-                self.cfg.setdefault("last_equipped",{})[self.build["side"]]=None
+                self.cfg.setdefault("last_equipped",{})[side]=None
                 self._save()
         finally:
             self._target_window = None
+            self._equip_side = None
             self._messages.put(("running",False))
             self._wake.emit()
 
