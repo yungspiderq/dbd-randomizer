@@ -70,6 +70,8 @@ def run(previous: Path, candidate: Path) -> None:
         candidate_dir = root / (updater.STAGE_PREFIX + "candidate19")
         candidate_dir.mkdir()
         staged = updater._unpack_verified(candidate, candidate_dir)
+        for filename in ("Repair DBD Randomizer Shortcut.ps1", "Update DBD Randomizer Shortcut.cmd"):
+            assert (staged / filename).is_file(), "RC ZIP missing shortcut repair: " + filename
         candidate_exe_hash = sha256(staged / updater.APP_EXE)
         candidate_dll_hash = sha256(staged / "_internal" / "python312.dll")
         # PyInstaller bootloader bytes and python312.dll can stay unchanged
@@ -98,6 +100,18 @@ def run(previous: Path, candidate: Path) -> None:
         assert not (destination / ".dbd_qt_previous_internal").exists()
         assert not (destination / "dbd_update_error.log").exists()
         assert not candidate_dir.exists()
+        for filename in ("Repair DBD Randomizer Shortcut.ps1", "Update DBD Randomizer Shortcut.cmd"):
+            assert (destination / filename).is_file(), "Installer lost shortcut helper: " + filename
+        desktop = root / "Test Desktop With Spaces"
+        desktop.mkdir()
+        shortcut = subprocess.run([
+            "powershell.exe", "-NoProfile", "-NonInteractive",
+            "-ExecutionPolicy", "Bypass",
+            "-File", str(destination / "Repair DBD Randomizer Shortcut.ps1"),
+            "-InstallDir", str(destination), "-ShortcutDirectory", str(desktop),
+        ], capture_output=True, text=True, errors="replace", timeout=30)
+        assert shortcut.returncode == 0, "Shortcut repair failed: " + shortcut.stderr
+        assert (desktop / "DBD Randomizer.lnk").is_file(), "Shortcut was not created"
         assert favorite.read_text(encoding="utf-8") == '{"preserve":true}'
         assert "SUCCESS: installed portable Qt update" in (
             destination / "dbd_update_progress.log").read_text(encoding="utf-8-sig")
