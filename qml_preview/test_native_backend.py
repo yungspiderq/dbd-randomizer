@@ -480,7 +480,7 @@ class QtBackendTests(unittest.TestCase):
             points = [0]
             def guard_click():
                 points[0] += 1
-                if points[0] >= 4:
+                if points[0] >= 5:
                     raise RuntimeError("lost focus while mouse held")
             with self.assertRaisesRegex(RuntimeError, "lost focus"):
                 core.INPUT.click(1, 1, steps=1, step_delay=0, wiggle=0,
