@@ -51,19 +51,19 @@ class UpdaterTests(unittest.TestCase):
         self.assertIsNone(u._key("v999.0.0-malicious"))
         self.assertEqual(u.ASSET, "DBDRandomizerQtBeta.zip")
 
-    def test_beta20_version_does_not_offer_itself(self):
-        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.20")
+    def test_beta21_version_does_not_offer_itself(self):
+        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.21")
         def release(tag):
             return {"draft": False, "tag_name": tag,
                     "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
                     "assets": [{"name": u.ASSET, "size": 20000000,
                                 "browser_download_url": "https://github.com/" + u.REPO + "/releases/download/" + tag + "/" + u.ASSET}]}
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.19")]).encode())):
+                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.20")]).encode())):
             self.assertIsNone(u.check())
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release("v2.28.0-qt-beta.21"), release(u.CURRENT_TAG)]).encode())):
-            self.assertEqual(u.check()["tag"], "v2.28.0-qt-beta.21")
+                release("v2.28.0-qt-beta.22"), release(u.CURRENT_TAG)]).encode())):
+            self.assertEqual(u.check()["tag"], "v2.28.0-qt-beta.22")
 
     def test_beta19_discovers_beta20_prerelease_with_checksum(self):
         tag = "v2.28.0-qt-beta.20"
@@ -82,6 +82,27 @@ class UpdaterTests(unittest.TestCase):
         with patch.object(u, "CURRENT_TAG", "v2.28.0-qt-beta.19"), \
              patch.object(u, "_get",
                           return_value=io.BytesIO(json.dumps([release]).encode())):
+            info = u.check()
+        self.assertEqual(info["tag"], tag)
+        self.assertTrue(info["checksum_url"].endswith(".sha256"))
+
+    def test_beta20_discovers_beta21_prerelease_with_checksum(self):
+        tag = "v2.28.0-qt-beta.21"
+        release = {
+            "draft": False, "prerelease": True, "tag_name": tag,
+            "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
+            "assets": [
+                {"name": u.ASSET, "size": 150000000,
+                 "browser_download_url": "https://github.com/" + u.REPO +
+                 "/releases/download/" + tag + "/" + u.ASSET},
+                {"name": u.ASSET + ".sha256",
+                 "browser_download_url": "https://github.com/" + u.REPO +
+                 "/releases/download/" + tag + "/" + u.ASSET + ".sha256"}
+            ]
+        }
+        with patch.object(u, "CURRENT_TAG", "v2.28.0-qt-beta.20"), \
+             patch.object(u, "_get", return_value=io.BytesIO(
+                 json.dumps([release]).encode())):
             info = u.check()
         self.assertEqual(info["tag"], tag)
         self.assertTrue(info["checksum_url"].endswith(".sha256"))
@@ -173,7 +194,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_newer_release_requires_portable_asset(self):
         base = {
-            "draft": False, "tag_name": "v2.28.0-qt-beta.21",
+            "draft": False, "tag_name": "v2.28.0-qt-beta.22",
             "name": "New Version",
             "html_url": "https://github.com/" + u.REPO + "/releases/tag/new",
             "assets": [
@@ -186,7 +207,7 @@ class UpdaterTests(unittest.TestCase):
             ]
         }
         latest = dict(base)
-        latest["tag_name"] = "v2.28.0-qt-beta.22"
+        latest["tag_name"] = "v2.28.0-qt-beta.23"
         latest["assets"] = [{"name": "DBDRandomizerQtBeta.exe", "size": 20000000}]
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([base, latest]).encode())):

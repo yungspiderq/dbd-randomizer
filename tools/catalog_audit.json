@@ -1,0 +1,4296 @@
+{
+  "source": {
+    "cosmetics_game_version": "10.2.2_live",
+    "cosmetics_source_stamp": "2026-10-20 18:18:44",
+    "perks_addons_version": "10.1.2a / 2026-09 (имена навыков сверены с RU-вики)",
+    "skin_ru_source": "dead-by-daylight.fandom.com/ru",
+    "cosmetics_source": "deadbydaylight.wiki.gg",
+    "reference_note": "Russian names are checked against committed source maps, not the live DBD client."
+  },
+  "skins": {
+    "total": 2250,
+    "with_russian": 1663,
+    "without_russian": 587,
+    "russian_percentage": 73.91,
+    "missing_by_character": {
+      "Доктор": 16,
+      "Кейт Денсон": 15,
+      "Трюкач": 14,
+      "Адам Фрэнсис": 13,
+      "Фенг Мин": 13,
+      "Дэвид Кинг": 13,
+      "Феликс Рихтер": 13,
+      "Микаэла Рид": 12,
+      "Мэг Томас": 12,
+      "Призрак": 11,
+      "Деревенщина": 11,
+      "Медсестра": 11,
+      "Стрелок": 11,
+      "Нея Карлссон": 11,
+      "Ренато Лира": 10,
+      "Хэдди Каур": 10,
+      "Легион": 10,
+      "Джефф Йохансен": 10,
+      "Зарина Кассир": 10,
+      "Ви Бунясак": 10,
+      "Элоди Ракото": 9,
+      "Охотница": 9,
+      "Близнецы": 9,
+      "Художница": 9,
+      "Рыцарь": 9,
+      "Хороший парень": 9,
+      "Юи Кимура": 9,
+      "Ли Юнчин": 9,
+      "Тёмный властелин": 8,
+      "Красу": 8,
+      "Джейн Ромеро": 8,
+      "Витторио Тоскано": 8,
+      "Талита Лира": 8,
+      "Сейбл Уорд": 8,
+      "Тори Кейн": 8,
+      "Орела Роуз": 8,
+      "Квон Тхэён": 8,
+      "Ведьма": 7,
+      "Торговка черепами": 7,
+      "Дуайт Фэйрфилд": 7,
+      "Джейк Парк": 7,
+      "Эйс Висконти": 7,
+      "Эшли Уильямс": 7,
+      "Хонас Васкес": 7,
+      "Габриэль Сома": 7,
+      "Шейн Уиигваас": 7,
+      "Охотник": 6,
+      "Клоун": 6,
+      "Они": 6,
+      "Неведомое": 6,
+      "Правосудие": 6,
+      "Клодетт Морель": 6,
+      "Аврора": 6,
+      "Дух": 5,
+      "Грязь": 5,
+      "Сингулярность": 5,
+      "Алан Уэйк": 5,
+      "Гоуст Фейс": 4,
+      "Мор": 4,
+      "Тень": 3,
+      "Свинья": 3,
+      "Сенобит": 3,
+      "Егерь": 3,
+      "Первый": 3,
+      "Уильям Овербек": 3,
+      "Стив Харрингтон": 3,
+      "Аэстри Язар": 3,
+      "Рик Граймс": 3,
+      "Каннибал": 2,
+      "Кошмар": 2,
+      "Чума": 2,
+      "Демогоргон": 2,
+      "Палач": 2,
+      "Онрё": 2,
+      "Лич": 2,
+      "Гуль": 2,
+      "Аниматроник": 2,
+      "Слэшер": 2,
+      "Лори Строуд": 2,
+      "Детектив Тэпп": 2,
+      "Нэнси Уиллер": 2,
+      "Шерил Мейсон": 2,
+      "Николас Кейдж": 2,
+      "Мишон Граймс": 2,
+      "Дастин Хендерсон": 2,
+      "Одиннадцать": 2,
+      "Тревор Бельмонт": 2,
+      "Немезис": 1,
+      "Кукловод": 1,
+      "Квентин Смит": 1,
+      "Джилл Валентайн": 1,
+      "Леон С. Кеннеди": 1,
+      "Ёити Асакава": 1,
+      "Ада Вонг": 1,
+      "Ребекка Чемберс": 1,
+      "Эллен Рипли": 1
+    },
+    "missing_records": [
+      {
+        "id": 9,
+        "character": "Ренато Лира",
+        "english": "Queen's Ball Attire",
+        "type": "outfit",
+        "file": "S36_outfit_025.png"
+      },
+      {
+        "id": 10,
+        "character": "Адам Фрэнсис",
+        "english": "Queen's Ball Attire",
+        "type": "outfit",
+        "file": "HS_outfit_032.png"
+      },
+      {
+        "id": 11,
+        "character": "Микаэла Рид",
+        "english": "Queen's Ball Attire",
+        "type": "outfit",
+        "file": "S28_outfit_034.png"
+      },
+      {
+        "id": 12,
+        "character": "Хэдди Каур",
+        "english": "Queen's Ball Attire",
+        "type": "outfit",
+        "file": "S31_outfit_025.png"
+      },
+      {
+        "id": 13,
+        "character": "Фенг Мин",
+        "english": "Heart of Freedom",
+        "type": "outfit",
+        "file": "FM_outfit_043.png"
+      },
+      {
+        "id": 14,
+        "character": "Элоди Ракото",
+        "english": "Heart of Freedom",
+        "type": "outfit",
+        "file": "S24_outfit_028.png"
+      },
+      {
+        "id": 55,
+        "character": "Охотник",
+        "english": "Grim Punishment",
+        "type": "outfit",
+        "file": "TR_outfit_027.png"
+      },
+      {
+        "id": 57,
+        "character": "Охотник",
+        "english": "Dearest Evan",
+        "type": "outfit",
+        "file": "TR_outfit_030.png"
+      },
+      {
+        "id": 62,
+        "character": "Охотник",
+        "english": "Levee Builder",
+        "type": "outfit",
+        "file": "Chuckles_outfit_005.png"
+      },
+      {
+        "id": 63,
+        "character": "Охотник",
+        "english": "Trench Digger",
+        "type": "outfit",
+        "file": "Chuckles_outfit_006.png"
+      },
+      {
+        "id": 70,
+        "character": "Охотник",
+        "english": "The Trapper",
+        "type": "outfit",
+        "file": "S01_outfit_01.png"
+      },
+      {
+        "id": 71,
+        "character": "Охотник",
+        "english": "Bloody Trapper",
+        "type": "outfit",
+        "file": "S01_outfit_01_P01.png"
+      },
+      {
+        "id": 87,
+        "character": "Призрак",
+        "english": "Masquerade Phantom",
+        "type": "outfit",
+        "file": "TW_outfit_023.png"
+      },
+      {
+        "id": 92,
+        "character": "Призрак",
+        "english": "The Wraith",
+        "type": "outfit",
+        "file": "Wraith_outfit_01.png"
+      },
+      {
+        "id": 96,
+        "character": "Призрак",
+        "english": "Bad Omen",
+        "type": "outfit",
+        "file": "Bob_outfit_003.png"
+      },
+      {
+        "id": 97,
+        "character": "Призрак",
+        "english": "Bad Omen",
+        "type": "outfit",
+        "file": "Bob_outfit_004.png"
+      },
+      {
+        "id": 98,
+        "character": "Призрак",
+        "english": "Bad Omen",
+        "type": "outfit",
+        "file": "Bob_outfit_005.png"
+      },
+      {
+        "id": 99,
+        "character": "Призрак",
+        "english": "Bad Omen",
+        "type": "outfit",
+        "file": "Bob_outfit_006.png"
+      },
+      {
+        "id": 100,
+        "character": "Призрак",
+        "english": "Bad Omen",
+        "type": "outfit",
+        "file": "Bob_outfit_007.png"
+      },
+      {
+        "id": 101,
+        "character": "Призрак",
+        "english": "Death Blow",
+        "type": "outfit",
+        "file": "Bob_outfit_008.png"
+      },
+      {
+        "id": 102,
+        "character": "Призрак",
+        "english": "Death Trap",
+        "type": "outfit",
+        "file": "Bob_outfit_009.png"
+      },
+      {
+        "id": 117,
+        "character": "Призрак",
+        "english": "Forsaken Stag",
+        "type": "outfit",
+        "file": "TW_outfit_019.png"
+      },
+      {
+        "id": 119,
+        "character": "Призрак",
+        "english": "Bad Omen (5th Anniversary)",
+        "type": "outfit",
+        "file": "TW_outfit_01_04.png"
+      },
+      {
+        "id": 127,
+        "character": "Деревенщина",
+        "english": "Coldwind Farming",
+        "type": "outfit",
+        "file": "HillBilly_outfit_003.png"
+      },
+      {
+        "id": 128,
+        "character": "Деревенщина",
+        "english": "Coldwind Farming",
+        "type": "outfit",
+        "file": "HillBilly_outfit_004.png"
+      },
+      {
+        "id": 129,
+        "character": "Деревенщина",
+        "english": "Coldwind Farming",
+        "type": "outfit",
+        "file": "HillBilly_outfit_005.png"
+      },
+      {
+        "id": 130,
+        "character": "Деревенщина",
+        "english": "Coldwind Farming",
+        "type": "outfit",
+        "file": "HillBilly_outfit_006.png"
+      },
+      {
+        "id": 131,
+        "character": "Деревенщина",
+        "english": "Coldwind Farming",
+        "type": "outfit",
+        "file": "HillBilly_outfit_007.png"
+      },
+      {
+        "id": 132,
+        "character": "Деревенщина",
+        "english": "Unwanted Child",
+        "type": "outfit",
+        "file": "HillBilly_outfit_008.png"
+      },
+      {
+        "id": 133,
+        "character": "Деревенщина",
+        "english": "Another Mouth to Feed",
+        "type": "outfit",
+        "file": "HillBilly_outfit_009.png"
+      },
+      {
+        "id": 137,
+        "character": "Деревенщина",
+        "english": "The Hillbilly",
+        "type": "outfit",
+        "file": "Hillbilly_outfit_01.png"
+      },
+      {
+        "id": 138,
+        "character": "Деревенщина",
+        "english": "Bloody Hillbilly",
+        "type": "outfit",
+        "file": "Hillbilly_outfit_01_P01.png"
+      },
+      {
+        "id": 148,
+        "character": "Деревенщина",
+        "english": "Masquerade Chainsaw",
+        "type": "outfit",
+        "file": "TC_outfit_015.png"
+      },
+      {
+        "id": 167,
+        "character": "Медсестра",
+        "english": "On Probation",
+        "type": "outfit",
+        "file": "Nurse_outfit_006.png"
+      },
+      {
+        "id": 168,
+        "character": "Медсестра",
+        "english": "On Probation",
+        "type": "outfit",
+        "file": "Nurse_outfit_007.png"
+      },
+      {
+        "id": 169,
+        "character": "Медсестра",
+        "english": "On Probation",
+        "type": "outfit",
+        "file": "Nurse_outfit_008.png"
+      },
+      {
+        "id": 170,
+        "character": "Медсестра",
+        "english": "On Probation",
+        "type": "outfit",
+        "file": "Nurse_outfit_009.png"
+      },
+      {
+        "id": 171,
+        "character": "Медсестра",
+        "english": "On Probation",
+        "type": "outfit",
+        "file": "Nurse_outfit_010.png"
+      },
+      {
+        "id": 172,
+        "character": "Медсестра",
+        "english": "Bad News",
+        "type": "outfit",
+        "file": "Nurse_outfit_011.png"
+      },
+      {
+        "id": 173,
+        "character": "Медсестра",
+        "english": "Tainted Anniversary",
+        "type": "outfit",
+        "file": "Nurse_outfit_012.png"
+      },
+      {
+        "id": 176,
+        "character": "Медсестра",
+        "english": "The Nurse",
+        "type": "outfit",
+        "file": "Nurse_outfit_01.png"
+      },
+      {
+        "id": 177,
+        "character": "Медсестра",
+        "english": "Bloody Nurse",
+        "type": "outfit",
+        "file": "Nurse_outfit_01_P01.png"
+      },
+      {
+        "id": 206,
+        "character": "Ведьма",
+        "english": "Red Sap",
+        "type": "outfit",
+        "file": "Witch_outfit_010.png"
+      },
+      {
+        "id": 207,
+        "character": "Ведьма",
+        "english": "Birch Twigs",
+        "type": "outfit",
+        "file": "Witch_outfit_011.png"
+      },
+      {
+        "id": 209,
+        "character": "Ведьма",
+        "english": "The Hag",
+        "type": "outfit",
+        "file": "HA_outfit_01.png"
+      },
+      {
+        "id": 210,
+        "character": "Ведьма",
+        "english": "Bloody Hag",
+        "type": "outfit",
+        "file": "HA_outfit_01_P01.png"
+      },
+      {
+        "id": 215,
+        "character": "Ведьма",
+        "english": "Swamp Creature",
+        "type": "outfit",
+        "file": "WI_outfit_011.png"
+      },
+      {
+        "id": 219,
+        "character": "Ведьма",
+        "english": "Bile Beldam",
+        "type": "outfit",
+        "file": "WI_outfit_03_01.png"
+      },
+      {
+        "id": 221,
+        "character": "Тень",
+        "english": "The Shape",
+        "type": "outfit",
+        "file": "MM_outfit_01.png"
+      },
+      {
+        "id": 222,
+        "character": "Тень",
+        "english": "Bloody Shape",
+        "type": "outfit",
+        "file": "MM_outfit_01_P01.png"
+      },
+      {
+        "id": 223,
+        "character": "Тень",
+        "english": "Escaped Patient",
+        "type": "outfit",
+        "file": "MM_outfit_02.png"
+      },
+      {
+        "id": 224,
+        "character": "Доктор",
+        "english": "Blood Shock",
+        "type": "outfit",
+        "file": "DO_outfit_020.png"
+      },
+      {
+        "id": 229,
+        "character": "Доктор",
+        "english": "Dearest Herman",
+        "type": "outfit",
+        "file": "DO_outfit_028.png"
+      },
+      {
+        "id": 230,
+        "character": "Доктор",
+        "english": "The Doctor",
+        "type": "outfit",
+        "file": "DO_outfit_01.png"
+      },
+      {
+        "id": 231,
+        "character": "Доктор",
+        "english": "Bloody Doctor",
+        "type": "outfit",
+        "file": "DO_outfit_01_P01.png"
+      },
+      {
+        "id": 236,
+        "character": "Доктор",
+        "english": "Neuroscientist",
+        "type": "outfit",
+        "file": "Killer07_outfit_005.png"
+      },
+      {
+        "id": 237,
+        "character": "Доктор",
+        "english": "Neuroscientist",
+        "type": "outfit",
+        "file": "Killer07_outfit_006.png"
+      },
+      {
+        "id": 238,
+        "character": "Доктор",
+        "english": "Neuroscientist",
+        "type": "outfit",
+        "file": "Killer07_outfit_007.png"
+      },
+      {
+        "id": 239,
+        "character": "Доктор",
+        "english": "Neuroscientist",
+        "type": "outfit",
+        "file": "Killer07_outfit_008.png"
+      },
+      {
+        "id": 240,
+        "character": "Доктор",
+        "english": "Neuroscientist",
+        "type": "outfit",
+        "file": "Killer07_outfit_009.png"
+      },
+      {
+        "id": 241,
+        "character": "Доктор",
+        "english": "Neuroscientist",
+        "type": "outfit",
+        "file": "Killer07_outfit_010.png"
+      },
+      {
+        "id": 242,
+        "character": "Доктор",
+        "english": "Secret Weapon",
+        "type": "outfit",
+        "file": "Killer07_outfit_011.png"
+      },
+      {
+        "id": 243,
+        "character": "Доктор",
+        "english": "Reformed Ally",
+        "type": "outfit",
+        "file": "Killer07_outfit_012.png"
+      },
+      {
+        "id": 252,
+        "character": "Доктор",
+        "english": "The Transplant",
+        "type": "outfit",
+        "file": "DO_outfit_013.png"
+      },
+      {
+        "id": 258,
+        "character": "Доктор",
+        "english": "Pharaoh Eddie",
+        "type": "outfit",
+        "file": "DO_outfit_019.png"
+      },
+      {
+        "id": 260,
+        "character": "Охотница",
+        "english": "The Huntress",
+        "type": "outfit",
+        "file": "BE_outfit_01.png"
+      },
+      {
+        "id": 261,
+        "character": "Охотница",
+        "english": "Bloody Huntress",
+        "type": "outfit",
+        "file": "BE_outfit_01_P01.png"
+      },
+      {
+        "id": 263,
+        "character": "Охотница",
+        "english": "Curious Kill",
+        "type": "outfit",
+        "file": "BE_outfit_026.png"
+      },
+      {
+        "id": 271,
+        "character": "Охотница",
+        "english": "Fur-Trimmed",
+        "type": "outfit",
+        "file": "Bear_outfit_004.png"
+      },
+      {
+        "id": 272,
+        "character": "Охотница",
+        "english": "Orenburg",
+        "type": "outfit",
+        "file": "Bear_outfit_005.png"
+      },
+      {
+        "id": 274,
+        "character": "Охотница",
+        "english": "Brave Beast",
+        "type": "outfit",
+        "file": "Bear_outfit_008.png"
+      },
+      {
+        "id": 288,
+        "character": "Каннибал",
+        "english": "The Cannibal",
+        "type": "outfit",
+        "file": "CA_outfit_01.png"
+      },
+      {
+        "id": 289,
+        "character": "Каннибал",
+        "english": "Bloody Cannibal",
+        "type": "outfit",
+        "file": "CA_outfit_01_P01.png"
+      },
+      {
+        "id": 292,
+        "character": "Кошмар",
+        "english": "The Nightmare",
+        "type": "outfit",
+        "file": "SD_outfit_01.png"
+      },
+      {
+        "id": 293,
+        "character": "Кошмар",
+        "english": "Bloody Nightmare",
+        "type": "outfit",
+        "file": "SD_outfit_01_P01.png"
+      },
+      {
+        "id": 294,
+        "character": "Свинья",
+        "english": "Masquerade Piggy",
+        "type": "outfit",
+        "file": "FK_outfit_010.png"
+      },
+      {
+        "id": 296,
+        "character": "Свинья",
+        "english": "The Pig",
+        "type": "outfit",
+        "file": "FK_outfit_01.png"
+      },
+      {
+        "id": 297,
+        "character": "Свинья",
+        "english": "Bloody Pig",
+        "type": "outfit",
+        "file": "FK_outfit_01_P01.png"
+      },
+      {
+        "id": 306,
+        "character": "Клоун",
+        "english": "The Clown",
+        "type": "outfit",
+        "file": "GK_outfit_01.png"
+      },
+      {
+        "id": 307,
+        "character": "Клоун",
+        "english": "Bloody Clown",
+        "type": "outfit",
+        "file": "GK_outfit_01_P01.png"
+      },
+      {
+        "id": 322,
+        "character": "Клоун",
+        "english": "Hot-Dog Cook",
+        "type": "outfit",
+        "file": "GK_outfit_015.png"
+      },
+      {
+        "id": 336,
+        "character": "Дух",
+        "english": "Sliced To Ribbons",
+        "type": "outfit",
+        "file": "HK_outfit_027.png"
+      },
+      {
+        "id": 337,
+        "character": "Дух",
+        "english": "The Spirit",
+        "type": "outfit",
+        "file": "HK_outfit_01.png"
+      },
+      {
+        "id": 373,
+        "character": "Легион",
+        "english": "Dearest Julie",
+        "type": "outfit",
+        "file": "KK_outfit_041.png"
+      },
+      {
+        "id": 374,
+        "character": "Легион",
+        "english": "The Legion (Frank)",
+        "type": "outfit",
+        "file": "KK_outfit_01.png"
+      },
+      {
+        "id": 376,
+        "character": "Легион",
+        "english": "The Legion (Julie)",
+        "type": "outfit",
+        "file": "KK_outfit_02.png"
+      },
+      {
+        "id": 393,
+        "character": "Легион",
+        "english": "Lost Mascot (Frank)",
+        "type": "outfit",
+        "file": "KK_outfit_016.png"
+      },
+      {
+        "id": 394,
+        "character": "Легион",
+        "english": "Lost Mascot (Julie)",
+        "type": "outfit",
+        "file": "KK_outfit_016_01.png"
+      },
+      {
+        "id": 395,
+        "character": "Легион",
+        "english": "Lost Mascot (Joey)",
+        "type": "outfit",
+        "file": "KK_outfit_016_02.png"
+      },
+      {
+        "id": 396,
+        "character": "Легион",
+        "english": "Lost Mascot (Susie)",
+        "type": "outfit",
+        "file": "KK_outfit_016_03.png"
+      },
+      {
+        "id": 413,
+        "character": "Чума",
+        "english": "Forsaken Land",
+        "type": "outfit",
+        "file": "MK_outfit_017.png"
+      },
+      {
+        "id": 420,
+        "character": "Чума",
+        "english": "The Plague",
+        "type": "outfit",
+        "file": "MK_outfit_01.png"
+      },
+      {
+        "id": 445,
+        "character": "Гоуст Фейс",
+        "english": "Ghost Face Santa",
+        "type": "outfit",
+        "file": "OK_outfit_017.png"
+      },
+      {
+        "id": 458,
+        "character": "Гоуст Фейс",
+        "english": "Masquerade Ghost Face",
+        "type": "outfit",
+        "file": "OK_outfit_014.png"
+      },
+      {
+        "id": 459,
+        "character": "Демогоргон",
+        "english": "The Demogorgon",
+        "type": "outfit",
+        "file": "QK_outfit_01.png"
+      },
+      {
+        "id": 460,
+        "character": "Демогоргон",
+        "english": "Bloody Demogorgon",
+        "type": "outfit",
+        "file": "QK_outfit_01_P01.png"
+      },
+      {
+        "id": 464,
+        "character": "Они",
+        "english": "Red Mist",
+        "type": "outfit",
+        "file": "SwedenKiller_outfit_021.png"
+      },
+      {
+        "id": 469,
+        "character": "Они",
+        "english": "The Oni",
+        "type": "outfit",
+        "file": "SwedenKiller_outfit_01.png"
+      },
+      {
+        "id": 470,
+        "character": "Они",
+        "english": "Bloody Oni",
+        "type": "outfit",
+        "file": "SwedenKiller_outfit_01_P01.png"
+      },
+      {
+        "id": 495,
+        "character": "Они",
+        "english": "Samurai Eddie",
+        "type": "outfit",
+        "file": "SwedenKiller_outfit_020.png"
+      },
+      {
+        "id": 499,
+        "character": "Стрелок",
+        "english": "Frontier Nightmare",
+        "type": "outfit",
+        "file": "UK_outfit_020.png"
+      },
+      {
+        "id": 501,
+        "character": "Стрелок",
+        "english": "The Deathslinger",
+        "type": "outfit",
+        "file": "UkraineKiller_outfit_01.png"
+      },
+      {
+        "id": 502,
+        "character": "Стрелок",
+        "english": "Bloody Deathslinger",
+        "type": "outfit",
+        "file": "UK_outfit_01_P01.png"
+      },
+      {
+        "id": 503,
+        "character": "Стрелок",
+        "english": "Merciless",
+        "type": "outfit",
+        "file": "UK_outfit_01_CV01.png"
+      },
+      {
+        "id": 504,
+        "character": "Стрелок",
+        "english": "Lawless",
+        "type": "outfit",
+        "file": "UK_outfit_01_CV02.png"
+      },
+      {
+        "id": 505,
+        "character": "Стрелок",
+        "english": "Godless",
+        "type": "outfit",
+        "file": "UK_outfit_01_CV03.png"
+      },
+      {
+        "id": 506,
+        "character": "Стрелок",
+        "english": "Heartless",
+        "type": "outfit",
+        "file": "UK_outfit_01_CV04.png"
+      },
+      {
+        "id": 514,
+        "character": "Стрелок",
+        "english": "Bounty Hunter (4th Anniversary)",
+        "type": "outfit",
+        "file": "UK_outfit_01_04.png"
+      },
+      {
+        "id": 522,
+        "character": "Стрелок",
+        "english": "Stranger Eddie",
+        "type": "outfit",
+        "file": "UK_outfit_015.png"
+      },
+      {
+        "id": 527,
+        "character": "Палач",
+        "english": "The Executioner",
+        "type": "outfit",
+        "file": "K20_outfit_01.png"
+      },
+      {
+        "id": 528,
+        "character": "Палач",
+        "english": "Bloody Executioner",
+        "type": "outfit",
+        "file": "K20_outfit_01_P01.png"
+      },
+      {
+        "id": 536,
+        "character": "Мор",
+        "english": "Bad Transfusion",
+        "type": "outfit",
+        "file": "K21_outfit_022.png"
+      },
+      {
+        "id": 537,
+        "character": "Мор",
+        "english": "The Blight",
+        "type": "outfit",
+        "file": "K21_outfit_01.png"
+      },
+      {
+        "id": 562,
+        "character": "Близнецы",
+        "english": "The Twins",
+        "type": "outfit",
+        "file": "K22_outfit_01.png"
+      },
+      {
+        "id": 563,
+        "character": "Близнецы",
+        "english": "Bloody Twins",
+        "type": "outfit",
+        "file": "K22_outfit_01_P01.png"
+      },
+      {
+        "id": 568,
+        "character": "Близнецы",
+        "english": "From the Wastes",
+        "type": "outfit",
+        "file": "K22_outfit_01_01.png"
+      },
+      {
+        "id": 569,
+        "character": "Близнецы",
+        "english": "From the Gutters",
+        "type": "outfit",
+        "file": "K22_outfit_01_02.png"
+      },
+      {
+        "id": 570,
+        "character": "Близнецы",
+        "english": "From the Ruins",
+        "type": "outfit",
+        "file": "K22_outfit_01_03.png"
+      },
+      {
+        "id": 571,
+        "character": "Близнецы",
+        "english": "Eternal Anguish",
+        "type": "outfit",
+        "file": "K22_outfit_02.png"
+      },
+      {
+        "id": 572,
+        "character": "Близнецы",
+        "english": "Eternal Sorrow",
+        "type": "outfit",
+        "file": "K22_outfit_02_01.png"
+      },
+      {
+        "id": 573,
+        "character": "Близнецы",
+        "english": "Blood & Guts",
+        "type": "outfit",
+        "file": "K22_outfit_006.png"
+      },
+      {
+        "id": 581,
+        "character": "Трюкач",
+        "english": "The Trickster",
+        "type": "outfit",
+        "file": "K23_outfit_01.png"
+      },
+      {
+        "id": 586,
+        "character": "Трюкач",
+        "english": "Danse Macabre Star",
+        "type": "outfit",
+        "file": "K23_outfit_025.png"
+      },
+      {
+        "id": 595,
+        "character": "Трюкач",
+        "english": "Cut Thru U Performance",
+        "type": "outfit",
+        "file": "K23_outfit_006.png"
+      },
+      {
+        "id": 597,
+        "character": "Трюкач",
+        "english": "Pressured Performer",
+        "type": "outfit",
+        "file": "K23_outfit_007.png"
+      },
+      {
+        "id": 608,
+        "character": "Трюкач",
+        "english": "False Silver Lining Performance",
+        "type": "outfit",
+        "file": "K23_outfit_01_01.png"
+      },
+      {
+        "id": 609,
+        "character": "Трюкач",
+        "english": "On Target Performance",
+        "type": "outfit",
+        "file": "K23_outfit_01_02.png"
+      },
+      {
+        "id": 610,
+        "character": "Трюкач",
+        "english": "Forgive Me Not Performance",
+        "type": "outfit",
+        "file": "K23_outfit_01_03.png"
+      },
+      {
+        "id": 611,
+        "character": "Трюкач",
+        "english": "Smash & Run Style",
+        "type": "outfit",
+        "file": "K23_outfit_01_CV01.png"
+      },
+      {
+        "id": 612,
+        "character": "Трюкач",
+        "english": "Fatal Free Fall Style",
+        "type": "outfit",
+        "file": "K23_outfit_01_CV02.png"
+      },
+      {
+        "id": 613,
+        "character": "Трюкач",
+        "english": "One Caged Heart Style",
+        "type": "outfit",
+        "file": "K23_outfit_01_CV03.png"
+      },
+      {
+        "id": 614,
+        "character": "Трюкач",
+        "english": "Whispers of Warmth Style",
+        "type": "outfit",
+        "file": "K23_outfit_01_CV04.png"
+      },
+      {
+        "id": 615,
+        "character": "Трюкач",
+        "english": "Ripper Night Costume",
+        "type": "outfit",
+        "file": "K23_outfit_02.png"
+      },
+      {
+        "id": 616,
+        "character": "Трюкач",
+        "english": "I'll Be Waiting for You Costume",
+        "type": "outfit",
+        "file": "K23_outfit_02_01.png"
+      },
+      {
+        "id": 618,
+        "character": "Немезис",
+        "english": "The Nemesis",
+        "type": "outfit",
+        "file": "K24_outfit_01.png"
+      },
+      {
+        "id": 621,
+        "character": "Сенобит",
+        "english": "The Cenobite",
+        "type": "outfit",
+        "file": "K25_outfit_01.png"
+      },
+      {
+        "id": 622,
+        "character": "Сенобит",
+        "english": "Bloody Cenobite",
+        "type": "outfit",
+        "file": "K25_outfit_01_P01.png"
+      },
+      {
+        "id": 624,
+        "character": "Сенобит",
+        "english": "The Hell Priest",
+        "type": "outfit",
+        "file": "K25_outfit_006.png"
+      },
+      {
+        "id": 629,
+        "character": "Художница",
+        "english": "Painted Red",
+        "type": "outfit",
+        "file": "K26_outfit_019.png"
+      },
+      {
+        "id": 632,
+        "character": "Художница",
+        "english": "The Artist",
+        "type": "outfit",
+        "file": "K26_outfit_01.png"
+      },
+      {
+        "id": 639,
+        "character": "Художница",
+        "english": "Marvelled Psyche",
+        "type": "outfit",
+        "file": "K26_outfit_01_01.png"
+      },
+      {
+        "id": 640,
+        "character": "Художница",
+        "english": "Lunar Memory",
+        "type": "outfit",
+        "file": "K26_outfit_01_02.png"
+      },
+      {
+        "id": 641,
+        "character": "Художница",
+        "english": "Subliminal Truth",
+        "type": "outfit",
+        "file": "K26_outfit_01_03.png"
+      },
+      {
+        "id": 642,
+        "character": "Художница",
+        "english": "Indelible Stain",
+        "type": "outfit",
+        "file": "K26_outfit_01_04.png"
+      },
+      {
+        "id": 643,
+        "character": "Художница",
+        "english": "Altered Perception",
+        "type": "outfit",
+        "file": "K26_outfit_02.png"
+      },
+      {
+        "id": 644,
+        "character": "Художница",
+        "english": "Deluded Perception",
+        "type": "outfit",
+        "file": "K26_outfit_02_01.png"
+      },
+      {
+        "id": 650,
+        "character": "Онрё",
+        "english": "The Onryo",
+        "type": "outfit",
+        "file": "K27_outfit_01.png"
+      },
+      {
+        "id": 651,
+        "character": "Онрё",
+        "english": "Bloody Onryo",
+        "type": "outfit",
+        "file": "K27_outfit_01_P01.png"
+      },
+      {
+        "id": 663,
+        "character": "Грязь",
+        "english": "The Dredge",
+        "type": "outfit",
+        "file": "K28_outfit_01.png"
+      },
+      {
+        "id": 664,
+        "character": "Грязь",
+        "english": "Bloody Dredge",
+        "type": "outfit",
+        "file": "K28_outfit_01_P01.png"
+      },
+      {
+        "id": 666,
+        "character": "Грязь",
+        "english": "Masquerade Colors",
+        "type": "outfit",
+        "file": "K28_outfit_007.png"
+      },
+      {
+        "id": 676,
+        "character": "Грязь",
+        "english": "Eddie's Tribute",
+        "type": "outfit",
+        "file": "K28_outfit_013.png"
+      },
+      {
+        "id": 678,
+        "character": "Кукловод",
+        "english": "The Mastermind",
+        "type": "outfit",
+        "file": "K29_outfit_01.png"
+      },
+      {
+        "id": 687,
+        "character": "Рыцарь",
+        "english": "Red Knight",
+        "type": "outfit",
+        "file": "K30_outfit_012.png"
+      },
+      {
+        "id": 696,
+        "character": "Рыцарь",
+        "english": "The Knight",
+        "type": "outfit",
+        "file": "K30_outfit_01.png"
+      },
+      {
+        "id": 704,
+        "character": "Рыцарь",
+        "english": "Pale Behemoth",
+        "type": "outfit",
+        "file": "K30_outfit_01_CV01.png"
+      },
+      {
+        "id": 705,
+        "character": "Рыцарь",
+        "english": "Sickening Behemoth",
+        "type": "outfit",
+        "file": "K30_outfit_01_CV02.png"
+      },
+      {
+        "id": 706,
+        "character": "Рыцарь",
+        "english": "Furious Behemoth",
+        "type": "outfit",
+        "file": "K30_outfit_01_CV03.png"
+      },
+      {
+        "id": 707,
+        "character": "Рыцарь",
+        "english": "Calculating Behemoth",
+        "type": "outfit",
+        "file": "K30_outfit_01_CV04.png"
+      },
+      {
+        "id": 709,
+        "character": "Рыцарь",
+        "english": "Jack O'Lantern",
+        "type": "outfit",
+        "file": "K30_outfit_011.png"
+      },
+      {
+        "id": 710,
+        "character": "Торговка черепами",
+        "english": "Scarlet Vengeance",
+        "type": "outfit",
+        "file": "K31_outfit_012.png"
+      },
+      {
+        "id": 715,
+        "character": "Торговка черепами",
+        "english": "Dia das Bruxas",
+        "type": "outfit",
+        "file": "K31_outfit_018.png"
+      },
+      {
+        "id": 716,
+        "character": "Торговка черепами",
+        "english": "The Skull Merchant",
+        "type": "outfit",
+        "file": "K31_outfit_01.png"
+      },
+      {
+        "id": 727,
+        "character": "Торговка черепами",
+        "english": "Bloodthirsty Executive",
+        "type": "outfit",
+        "file": "K31_outfit_01_CV01.png"
+      },
+      {
+        "id": 728,
+        "character": "Торговка черепами",
+        "english": "Sadistic Executive",
+        "type": "outfit",
+        "file": "K31_outfit_01_CV02.png"
+      },
+      {
+        "id": 729,
+        "character": "Торговка черепами",
+        "english": "Relentless Executive",
+        "type": "outfit",
+        "file": "K31_outfit_01_CV03.png"
+      },
+      {
+        "id": 730,
+        "character": "Торговка черепами",
+        "english": "Malevolent Executive",
+        "type": "outfit",
+        "file": "K31_outfit_01_CV04.png"
+      },
+      {
+        "id": 736,
+        "character": "Сингулярность",
+        "english": "The Singularity",
+        "type": "outfit",
+        "file": "K32_outfit_01.png"
+      },
+      {
+        "id": 744,
+        "character": "Сингулярность",
+        "english": "Alien Alloy",
+        "type": "outfit",
+        "file": "K32_outfit_01_CV01.png"
+      },
+      {
+        "id": 745,
+        "character": "Сингулярность",
+        "english": "Metallurgy",
+        "type": "outfit",
+        "file": "K32_outfit_01_CV02.png"
+      },
+      {
+        "id": 746,
+        "character": "Сингулярность",
+        "english": "Gold Standard",
+        "type": "outfit",
+        "file": "K32_outfit_01_CV03.png"
+      },
+      {
+        "id": 747,
+        "character": "Сингулярность",
+        "english": "Precision Build",
+        "type": "outfit",
+        "file": "K32_outfit_01_CV04.png"
+      },
+      {
+        "id": 758,
+        "character": "Хороший парень",
+        "english": "Charred Chucky",
+        "type": "outfit",
+        "file": "K34_outfit_009.png"
+      },
+      {
+        "id": 759,
+        "character": "Хороший парень",
+        "english": "Blighted Good Guy",
+        "type": "outfit",
+        "file": "K34_outfit_010.png"
+      },
+      {
+        "id": 760,
+        "character": "Хороший парень",
+        "english": "Birthday Doll",
+        "type": "outfit",
+        "file": "K34_outfit_011.png"
+      },
+      {
+        "id": 761,
+        "character": "Хороший парень",
+        "english": "Bloody Christmas",
+        "type": "outfit",
+        "file": "K34_outfit_012.png"
+      },
+      {
+        "id": 762,
+        "character": "Хороший парень",
+        "english": "The Good Guy",
+        "type": "outfit",
+        "file": "K34_outfit_01.png"
+      },
+      {
+        "id": 763,
+        "character": "Хороший парень",
+        "english": "Bloody Good Guy",
+        "type": "outfit",
+        "file": "K34_outfit_01_P01.png"
+      },
+      {
+        "id": 764,
+        "character": "Хороший парень",
+        "english": "Back From The Dead Chucky",
+        "type": "outfit",
+        "file": "K34_outfit_006.png"
+      },
+      {
+        "id": 765,
+        "character": "Хороший парень",
+        "english": "The Good Gal",
+        "type": "outfit",
+        "file": "K34_outfit_007.png"
+      },
+      {
+        "id": 766,
+        "character": "Неведомое",
+        "english": "The Unknown",
+        "type": "outfit",
+        "file": "K35_outfit_01.png"
+      },
+      {
+        "id": 772,
+        "character": "Неведомое",
+        "english": "Time For Office",
+        "type": "outfit",
+        "file": "K35_outfit_01_CV01.png"
+      },
+      {
+        "id": 773,
+        "character": "Неведомое",
+        "english": "Time For the Big Game",
+        "type": "outfit",
+        "file": "K35_outfit_01_CV02.png"
+      },
+      {
+        "id": 774,
+        "character": "Неведомое",
+        "english": "Time For Barbecue",
+        "type": "outfit",
+        "file": "K35_outfit_01_CV03.png"
+      },
+      {
+        "id": 775,
+        "character": "Неведомое",
+        "english": "Time For Funeral",
+        "type": "outfit",
+        "file": "K35_outfit_01_CV04.png"
+      },
+      {
+        "id": 778,
+        "character": "Неведомое",
+        "english": "Masquerade Obscure",
+        "type": "outfit",
+        "file": "K35_outfit_008.png"
+      },
+      {
+        "id": 785,
+        "character": "Лич",
+        "english": "Masquerade Lich",
+        "type": "outfit",
+        "file": "K36_outfit_008.png"
+      },
+      {
+        "id": 786,
+        "character": "Лич",
+        "english": "The Lich",
+        "type": "outfit",
+        "file": "K36_outfit_01.png"
+      },
+      {
+        "id": 789,
+        "character": "Тёмный властелин",
+        "english": "Scorched Terror",
+        "type": "outfit",
+        "file": "K37_outfit_009.png"
+      },
+      {
+        "id": 790,
+        "character": "Тёмный властелин",
+        "english": "The Dark Lord",
+        "type": "outfit",
+        "file": "K37_outfit_01.png"
+      },
+      {
+        "id": 791,
+        "character": "Тёмный властелин",
+        "english": "Bloody Dark Lord",
+        "type": "outfit",
+        "file": "K37_outfit_01_P01.png"
+      },
+      {
+        "id": 792,
+        "character": "Тёмный властелин",
+        "english": "Chronicle of Terror",
+        "type": "outfit",
+        "file": "K37_outfit_006.png"
+      },
+      {
+        "id": 793,
+        "character": "Тёмный властелин",
+        "english": "Darkness Reigns",
+        "type": "outfit",
+        "file": "K37_outfit_007.png"
+      },
+      {
+        "id": 794,
+        "character": "Тёмный властелин",
+        "english": "True Form",
+        "type": "outfit",
+        "file": "K37_outfit_008.png"
+      },
+      {
+        "id": 795,
+        "character": "Тёмный властелин",
+        "english": "True Form (Deep Rift)",
+        "type": "outfit",
+        "file": "K37_outfit_008_01.png"
+      },
+      {
+        "id": 796,
+        "character": "Егерь",
+        "english": "Captain In Exile",
+        "type": "outfit",
+        "file": "K38_outfit_007.png"
+      },
+      {
+        "id": 798,
+        "character": "Егерь",
+        "english": "The Houndmaster",
+        "type": "outfit",
+        "file": "K38_outfit_01.png"
+      },
+      {
+        "id": 799,
+        "character": "Егерь",
+        "english": "Bloody Houndmaster",
+        "type": "outfit",
+        "file": "K38_outfit_01_P01.png"
+      },
+      {
+        "id": 810,
+        "character": "Гуль",
+        "english": "The Ghoul",
+        "type": "outfit",
+        "file": "K39_outfit_01.png"
+      },
+      {
+        "id": 811,
+        "character": "Гуль",
+        "english": "Bloody Ghoul",
+        "type": "outfit",
+        "file": "K39_outfit_01_P01.png"
+      },
+      {
+        "id": 819,
+        "character": "Аниматроник",
+        "english": "The Animatronic",
+        "type": "outfit",
+        "file": "K40_outfit_01.png"
+      },
+      {
+        "id": 820,
+        "character": "Аниматроник",
+        "english": "Bloody Animatronic",
+        "type": "outfit",
+        "file": "K40_outfit_01_P01.png"
+      },
+      {
+        "id": 821,
+        "character": "Красу",
+        "english": "Dazzling Audition",
+        "type": "outfit",
+        "file": "K41_outfit_01_CV01.png"
+      },
+      {
+        "id": 822,
+        "character": "Красу",
+        "english": "Striking Audition",
+        "type": "outfit",
+        "file": "K41_outfit_01_CV02.png"
+      },
+      {
+        "id": 823,
+        "character": "Красу",
+        "english": "Radiant Audition",
+        "type": "outfit",
+        "file": "K41_outfit_01_CV03.png"
+      },
+      {
+        "id": 824,
+        "character": "Красу",
+        "english": "Glamorous Audition",
+        "type": "outfit",
+        "file": "K41_outfit_01_CV04.png"
+      },
+      {
+        "id": 831,
+        "character": "Красу",
+        "english": "Ice Queen",
+        "type": "outfit",
+        "file": "K41_outfit_008.png"
+      },
+      {
+        "id": 832,
+        "character": "Красу",
+        "english": "The Krasue",
+        "type": "outfit",
+        "file": "K41_outfit_01.png"
+      },
+      {
+        "id": 833,
+        "character": "Красу",
+        "english": "Bloody Krasue",
+        "type": "outfit",
+        "file": "K41_outfit_01_P01.png"
+      },
+      {
+        "id": 836,
+        "character": "Первый",
+        "english": "The First",
+        "type": "outfit",
+        "file": "K42_outfit_01.png"
+      },
+      {
+        "id": 837,
+        "character": "Первый",
+        "english": "Bloody First",
+        "type": "outfit",
+        "file": "K42_outfit_01_P01.png"
+      },
+      {
+        "id": 842,
+        "character": "Слэшер",
+        "english": "The Slasher",
+        "type": "outfit",
+        "file": "K43_outfit_01.png"
+      },
+      {
+        "id": 843,
+        "character": "Слэшер",
+        "english": "Bloody Slasher",
+        "type": "outfit",
+        "file": "K43_outfit_01_P01.png"
+      },
+      {
+        "id": 844,
+        "character": "Правосудие",
+        "english": "The Judgment",
+        "type": "outfit",
+        "file": ""
+      },
+      {
+        "id": 845,
+        "character": "Правосудие",
+        "english": "Bloody Judgment",
+        "type": "outfit",
+        "file": ""
+      },
+      {
+        "id": 846,
+        "character": "Правосудие",
+        "english": "Avatar of the Rising Sun",
+        "type": "outfit",
+        "file": ""
+      },
+      {
+        "id": 847,
+        "character": "Правосудие",
+        "english": "Avatar of the Brightest Day",
+        "type": "outfit",
+        "file": ""
+      },
+      {
+        "id": 848,
+        "character": "Правосудие",
+        "english": "Avatar of the Vivid Fields",
+        "type": "outfit",
+        "file": ""
+      },
+      {
+        "id": 849,
+        "character": "Правосудие",
+        "english": "Avatar of the Cloudless Sky",
+        "type": "outfit",
+        "file": ""
+      },
+      {
+        "id": 858,
+        "character": "Дуайт Фэйрфилд",
+        "english": "Dearest Dwight",
+        "type": "outfit",
+        "file": "DF_outfit_040.png"
+      },
+      {
+        "id": 876,
+        "character": "Дуайт Фэйрфилд",
+        "english": "Dwight Fairfield",
+        "type": "outfit",
+        "file": "D_outfit_01.png"
+      },
+      {
+        "id": 877,
+        "character": "Дуайт Фэйрфилд",
+        "english": "Bloody Dwight Fairfield",
+        "type": "outfit",
+        "file": "D_outfit_01_P01.png"
+      },
+      {
+        "id": 895,
+        "character": "Дуайт Фэйрфилд",
+        "english": "Dwight Unknown",
+        "type": "outfit",
+        "file": "DF_outfit_021.png"
+      },
+      {
+        "id": 914,
+        "character": "Мэг Томас",
+        "english": "Forty-Love",
+        "type": "outfit",
+        "file": "Meg_outfit_007.png"
+      },
+      {
+        "id": 915,
+        "character": "Мэг Томас",
+        "english": "Grand Slammer",
+        "type": "outfit",
+        "file": "Meg_outfit_008.png"
+      },
+      {
+        "id": 916,
+        "character": "Мэг Томас",
+        "english": "Racket Scientist",
+        "type": "outfit",
+        "file": "Meg_outfit_009.png"
+      },
+      {
+        "id": 920,
+        "character": "Мэг Томас",
+        "english": "Fortune Teller",
+        "type": "outfit",
+        "file": "Meg_outfit_013.png"
+      },
+      {
+        "id": 929,
+        "character": "Мэг Томас",
+        "english": "Meg Thomas",
+        "type": "outfit",
+        "file": "M_outfit_01.png"
+      },
+      {
+        "id": 930,
+        "character": "Мэг Томас",
+        "english": "Bloody Meg Thomas",
+        "type": "outfit",
+        "file": "M_outfit_01_P01.png"
+      },
+      {
+        "id": 943,
+        "character": "Мэг Томас",
+        "english": "Cycle Courier",
+        "type": "outfit",
+        "file": "MT_outfit_018.png"
+      },
+      {
+        "id": 949,
+        "character": "Мэг Томас",
+        "english": "Pentekath's Suit",
+        "type": "outfit",
+        "file": "MT_outfit_022.png"
+      },
+      {
+        "id": 953,
+        "character": "Мэг Томас",
+        "english": "Candy Night",
+        "type": "outfit",
+        "file": "MT_outfit_027.png"
+      },
+      {
+        "id": 956,
+        "character": "Мэг Томас",
+        "english": "Violet Flair",
+        "type": "outfit",
+        "file": "MT_outfit_004_04.png"
+      },
+      {
+        "id": 959,
+        "character": "Клодетт Морель",
+        "english": "Bloody Botany",
+        "type": "outfit",
+        "file": "CM_outfit_030.png"
+      },
+      {
+        "id": 966,
+        "character": "Клодетт Морель",
+        "english": "Dearest Claudette",
+        "type": "outfit",
+        "file": "CM_outfit_036.png"
+      },
+      {
+        "id": 985,
+        "character": "Клодетт Морель",
+        "english": "Claudette Morel",
+        "type": "outfit",
+        "file": "C_outfit_01.png"
+      },
+      {
+        "id": 986,
+        "character": "Клодетт Морель",
+        "english": "Bloody Claudette Morel",
+        "type": "outfit",
+        "file": "C_outfit_01_P01.png"
+      },
+      {
+        "id": 999,
+        "character": "Клодетт Морель",
+        "english": "Science Kit (4th Anniversary)",
+        "type": "outfit",
+        "file": "CM_outfit_01_CV08.png"
+      },
+      {
+        "id": 1006,
+        "character": "Клодетт Морель",
+        "english": "Fae Claudette",
+        "type": "outfit",
+        "file": "CM_outfit_025.png"
+      },
+      {
+        "id": 1016,
+        "character": "Джейк Парк",
+        "english": "Woodland Wanderer",
+        "type": "outfit",
+        "file": "JP_outfit_033.png"
+      },
+      {
+        "id": 1033,
+        "character": "Джейк Парк",
+        "english": "Jake Park",
+        "type": "outfit",
+        "file": "J_outfit_01.png"
+      },
+      {
+        "id": 1034,
+        "character": "Джейк Парк",
+        "english": "Bloody Jake Park",
+        "type": "outfit",
+        "file": "J_outfit_01_P01.png"
+      },
+      {
+        "id": 1046,
+        "character": "Джейк Парк",
+        "english": "Surf Survivor",
+        "type": "outfit",
+        "file": "JP_outfit_017.png"
+      },
+      {
+        "id": 1048,
+        "character": "Джейк Парк",
+        "english": "Lucky Stroll",
+        "type": "outfit",
+        "file": "JP_outfit_019.png"
+      },
+      {
+        "id": 1051,
+        "character": "Джейк Парк",
+        "english": "Wolfy Jake",
+        "type": "outfit",
+        "file": "JP_outfit_021.png"
+      },
+      {
+        "id": 1057,
+        "character": "Нея Карлссон",
+        "english": "Slippery Slope",
+        "type": "outfit",
+        "file": "NK_outfit_033.png"
+      },
+      {
+        "id": 1074,
+        "character": "Нея Карлссон",
+        "english": "Tagging Vandal",
+        "type": "outfit",
+        "file": "Nea_outfit_011.png"
+      },
+      {
+        "id": 1075,
+        "character": "Нея Карлссон",
+        "english": "Tagging Vandal",
+        "type": "outfit",
+        "file": "Nea_outfit_012.png"
+      },
+      {
+        "id": 1076,
+        "character": "Нея Карлссон",
+        "english": "Tagging Vandal",
+        "type": "outfit",
+        "file": "Nea_outfit_013.png"
+      },
+      {
+        "id": 1077,
+        "character": "Нея Карлссон",
+        "english": "Tagging Vandal",
+        "type": "outfit",
+        "file": "Nea_outfit_014.png"
+      },
+      {
+        "id": 1078,
+        "character": "Нея Карлссон",
+        "english": "Tagging Vandal",
+        "type": "outfit",
+        "file": "Nea_outfit_015.png"
+      },
+      {
+        "id": 1081,
+        "character": "Нея Карлссон",
+        "english": "Nea Karlsson",
+        "type": "outfit",
+        "file": "N_outfit_01.png"
+      },
+      {
+        "id": 1082,
+        "character": "Нея Карлссон",
+        "english": "Bloody Nea Karlsson",
+        "type": "outfit",
+        "file": "N_outfit_01_P01.png"
+      },
+      {
+        "id": 1100,
+        "character": "Нея Карлссон",
+        "english": "Masquerade Shadow",
+        "type": "outfit",
+        "file": "NK_outfit_024.png"
+      },
+      {
+        "id": 1105,
+        "character": "Аврора",
+        "english": "Aurora Stardotter",
+        "type": "outfit",
+        "file": "S054_outfit_01.png"
+      },
+      {
+        "id": 1106,
+        "character": "Аврора",
+        "english": "Bloody Aurora",
+        "type": "outfit",
+        "file": "S054_outfit_01_P01.png"
+      },
+      {
+        "id": 1107,
+        "character": "Аврора",
+        "english": "Duskenstar",
+        "type": "outfit",
+        "file": "S054_outfit_01_CV01.png"
+      },
+      {
+        "id": 1108,
+        "character": "Аврора",
+        "english": "Verdantstar",
+        "type": "outfit",
+        "file": "S054_outfit_01_CV02.png"
+      },
+      {
+        "id": 1109,
+        "character": "Аврора",
+        "english": "Gloamstar",
+        "type": "outfit",
+        "file": "S054_outfit_01_CV03.png"
+      },
+      {
+        "id": 1110,
+        "character": "Аврора",
+        "english": "Bloodstar",
+        "type": "outfit",
+        "file": "S054_outfit_01_CV04.png"
+      },
+      {
+        "id": 1114,
+        "character": "Лори Строуд",
+        "english": "Laurie Strode",
+        "type": "outfit",
+        "file": "LS_outfit_01.png"
+      },
+      {
+        "id": 1115,
+        "character": "Лори Строуд",
+        "english": "Bloody Laurie Strode",
+        "type": "outfit",
+        "file": "LS_outfit_01_P01.png"
+      },
+      {
+        "id": 1117,
+        "character": "Эйс Висконти",
+        "english": "Gambler's Rush",
+        "type": "outfit",
+        "file": "AV_outfit_022.png"
+      },
+      {
+        "id": 1141,
+        "character": "Эйс Висконти",
+        "english": "Seasoned Gambler",
+        "type": "outfit",
+        "file": "Ace_outfit_007_01.png"
+      },
+      {
+        "id": 1143,
+        "character": "Эйс Висконти",
+        "english": "Ace Visconti",
+        "type": "outfit",
+        "file": "AV_outfit_01.png"
+      },
+      {
+        "id": 1144,
+        "character": "Эйс Висконти",
+        "english": "Bloody Ace Visconti",
+        "type": "outfit",
+        "file": "AV_outfit_01_P01.png"
+      },
+      {
+        "id": 1148,
+        "character": "Эйс Висконти",
+        "english": "Hotel Deceit",
+        "type": "outfit",
+        "file": "AV_outfit02_03.png"
+      },
+      {
+        "id": 1161,
+        "character": "Уильям Овербек",
+        "english": "Masquerade Veteran",
+        "type": "outfit",
+        "file": "BO_outfit_008.png"
+      },
+      {
+        "id": 1162,
+        "character": "Уильям Овербек",
+        "english": "Bill Overbeck",
+        "type": "outfit",
+        "file": "BO_outfit_01.png"
+      },
+      {
+        "id": 1163,
+        "character": "Уильям Овербек",
+        "english": "Bloody Bill Overbeck",
+        "type": "outfit",
+        "file": "BO_outfit_01_P01.png"
+      },
+      {
+        "id": 1167,
+        "character": "Фенг Мин",
+        "english": "Feng Min",
+        "type": "outfit",
+        "file": "FM_outfit_01.png"
+      },
+      {
+        "id": 1192,
+        "character": "Фенг Мин",
+        "english": "Shining Lion",
+        "type": "outfit",
+        "file": "Feng_outfit_010.png"
+      },
+      {
+        "id": 1193,
+        "character": "Фенг Мин",
+        "english": "Shining Lion",
+        "type": "outfit",
+        "file": "Feng_outfit_011.png"
+      },
+      {
+        "id": 1194,
+        "character": "Фенг Мин",
+        "english": "Shining Lion",
+        "type": "outfit",
+        "file": "Feng_outfit_012.png"
+      },
+      {
+        "id": 1195,
+        "character": "Фенг Мин",
+        "english": "Shining Lion",
+        "type": "outfit",
+        "file": "Feng_outfit_013.png"
+      },
+      {
+        "id": 1196,
+        "character": "Фенг Мин",
+        "english": "Shining Lion",
+        "type": "outfit",
+        "file": "Feng_outfit_014.png"
+      },
+      {
+        "id": 1197,
+        "character": "Фенг Мин",
+        "english": "Spring Festival",
+        "type": "outfit",
+        "file": "Feng_outfit_007_01.png"
+      },
+      {
+        "id": 1208,
+        "character": "Фенг Мин",
+        "english": "Nexus Ranger (Supernova)",
+        "type": "outfit",
+        "file": "FM_outfit_016_01.png"
+      },
+      {
+        "id": 1220,
+        "character": "Фенг Мин",
+        "english": "Masquerade Player",
+        "type": "outfit",
+        "file": "FM_outfit_025.png"
+      },
+      {
+        "id": 1224,
+        "character": "Фенг Мин",
+        "english": "Cosplay Stream",
+        "type": "outfit",
+        "file": "FM_outfit_028.png"
+      },
+      {
+        "id": 1227,
+        "character": "Дэвид Кинг",
+        "english": "David King",
+        "type": "outfit",
+        "file": "DK_outfit_01.png"
+      },
+      {
+        "id": 1228,
+        "character": "Дэвид Кинг",
+        "english": "Bloody David King",
+        "type": "outfit",
+        "file": "DK_outfit_01_P01.png"
+      },
+      {
+        "id": 1234,
+        "character": "Дэвид Кинг",
+        "english": "Masquerade King",
+        "type": "outfit",
+        "file": "DK_outfit_030.png"
+      },
+      {
+        "id": 1245,
+        "character": "Дэвид Кинг",
+        "english": "Mancunian Fighter",
+        "type": "outfit",
+        "file": "Smoke_outfit_010.png"
+      },
+      {
+        "id": 1246,
+        "character": "Дэвид Кинг",
+        "english": "Mancunian Fighter",
+        "type": "outfit",
+        "file": "Smoke_outfit_011.png"
+      },
+      {
+        "id": 1247,
+        "character": "Дэвид Кинг",
+        "english": "Mancunian Fighter",
+        "type": "outfit",
+        "file": "Smoke_outfit_012.png"
+      },
+      {
+        "id": 1248,
+        "character": "Дэвид Кинг",
+        "english": "Mancunian Fighter",
+        "type": "outfit",
+        "file": "Smoke_outfit_013.png"
+      },
+      {
+        "id": 1249,
+        "character": "Дэвид Кинг",
+        "english": "Mancunian Fighter",
+        "type": "outfit",
+        "file": "Smoke_outfit_014.png"
+      },
+      {
+        "id": 1261,
+        "character": "Дэвид Кинг",
+        "english": "Makeshift Nutcracker",
+        "type": "outfit",
+        "file": "DK_outfit_017.png"
+      },
+      {
+        "id": 1263,
+        "character": "Дэвид Кинг",
+        "english": "Forgotten Hollow",
+        "type": "outfit",
+        "file": "DK_outfit_019.png"
+      },
+      {
+        "id": 1264,
+        "character": "Дэвид Кинг",
+        "english": "Mancunian Fighter (5th Anniversary)",
+        "type": "outfit",
+        "file": "DK_outfit_01_02.png"
+      },
+      {
+        "id": 1268,
+        "character": "Квентин Смит",
+        "english": "Bloody Quentin Smith",
+        "type": "outfit",
+        "file": "QS_outfit_01_P01.png"
+      },
+      {
+        "id": 1269,
+        "character": "Детектив Тэпп",
+        "english": "David Tapp",
+        "type": "outfit",
+        "file": "FS_outfit_01.png"
+      },
+      {
+        "id": 1270,
+        "character": "Детектив Тэпп",
+        "english": "Bloody David Tapp",
+        "type": "outfit",
+        "file": "FS_outfit_01_P01.png"
+      },
+      {
+        "id": 1278,
+        "character": "Кейт Денсон",
+        "english": "Broken Heart",
+        "type": "outfit",
+        "file": "GS_outfit_033.png"
+      },
+      {
+        "id": 1280,
+        "character": "Кейт Денсон",
+        "english": "Kate Denson",
+        "type": "outfit",
+        "file": "GS_outfit_01.png"
+      },
+      {
+        "id": 1281,
+        "character": "Кейт Денсон",
+        "english": "Bloody Kate Denson",
+        "type": "outfit",
+        "file": "GS_outfit_01_P01.png"
+      },
+      {
+        "id": 1285,
+        "character": "Кейт Денсон",
+        "english": "Dearest Kate",
+        "type": "outfit",
+        "file": "GS_outfit_040.png"
+      },
+      {
+        "id": 1293,
+        "character": "Кейт Денсон",
+        "english": "Struggling Songwriter",
+        "type": "outfit",
+        "file": "Kate_outfit_005.png"
+      },
+      {
+        "id": 1294,
+        "character": "Кейт Денсон",
+        "english": "Struggling Songwriter",
+        "type": "outfit",
+        "file": "Kate_outfit_006.png"
+      },
+      {
+        "id": 1295,
+        "character": "Кейт Денсон",
+        "english": "Struggling Songwriter",
+        "type": "outfit",
+        "file": "Kate_outfit_007.png"
+      },
+      {
+        "id": 1296,
+        "character": "Кейт Денсон",
+        "english": "Struggling Songwriter",
+        "type": "outfit",
+        "file": "Kate_outfit_008.png"
+      },
+      {
+        "id": 1297,
+        "character": "Кейт Денсон",
+        "english": "Struggling Songwriter",
+        "type": "outfit",
+        "file": "Kate_outfit_009.png"
+      },
+      {
+        "id": 1315,
+        "character": "Кейт Денсон",
+        "english": "Cornfield Scarecrow",
+        "type": "outfit",
+        "file": "GS_outfit_021.png"
+      },
+      {
+        "id": 1325,
+        "character": "Адам Фрэнсис",
+        "english": "Through Havoc",
+        "type": "outfit",
+        "file": "HS_outfit_025.png"
+      },
+      {
+        "id": 1327,
+        "character": "Адам Фрэнсис",
+        "english": "Adam Francis",
+        "type": "outfit",
+        "file": "HS_outfit_01.png"
+      },
+      {
+        "id": 1328,
+        "character": "Адам Фрэнсис",
+        "english": "Bloody Adam Francis",
+        "type": "outfit",
+        "file": "HS_outfit_01_P01.png"
+      },
+      {
+        "id": 1337,
+        "character": "Адам Фрэнсис",
+        "english": "Autumn Seminar",
+        "type": "outfit",
+        "file": "Adam_outfit_002.png"
+      },
+      {
+        "id": 1338,
+        "character": "Адам Фрэнсис",
+        "english": "Back to School",
+        "type": "outfit",
+        "file": "Adam_outfit_003.png"
+      },
+      {
+        "id": 1339,
+        "character": "Адам Фрэнсис",
+        "english": "Teacher Colloquium",
+        "type": "outfit",
+        "file": "Adam_outfit_004.png"
+      },
+      {
+        "id": 1340,
+        "character": "Адам Фрэнсис",
+        "english": "Casual Authority",
+        "type": "outfit",
+        "file": "Adam_outfit_005.png"
+      },
+      {
+        "id": 1341,
+        "character": "Адам Фрэнсис",
+        "english": "Casual Authority",
+        "type": "outfit",
+        "file": "Adam_outfit_006.png"
+      },
+      {
+        "id": 1342,
+        "character": "Адам Фрэнсис",
+        "english": "Casual Authority",
+        "type": "outfit",
+        "file": "Adam_outfit_007.png"
+      },
+      {
+        "id": 1343,
+        "character": "Адам Фрэнсис",
+        "english": "Casual Authority",
+        "type": "outfit",
+        "file": "Adam_outfit_008.png"
+      },
+      {
+        "id": 1344,
+        "character": "Адам Фрэнсис",
+        "english": "Casual Authority",
+        "type": "outfit",
+        "file": "Adam_outfit_009.png"
+      },
+      {
+        "id": 1365,
+        "character": "Джефф Йохансен",
+        "english": "Jeff Johansen",
+        "type": "outfit",
+        "file": "KS_outfit_01.png"
+      },
+      {
+        "id": 1366,
+        "character": "Джефф Йохансен",
+        "english": "Bloody Jeff Johansen",
+        "type": "outfit",
+        "file": "KS_outfit_01_P01.png"
+      },
+      {
+        "id": 1370,
+        "character": "Джефф Йохансен",
+        "english": "Rogue Illustrator",
+        "type": "outfit",
+        "file": "Jeff_outfit_CV01.png"
+      },
+      {
+        "id": 1371,
+        "character": "Джефф Йохансен",
+        "english": "Edgy Oil Painter",
+        "type": "outfit",
+        "file": "Jeff_outfit_CV02.png"
+      },
+      {
+        "id": 1372,
+        "character": "Джефф Йохансен",
+        "english": "Rugged Digital Artist",
+        "type": "outfit",
+        "file": "Jeff_outfit_CV03.png"
+      },
+      {
+        "id": 1373,
+        "character": "Джефф Йохансен",
+        "english": "Bohemian Sketcher",
+        "type": "outfit",
+        "file": "Jeff_outfit_CV04.png"
+      },
+      {
+        "id": 1374,
+        "character": "Джефф Йохансен",
+        "english": "Ex-Roadie for The Rememberers",
+        "type": "outfit",
+        "file": "Jeff_outfit_01_02.png"
+      },
+      {
+        "id": 1375,
+        "character": "Джефф Йохансен",
+        "english": "Roadie for The Great Winter",
+        "type": "outfit",
+        "file": "Jeff_outfit_01_03.png"
+      },
+      {
+        "id": 1376,
+        "character": "Джефф Йохансен",
+        "english": "Ex-Roadie for Infinite DeathCycle",
+        "type": "outfit",
+        "file": "Jeff_outfit_01_04.png"
+      },
+      {
+        "id": 1394,
+        "character": "Джефф Йохансен",
+        "english": "Holiday Concert",
+        "type": "outfit",
+        "file": "KS_outfit_020.png"
+      },
+      {
+        "id": 1399,
+        "character": "Джейн Ромеро",
+        "english": "Jane Romero",
+        "type": "outfit",
+        "file": "MS_outfit_01.png"
+      },
+      {
+        "id": 1400,
+        "character": "Джейн Ромеро",
+        "english": "Bloody Jane Romero",
+        "type": "outfit",
+        "file": "MS_outfit_01_P01.png"
+      },
+      {
+        "id": 1402,
+        "character": "Джейн Ромеро",
+        "english": "\\\"Jane's favorite books.\\\"",
+        "type": "outfit",
+        "file": "Jane_outfit_CV01.png"
+      },
+      {
+        "id": 1403,
+        "character": "Джейн Ромеро",
+        "english": "\\\"You can do it… here's how.\\\"",
+        "type": "outfit",
+        "file": "Jane_outfit_CV02.png"
+      },
+      {
+        "id": 1404,
+        "character": "Джейн Ромеро",
+        "english": "\\\"Making dreams come true.\\\"",
+        "type": "outfit",
+        "file": "Jane_outfit_CV03.png"
+      },
+      {
+        "id": 1405,
+        "character": "Джейн Ромеро",
+        "english": "\\\"Medical advice, with Dr. Roy.\\\"",
+        "type": "outfit",
+        "file": "Jane_outfit_CV04.png"
+      },
+      {
+        "id": 1424,
+        "character": "Джейн Ромеро",
+        "english": "Well-Deserved Holidays",
+        "type": "outfit",
+        "file": "MS_outfit_019.png"
+      },
+      {
+        "id": 1429,
+        "character": "Эшли Уильямс",
+        "english": "Ash Williams",
+        "type": "outfit",
+        "file": "ML_outfit_01.png"
+      },
+      {
+        "id": 1430,
+        "character": "Эшли Уильямс",
+        "english": "Bloody Ash Williams",
+        "type": "outfit",
+        "file": "ML_outfit_01_P01.png"
+      },
+      {
+        "id": 1431,
+        "character": "Эшли Уильямс",
+        "english": "Working For The Weekend",
+        "type": "outfit",
+        "file": "ML_outfit_02.png"
+      },
+      {
+        "id": 1432,
+        "character": "Эшли Уильямс",
+        "english": "Water Trash",
+        "type": "outfit",
+        "file": "ML_outfit_006.png"
+      },
+      {
+        "id": 1433,
+        "character": "Эшли Уильямс",
+        "english": "FINALE",
+        "type": "outfit",
+        "file": "ML_outfit_008.png"
+      },
+      {
+        "id": 1434,
+        "character": "Эшли Уильямс",
+        "english": "Ashy Slashy",
+        "type": "outfit",
+        "file": "ML_outfit_007.png"
+      },
+      {
+        "id": 1435,
+        "character": "Эшли Уильямс",
+        "english": "Ashy Slashy (Deep Rift)",
+        "type": "outfit",
+        "file": "ML_outfit_007_01.png"
+      },
+      {
+        "id": 1436,
+        "character": "Стив Харрингтон",
+        "english": "Steve Harrington",
+        "type": "outfit",
+        "file": "QM_outfit_01.png"
+      },
+      {
+        "id": 1437,
+        "character": "Стив Харрингтон",
+        "english": "Bloody Steve Harrington",
+        "type": "outfit",
+        "file": "QM_outfit_01_P01.png"
+      },
+      {
+        "id": 1444,
+        "character": "Нэнси Уиллер",
+        "english": "Nancy Wheeler",
+        "type": "outfit",
+        "file": "QF_outfit_01.png"
+      },
+      {
+        "id": 1445,
+        "character": "Нэнси Уиллер",
+        "english": "Bloody Nancy Wheeler",
+        "type": "outfit",
+        "file": "QF_outfit_01_P01.png"
+      },
+      {
+        "id": 1460,
+        "character": "Юи Кимура",
+        "english": "Yui Kimura",
+        "type": "outfit",
+        "file": "SwedenSurvivor_outfit_01.png"
+      },
+      {
+        "id": 1461,
+        "character": "Юи Кимура",
+        "english": "Bloody Yui Kimura",
+        "type": "outfit",
+        "file": "SwedenSurvivor_outfit_01_P01.png"
+      },
+      {
+        "id": 1490,
+        "character": "Зарина Кассир",
+        "english": "Disarray Inquiry",
+        "type": "outfit",
+        "file": "US_outfit_025.png"
+      },
+      {
+        "id": 1497,
+        "character": "Зарина Кассир",
+        "english": "Zarina Kassir",
+        "type": "outfit",
+        "file": "US_outfit_01.png"
+      },
+      {
+        "id": 1498,
+        "character": "Зарина Кассир",
+        "english": "Bloody Zarina Kassir",
+        "type": "outfit",
+        "file": "US_outfit_01_P01.png"
+      },
+      {
+        "id": 1517,
+        "character": "Зарина Кассир",
+        "english": "Undercover Reporter",
+        "type": "outfit",
+        "file": "US_outfit_01_CV01.png"
+      },
+      {
+        "id": 1518,
+        "character": "Зарина Кассир",
+        "english": "Watchdog Reporter",
+        "type": "outfit",
+        "file": "US_outfit_01_CV02.png"
+      },
+      {
+        "id": 1519,
+        "character": "Зарина Кассир",
+        "english": "Opinion Sampler",
+        "type": "outfit",
+        "file": "US_outfit_01_CV03.png"
+      },
+      {
+        "id": 1520,
+        "character": "Зарина Кассир",
+        "english": "Corruption Reporter",
+        "type": "outfit",
+        "file": "US_outfit_01_CV04.png"
+      },
+      {
+        "id": 1528,
+        "character": "Шерил Мейсон",
+        "english": "Bloody Cheryl",
+        "type": "outfit",
+        "file": "S22_outfit_01_P01.png"
+      },
+      {
+        "id": 1546,
+        "character": "Феликс Рихтер",
+        "english": "Inferno Core",
+        "type": "outfit",
+        "file": "S23_outfit_034.png"
+      },
+      {
+        "id": 1547,
+        "character": "Феликс Рихтер",
+        "english": "Felix Richter",
+        "type": "outfit",
+        "file": "S23_outfit_01.png"
+      },
+      {
+        "id": 1548,
+        "character": "Феликс Рихтер",
+        "english": "Bloody Felix Richter",
+        "type": "outfit",
+        "file": "S23_outfit_01_P01.png"
+      },
+      {
+        "id": 1561,
+        "character": "Феликс Рихтер",
+        "english": "Dashing Visionary",
+        "type": "outfit",
+        "file": "S23_outfit_01_02.png"
+      },
+      {
+        "id": 1562,
+        "character": "Феликс Рихтер",
+        "english": "Gifted Visionary",
+        "type": "outfit",
+        "file": "S23_outfit_01_03.png"
+      },
+      {
+        "id": 1563,
+        "character": "Феликс Рихтер",
+        "english": "Brilliant Visionary",
+        "type": "outfit",
+        "file": "S23_outfit_01_04.png"
+      },
+      {
+        "id": 1564,
+        "character": "Феликс Рихтер",
+        "english": "Celebrated Architect",
+        "type": "outfit",
+        "file": "S23_outfit_01_CV01.png"
+      },
+      {
+        "id": 1565,
+        "character": "Феликс Рихтер",
+        "english": "Prized Architect",
+        "type": "outfit",
+        "file": "S23_outfit_01_CV02.png"
+      },
+      {
+        "id": 1566,
+        "character": "Феликс Рихтер",
+        "english": "Famed Architect",
+        "type": "outfit",
+        "file": "S23_outfit_01_CV03.png"
+      },
+      {
+        "id": 1567,
+        "character": "Феликс Рихтер",
+        "english": "Acclaimed Architect",
+        "type": "outfit",
+        "file": "S23_outfit_01_CV04.png"
+      },
+      {
+        "id": 1576,
+        "character": "Элоди Ракото",
+        "english": "Catacomb Exploration",
+        "type": "outfit",
+        "file": "S24_outfit_021.png"
+      },
+      {
+        "id": 1577,
+        "character": "Элоди Ракото",
+        "english": "Elodie Rakoto",
+        "type": "outfit",
+        "file": "S24_outfit_01.png"
+      },
+      {
+        "id": 1578,
+        "character": "Элоди Ракото",
+        "english": "Bloody Elodie Rakoto",
+        "type": "outfit",
+        "file": "S24_outfit_01_P01.png"
+      },
+      {
+        "id": 1603,
+        "character": "Элоди Ракото",
+        "english": "The Occult Seeker",
+        "type": "outfit",
+        "file": "S24_outfit_01_CV01.png"
+      },
+      {
+        "id": 1604,
+        "character": "Элоди Ракото",
+        "english": "The Kin Seeker",
+        "type": "outfit",
+        "file": "S24_outfit_01_CV02.png"
+      },
+      {
+        "id": 1605,
+        "character": "Элоди Ракото",
+        "english": "The Relic Seeker",
+        "type": "outfit",
+        "file": "S24_outfit_01_CV03.png"
+      },
+      {
+        "id": 1606,
+        "character": "Элоди Ракото",
+        "english": "The Mystery Seeker",
+        "type": "outfit",
+        "file": "S24_outfit_01_CV04.png"
+      },
+      {
+        "id": 1612,
+        "character": "Ли Юнчин",
+        "english": "Lee Yun-jin",
+        "type": "outfit",
+        "file": "S25_outfit_01.png"
+      },
+      {
+        "id": 1615,
+        "character": "Ли Юнчин",
+        "english": "Danse Macabre Cameo",
+        "type": "outfit",
+        "file": "S25_outfit_027.png"
+      },
+      {
+        "id": 1636,
+        "character": "Ли Юнчин",
+        "english": "Catching Figure",
+        "type": "outfit",
+        "file": "S25_outfit_019.png"
+      },
+      {
+        "id": 1640,
+        "character": "Ли Юнчин",
+        "english": "Sinsa-dong Press Conference",
+        "type": "outfit",
+        "file": "S25_outfit_01_CV01.png"
+      },
+      {
+        "id": 1641,
+        "character": "Ли Юнчин",
+        "english": "Apgujeong-dong Press Conference",
+        "type": "outfit",
+        "file": "S25_outfit_01_CV02.png"
+      },
+      {
+        "id": 1642,
+        "character": "Ли Юнчин",
+        "english": "Myeong-dong Press Conference",
+        "type": "outfit",
+        "file": "S25_outfit_01_CV03.png"
+      },
+      {
+        "id": 1643,
+        "character": "Ли Юнчин",
+        "english": "Cheongdam-dong Press Conference",
+        "type": "outfit",
+        "file": "S25_outfit_01_CV04.png"
+      },
+      {
+        "id": 1650,
+        "character": "Джилл Валентайн",
+        "english": "Bloody Jill Valentine",
+        "type": "outfit",
+        "file": "S26_outfit_01_P01.png"
+      },
+      {
+        "id": 1658,
+        "character": "Леон С. Кеннеди",
+        "english": "Bloody Leon S. Kennedy",
+        "type": "outfit",
+        "file": "S27_outfit_01_P01.png"
+      },
+      {
+        "id": 1663,
+        "character": "Микаэла Рид",
+        "english": "Blood Magic",
+        "type": "outfit",
+        "file": "S28_outfit_023.png"
+      },
+      {
+        "id": 1669,
+        "character": "Микаэла Рид",
+        "english": "Fiery Cat",
+        "type": "outfit",
+        "file": "S28_outfit_028.png"
+      },
+      {
+        "id": 1677,
+        "character": "Микаэла Рид",
+        "english": "Mikaela Reid",
+        "type": "outfit",
+        "file": "S28_outfit_01.png"
+      },
+      {
+        "id": 1678,
+        "character": "Микаэла Рид",
+        "english": "Bloody Mikaela Reid",
+        "type": "outfit",
+        "file": "S28_outfit_01_P01.png"
+      },
+      {
+        "id": 1680,
+        "character": "Микаэла Рид",
+        "english": "Witching Hour",
+        "type": "outfit",
+        "file": "S28_outfit_007.png"
+      },
+      {
+        "id": 1695,
+        "character": "Микаэла Рид",
+        "english": "Love Spell",
+        "type": "outfit",
+        "file": "S28_outfit_01_CV01.png"
+      },
+      {
+        "id": 1696,
+        "character": "Микаэла Рид",
+        "english": "Good Luck Spell",
+        "type": "outfit",
+        "file": "S28_outfit_01_CV02.png"
+      },
+      {
+        "id": 1697,
+        "character": "Микаэла Рид",
+        "english": "Sleep Well Spell",
+        "type": "outfit",
+        "file": "S28_outfit_01_CV03.png"
+      },
+      {
+        "id": 1698,
+        "character": "Микаэла Рид",
+        "english": "Energy Boost Spell",
+        "type": "outfit",
+        "file": "S28_outfit_01_CV04.png"
+      },
+      {
+        "id": 1706,
+        "character": "Хонас Васкес",
+        "english": "Jonah Vasquez",
+        "type": "outfit",
+        "file": "S29_outfit_01.png"
+      },
+      {
+        "id": 1707,
+        "character": "Хонас Васкес",
+        "english": "Bloody Jonah Vasquez",
+        "type": "outfit",
+        "file": "S29_outfit_01_P01.png"
+      },
+      {
+        "id": 1719,
+        "character": "Хонас Васкес",
+        "english": "Brilliant Look",
+        "type": "outfit",
+        "file": "S29_outfit_01_CV01.png"
+      },
+      {
+        "id": 1720,
+        "character": "Хонас Васкес",
+        "english": "Clever Style",
+        "type": "outfit",
+        "file": "S29_outfit_01_CV02.png"
+      },
+      {
+        "id": 1721,
+        "character": "Хонас Васкес",
+        "english": "Smart Look",
+        "type": "outfit",
+        "file": "S29_outfit_01_CV03.png"
+      },
+      {
+        "id": 1722,
+        "character": "Хонас Васкес",
+        "english": "Classic Style",
+        "type": "outfit",
+        "file": "S29_outfit_01_CV04.png"
+      },
+      {
+        "id": 1725,
+        "character": "Хонас Васкес",
+        "english": "Needed Break",
+        "type": "outfit",
+        "file": "S29_outfit_008_01.png"
+      },
+      {
+        "id": 1728,
+        "character": "Ёити Асакава",
+        "english": "Bloody Yoichi Asakawa",
+        "type": "outfit",
+        "file": "S30_outfit_01_P01.png"
+      },
+      {
+        "id": 1739,
+        "character": "Хэдди Каур",
+        "english": "Haddie Kaur",
+        "type": "outfit",
+        "file": "S31_outfit_01.png"
+      },
+      {
+        "id": 1740,
+        "character": "Хэдди Каур",
+        "english": "Bloody Haddie Kaur",
+        "type": "outfit",
+        "file": "S31_outfit_01_P01.png"
+      },
+      {
+        "id": 1742,
+        "character": "Хэдди Каур",
+        "english": "Masquerade Outfit",
+        "type": "outfit",
+        "file": "S31_outfit_007.png"
+      },
+      {
+        "id": 1747,
+        "character": "Хэдди Каур",
+        "english": "Silent Breach",
+        "type": "outfit",
+        "file": "S31_outfit_013.png"
+      },
+      {
+        "id": 1752,
+        "character": "Хэдди Каур",
+        "english": "Daring Ensemble",
+        "type": "outfit",
+        "file": "S31_outfit_01_CV01.png"
+      },
+      {
+        "id": 1753,
+        "character": "Хэдди Каур",
+        "english": "Driven Ensemble",
+        "type": "outfit",
+        "file": "S31_outfit_01_CV02.png"
+      },
+      {
+        "id": 1754,
+        "character": "Хэдди Каур",
+        "english": "Inquisitive Ensemble",
+        "type": "outfit",
+        "file": "S31_outfit_01_CV03.png"
+      },
+      {
+        "id": 1755,
+        "character": "Хэдди Каур",
+        "english": "Spirited Ensemble",
+        "type": "outfit",
+        "file": "S31_outfit_01_CV04.png"
+      },
+      {
+        "id": 1760,
+        "character": "Ада Вонг",
+        "english": "Bloody Ada Wong",
+        "type": "outfit",
+        "file": "S32_outfit_01_P01.png"
+      },
+      {
+        "id": 1765,
+        "character": "Ребекка Чемберс",
+        "english": "Bloody Rebecca Chambers",
+        "type": "outfit",
+        "file": "S33_outfit_01_P01.png"
+      },
+      {
+        "id": 1770,
+        "character": "Витторио Тоскано",
+        "english": "Sanguine Traveler",
+        "type": "outfit",
+        "file": "S34_outfit_021.png"
+      },
+      {
+        "id": 1776,
+        "character": "Витторио Тоскано",
+        "english": "Vittorio Toscano",
+        "type": "outfit",
+        "file": "S34_outfit_01.png"
+      },
+      {
+        "id": 1777,
+        "character": "Витторио Тоскано",
+        "english": "Bloody Vittorio Toscano",
+        "type": "outfit",
+        "file": "S34_outfit_01_P01.png"
+      },
+      {
+        "id": 1787,
+        "character": "Витторио Тоскано",
+        "english": "Fog Wanderer",
+        "type": "outfit",
+        "file": "S34_outfit_01_CV01.png"
+      },
+      {
+        "id": 1788,
+        "character": "Витторио Тоскано",
+        "english": "Fog Navigator",
+        "type": "outfit",
+        "file": "S34_outfit_01_CV02.png"
+      },
+      {
+        "id": 1789,
+        "character": "Витторио Тоскано",
+        "english": "Fog Traveler",
+        "type": "outfit",
+        "file": "S34_outfit_01_CV03.png"
+      },
+      {
+        "id": 1790,
+        "character": "Витторио Тоскано",
+        "english": "Fog Expeditioner",
+        "type": "outfit",
+        "file": "S34_outfit_01_CV04.png"
+      },
+      {
+        "id": 1806,
+        "character": "Талита Лира",
+        "english": "Friendly Halloween",
+        "type": "outfit",
+        "file": "S35_outfit_024.png"
+      },
+      {
+        "id": 1808,
+        "character": "Талита Лира",
+        "english": "Thalita Lyra",
+        "type": "outfit",
+        "file": "S35_outfit_01.png"
+      },
+      {
+        "id": 1809,
+        "character": "Талита Лира",
+        "english": "Bloody Thalita Lyra",
+        "type": "outfit",
+        "file": "S35_outfit_01_P01.png"
+      },
+      {
+        "id": 1821,
+        "character": "Талита Лира",
+        "english": "Famous Competitor",
+        "type": "outfit",
+        "file": "S35_outfit_01_CV01.png"
+      },
+      {
+        "id": 1822,
+        "character": "Талита Лира",
+        "english": "Famous Vlogger",
+        "type": "outfit",
+        "file": "S35_outfit_01_CV02.png"
+      },
+      {
+        "id": 1823,
+        "character": "Талита Лира",
+        "english": "Famous Modeller",
+        "type": "outfit",
+        "file": "S35_outfit_01_CV03.png"
+      },
+      {
+        "id": 1824,
+        "character": "Талита Лира",
+        "english": "Famous Entrepreneur",
+        "type": "outfit",
+        "file": "S35_outfit_01_CV04.png"
+      },
+      {
+        "id": 1832,
+        "character": "Ренато Лира",
+        "english": "Beach Bat",
+        "type": "outfit",
+        "file": "S36_outfit_024.png"
+      },
+      {
+        "id": 1834,
+        "character": "Ренато Лира",
+        "english": "Renato Lyra",
+        "type": "outfit",
+        "file": "S36_outfit_01.png"
+      },
+      {
+        "id": 1835,
+        "character": "Ренато Лира",
+        "english": "Bloody Renato Lyra",
+        "type": "outfit",
+        "file": "S36_outfit_01_P01.png"
+      },
+      {
+        "id": 1848,
+        "character": "Ренато Лира",
+        "english": "Puzzle Solver",
+        "type": "outfit",
+        "file": "S36_outfit_01_CV01.png"
+      },
+      {
+        "id": 1849,
+        "character": "Ренато Лира",
+        "english": "Puzzle Tactician",
+        "type": "outfit",
+        "file": "S36_outfit_01_CV02.png"
+      },
+      {
+        "id": 1850,
+        "character": "Ренато Лира",
+        "english": "Puzzle Expert",
+        "type": "outfit",
+        "file": "S36_outfit_01_CV03.png"
+      },
+      {
+        "id": 1851,
+        "character": "Ренато Лира",
+        "english": "Puzzle Maker",
+        "type": "outfit",
+        "file": "S36_outfit_01_CV04.png"
+      },
+      {
+        "id": 1860,
+        "character": "Габриэль Сома",
+        "english": "Holiday Memories",
+        "type": "outfit",
+        "file": "S37_outfit_024.png"
+      },
+      {
+        "id": 1862,
+        "character": "Габриэль Сома",
+        "english": "Gabriel Soma",
+        "type": "outfit",
+        "file": "S37_outfit_01.png"
+      },
+      {
+        "id": 1863,
+        "character": "Габриэль Сома",
+        "english": "Bloody Gabriel Soma",
+        "type": "outfit",
+        "file": "S37_outfit_01_P01.png"
+      },
+      {
+        "id": 1872,
+        "character": "Габриэль Сома",
+        "english": "Loyal Crewmember",
+        "type": "outfit",
+        "file": "S37_outfit_01_CV01.png"
+      },
+      {
+        "id": 1873,
+        "character": "Габриэль Сома",
+        "english": "Kind Crewmember",
+        "type": "outfit",
+        "file": "S37_outfit_01_CV02.png"
+      },
+      {
+        "id": 1874,
+        "character": "Габриэль Сома",
+        "english": "Adept Crewmember",
+        "type": "outfit",
+        "file": "S37_outfit_01_CV03.png"
+      },
+      {
+        "id": 1875,
+        "character": "Габриэль Сома",
+        "english": "Honest Crewmember",
+        "type": "outfit",
+        "file": "S37_outfit_01_CV04.png"
+      },
+      {
+        "id": 1878,
+        "character": "Николас Кейдж",
+        "english": "Masquerade Actor",
+        "type": "outfit",
+        "file": "S38_outfit_013.png"
+      },
+      {
+        "id": 1883,
+        "character": "Николас Кейдж",
+        "english": "Bloody Nicolas Cage",
+        "type": "outfit",
+        "file": "S38_outfit_01_P01.png"
+      },
+      {
+        "id": 1894,
+        "character": "Эллен Рипли",
+        "english": "Bloody Ellen Ripley",
+        "type": "outfit",
+        "file": "S39_outfit_01_P01.png"
+      },
+      {
+        "id": 1897,
+        "character": "Алан Уэйк",
+        "english": "Alan Wake",
+        "type": "outfit",
+        "file": "S40_outfit_01.png"
+      },
+      {
+        "id": 1899,
+        "character": "Алан Уэйк",
+        "english": "Saga Anderson",
+        "type": "outfit",
+        "file": "S40_outfit_006.png"
+      },
+      {
+        "id": 1901,
+        "character": "Алан Уэйк",
+        "english": "Alan Wake Classic",
+        "type": "outfit",
+        "file": "S40_outfit_008.png"
+      },
+      {
+        "id": 1905,
+        "character": "Сейбл Уорд",
+        "english": "Sable Ward",
+        "type": "outfit",
+        "file": "S41_outfit_01.png"
+      },
+      {
+        "id": 1912,
+        "character": "Сейбл Уорд",
+        "english": "Rebel Grrrl",
+        "type": "outfit",
+        "file": "S41_outfit_01_CV01.png"
+      },
+      {
+        "id": 1913,
+        "character": "Сейбл Уорд",
+        "english": "Rose-Tinted Grrrl",
+        "type": "outfit",
+        "file": "S41_outfit_01_CV02.png"
+      },
+      {
+        "id": 1914,
+        "character": "Сейбл Уорд",
+        "english": "Midnight Grrrl",
+        "type": "outfit",
+        "file": "S41_outfit_01_CV03.png"
+      },
+      {
+        "id": 1915,
+        "character": "Сейбл Уорд",
+        "english": "Forest Grrrl",
+        "type": "outfit",
+        "file": "S41_outfit_01_CV04.png"
+      },
+      {
+        "id": 1922,
+        "character": "Сейбл Уорд",
+        "english": "Fiery Spider",
+        "type": "outfit",
+        "file": "S41_outfit_012.png"
+      },
+      {
+        "id": 1927,
+        "character": "Сейбл Уорд",
+        "english": "Reflections In Red",
+        "type": "outfit",
+        "file": "S41_outfit_021.png"
+      },
+      {
+        "id": 1929,
+        "character": "Аэстри Язар",
+        "english": "Masquerade Musician",
+        "type": "outfit",
+        "file": "S42_outfit_011.png"
+      },
+      {
+        "id": 1931,
+        "character": "Аэстри Язар",
+        "english": "Bloody Baermar Uraz",
+        "type": "outfit",
+        "file": "S42_outfit_01_P01.png"
+      },
+      {
+        "id": 1933,
+        "character": "Аэстри Язар",
+        "english": "Bloody Aestri Yazar",
+        "type": "outfit",
+        "file": "S42_outfit_02_P01.png"
+      },
+      {
+        "id": 1961,
+        "character": "Тори Кейн",
+        "english": "Ceremony of Blood",
+        "type": "outfit",
+        "file": "S45_outfit_011.png"
+      },
+      {
+        "id": 1967,
+        "character": "Тори Кейн",
+        "english": "Taurie Cain",
+        "type": "outfit",
+        "file": "S45_outfit_01.png"
+      },
+      {
+        "id": 1968,
+        "character": "Тори Кейн",
+        "english": "Bloody Taurie Cain",
+        "type": "outfit",
+        "file": "S45_outfit_01_P01.png"
+      },
+      {
+        "id": 1969,
+        "character": "Тори Кейн",
+        "english": "Cultist Thug",
+        "type": "outfit",
+        "file": "S45_outfit_01_CV01.png"
+      },
+      {
+        "id": 1970,
+        "character": "Тори Кейн",
+        "english": "Cultist Punk",
+        "type": "outfit",
+        "file": "S45_outfit_01_CV02.png"
+      },
+      {
+        "id": 1971,
+        "character": "Тори Кейн",
+        "english": "Cultist Rage",
+        "type": "outfit",
+        "file": "S45_outfit_01_CV03.png"
+      },
+      {
+        "id": 1972,
+        "character": "Тори Кейн",
+        "english": "Cultist Rebel",
+        "type": "outfit",
+        "file": "S45_outfit_01_CV04.png"
+      },
+      {
+        "id": 1989,
+        "character": "Орела Роуз",
+        "english": "Seas of Green",
+        "type": "outfit",
+        "file": "S46_outfit_01_CV01.png"
+      },
+      {
+        "id": 1990,
+        "character": "Орела Роуз",
+        "english": "Purple Mountains",
+        "type": "outfit",
+        "file": "S46_outfit_01_CV02.png"
+      },
+      {
+        "id": 1991,
+        "character": "Орела Роуз",
+        "english": "Rosy Pathways",
+        "type": "outfit",
+        "file": "S46_outfit_01_CV03.png"
+      },
+      {
+        "id": 1992,
+        "character": "Орела Роуз",
+        "english": "Violet Clouds",
+        "type": "outfit",
+        "file": "S46_outfit_01_CV04.png"
+      },
+      {
+        "id": 1998,
+        "character": "Орела Роуз",
+        "english": "Giving Blood",
+        "type": "outfit",
+        "file": "S46_outfit_015.png"
+      },
+      {
+        "id": 2002,
+        "character": "Орела Роуз",
+        "english": "Orela Rose",
+        "type": "outfit",
+        "file": "S46_outfit_01.png"
+      },
+      {
+        "id": 2003,
+        "character": "Орела Роуз",
+        "english": "Bloody Orela",
+        "type": "outfit",
+        "file": "S46_outfit_01_P01.png"
+      },
+      {
+        "id": 2009,
+        "character": "Рик Граймс",
+        "english": "Rick Grimes",
+        "type": "outfit",
+        "file": "S47_outfit_01.png"
+      },
+      {
+        "id": 2010,
+        "character": "Рик Граймс",
+        "english": "Bloody Rick Grimes",
+        "type": "outfit",
+        "file": "S47_outfit_01_P01.png"
+      },
+      {
+        "id": 2015,
+        "character": "Мишон Граймс",
+        "english": "Michonne Grimes",
+        "type": "outfit",
+        "file": "S48_outfit_01.png"
+      },
+      {
+        "id": 2016,
+        "character": "Мишон Граймс",
+        "english": "Bloody Michonne",
+        "type": "outfit",
+        "file": "S48_outfit_01_P01.png"
+      },
+      {
+        "id": 2017,
+        "character": "Ви Бунясак",
+        "english": "Periwinkle Percussionist",
+        "type": "outfit",
+        "file": "S49_outfit_01_CV01.png"
+      },
+      {
+        "id": 2018,
+        "character": "Ви Бунясак",
+        "english": "Poppy Percussionist",
+        "type": "outfit",
+        "file": "S49_outfit_01_CV02.png"
+      },
+      {
+        "id": 2019,
+        "character": "Ви Бунясак",
+        "english": "Purple Percussionist",
+        "type": "outfit",
+        "file": "S49_outfit_01_CV03.png"
+      },
+      {
+        "id": 2020,
+        "character": "Ви Бунясак",
+        "english": "Pistachio Percussionist",
+        "type": "outfit",
+        "file": "S49_outfit_01_CV04.png"
+      },
+      {
+        "id": 2029,
+        "character": "Ви Бунясак",
+        "english": "Tan Session",
+        "type": "outfit",
+        "file": "S49_outfit_012.png"
+      },
+      {
+        "id": 2030,
+        "character": "Ви Бунясак",
+        "english": "Vee Boonyasak",
+        "type": "outfit",
+        "file": "S49_outfit_01.png"
+      },
+      {
+        "id": 2031,
+        "character": "Ви Бунясак",
+        "english": "Bloody Vee",
+        "type": "outfit",
+        "file": "S49_outfit_01_P01.png"
+      },
+      {
+        "id": 2034,
+        "character": "Дастин Хендерсон",
+        "english": "Dustin Henderson",
+        "type": "outfit",
+        "file": "S50_outfit_01.png"
+      },
+      {
+        "id": 2035,
+        "character": "Дастин Хендерсон",
+        "english": "Bloody Dustin Henderson",
+        "type": "outfit",
+        "file": "S50_outfit_01_P01.png"
+      },
+      {
+        "id": 2038,
+        "character": "Одиннадцать",
+        "english": "Eleven",
+        "type": "outfit",
+        "file": "S51_outfit_01.png"
+      },
+      {
+        "id": 2039,
+        "character": "Одиннадцать",
+        "english": "Bloody Eleven",
+        "type": "outfit",
+        "file": "S51_outfit_01_P01.png"
+      },
+      {
+        "id": 2040,
+        "character": "Квон Тхэён",
+        "english": "Work Passion",
+        "type": "outfit",
+        "file": "S52_outfit_01_CV01.png"
+      },
+      {
+        "id": 2041,
+        "character": "Квон Тхэён",
+        "english": "Work Ethic",
+        "type": "outfit",
+        "file": "S52_outfit_01_CV02.png"
+      },
+      {
+        "id": 2042,
+        "character": "Квон Тхэён",
+        "english": "Work First",
+        "type": "outfit",
+        "file": "S52_outfit_01_CV03.png"
+      },
+      {
+        "id": 2043,
+        "character": "Квон Тхэён",
+        "english": "Work Process",
+        "type": "outfit",
+        "file": "S52_outfit_01_CV04.png"
+      },
+      {
+        "id": 2051,
+        "character": "Квон Тхэён",
+        "english": "Kwon Tae-young",
+        "type": "outfit",
+        "file": "S52_outfit_01.png"
+      },
+      {
+        "id": 2052,
+        "character": "Квон Тхэён",
+        "english": "Bloody Kwon Tae-young",
+        "type": "outfit",
+        "file": "S52_outfit_01_P01.png"
+      },
+      {
+        "id": 2053,
+        "character": "Шейн Уиигваас",
+        "english": "Ride On",
+        "type": "outfit",
+        "file": "S53_outfit_01_CV01.png"
+      },
+      {
+        "id": 2054,
+        "character": "Шейн Уиигваас",
+        "english": "Ride Out",
+        "type": "outfit",
+        "file": "S53_outfit_01_CV02.png"
+      },
+      {
+        "id": 2055,
+        "character": "Шейн Уиигваас",
+        "english": "Ride Through",
+        "type": "outfit",
+        "file": "S53_outfit_01_CV03.png"
+      },
+      {
+        "id": 2056,
+        "character": "Шейн Уиигваас",
+        "english": "Ride Away",
+        "type": "outfit",
+        "file": "S53_outfit_01_CV04.png"
+      },
+      {
+        "id": 2064,
+        "character": "Шейн Уиигваас",
+        "english": "Shane Wiigwaas",
+        "type": "outfit",
+        "file": "S53_outfit_01.png"
+      },
+      {
+        "id": 2065,
+        "character": "Шейн Уиигваас",
+        "english": "Bloody Shane Wiigwaas",
+        "type": "outfit",
+        "file": "S53_outfit_01_P01.png"
+      },
+      {
+        "id": 2066,
+        "character": "Деревенщина",
+        "english": "Sugar Rush",
+        "type": "outfit",
+        "file": "TC_outfit_024.png"
+      },
+      {
+        "id": 2067,
+        "character": "Доктор",
+        "english": "Mind Games",
+        "type": "outfit",
+        "file": "DO_outfit_007_02.png"
+      },
+      {
+        "id": 2068,
+        "character": "Охотница",
+        "english": "Furfur Headmistress",
+        "type": "outfit",
+        "file": "BE_outfit_033.png"
+      },
+      {
+        "id": 2069,
+        "character": "Охотница",
+        "english": "Furfur Headmistress (Deep Rift 1)",
+        "type": "outfit",
+        "file": "BE_outfit_033_01.png"
+      },
+      {
+        "id": 2070,
+        "character": "Охотница",
+        "english": "Furfur Headmistress (Deep Rift 2)",
+        "type": "outfit",
+        "file": "BE_outfit_033_02.png"
+      },
+      {
+        "id": 2071,
+        "character": "Клоун",
+        "english": "Leraie Cook",
+        "type": "outfit",
+        "file": "GK_outfit_027.png"
+      },
+      {
+        "id": 2072,
+        "character": "Клоун",
+        "english": "Leraie Cook (Deep Rift 1)",
+        "type": "outfit",
+        "file": "GK_outfit_027_01.png"
+      },
+      {
+        "id": 2073,
+        "character": "Клоун",
+        "english": "Leraie Cook (Deep Rift 2)",
+        "type": "outfit",
+        "file": "GK_outfit_027_02.png"
+      },
+      {
+        "id": 2074,
+        "character": "Дух",
+        "english": "Lessons Learned",
+        "type": "outfit",
+        "file": "HK_outfit_014_01.png"
+      },
+      {
+        "id": 2075,
+        "character": "Легион",
+        "english": "Emil's Purpose",
+        "type": "outfit",
+        "file": "KK_outfit_042.png"
+      },
+      {
+        "id": 2076,
+        "character": "Стрелок",
+        "english": "Lingering Rancher",
+        "type": "outfit",
+        "file": "UK_outfit_021.png"
+      },
+      {
+        "id": 2081,
+        "character": "Красу",
+        "english": "Force Of Nature",
+        "type": "outfit",
+        "file": "K41_outfit_009.png"
+      },
+      {
+        "id": 2086,
+        "character": "Дуайт Фэйрфилд",
+        "english": "Unmotivated Student",
+        "type": "outfit",
+        "file": "DF_outfit_006_02.png"
+      },
+      {
+        "id": 2091,
+        "character": "Нея Карлссон",
+        "english": "Panic At Prenn",
+        "type": "outfit",
+        "file": "NK_outfit_039.png"
+      },
+      {
+        "id": 2096,
+        "character": "Эйс Висконти",
+        "english": "Sexy Beast",
+        "type": "outfit",
+        "file": "AV_outfit_030.png"
+      },
+      {
+        "id": 2097,
+        "character": "Фенг Мин",
+        "english": "2B",
+        "type": "outfit",
+        "file": "FM_Outfit_045.png"
+      },
+      {
+        "id": 2098,
+        "character": "Кейт Денсон",
+        "english": "The Slayer",
+        "type": "outfit",
+        "file": "GS_outfit_042.png"
+      },
+      {
+        "id": 2099,
+        "character": "Джейн Ромеро",
+        "english": "Top Student",
+        "type": "outfit",
+        "file": "MS_outfit_016_01.png"
+      },
+      {
+        "id": 2100,
+        "character": "Юи Кимура",
+        "english": "A2",
+        "type": "outfit",
+        "file": "SS_Outfit_034.png"
+      },
+      {
+        "id": 2102,
+        "character": "Хэдди Каур",
+        "english": "Gifted Student",
+        "type": "outfit",
+        "file": "S31_outfit_014_01.png"
+      },
+      {
+        "id": 2108,
+        "character": "Ренато Лира",
+        "english": "Foras Casual",
+        "type": "outfit",
+        "file": "S36_outfit_027.png"
+      },
+      {
+        "id": 2112,
+        "character": "Ви Бунясак",
+        "english": "Sitri Style",
+        "type": "outfit",
+        "file": "S49_outfit_013.png"
+      },
+      {
+        "id": 2113,
+        "character": "Ви Бунясак",
+        "english": "Sitri Style (Deep Rift 1)",
+        "type": "outfit",
+        "file": "S49_outfit_013_01.png"
+      },
+      {
+        "id": 2114,
+        "character": "Ви Бунясак",
+        "english": "Sitri Style (Deep Rift 2)",
+        "type": "outfit",
+        "file": "S49_outfit_013_02.png"
+      },
+      {
+        "id": 2115,
+        "character": "Квон Тхэён",
+        "english": "Touch Sand",
+        "type": "outfit",
+        "file": "S52_outfit_008.png"
+      },
+      {
+        "id": 2117,
+        "character": "Шейн Уиигваас",
+        "english": "Zombie, Esq",
+        "type": "outfit",
+        "file": "S53_outfit_008.png"
+      },
+      {
+        "id": 2124,
+        "character": "Орела Роуз",
+        "english": "Deserved Break",
+        "type": "outfit",
+        "file": "S46_outfit_017.png"
+      },
+      {
+        "id": 2129,
+        "character": "Квон Тхэён",
+        "english": "Double Shifts",
+        "type": "outfit",
+        "file": "S52_outfit_010.png"
+      },
+      {
+        "id": 2133,
+        "character": "Гоуст Фейс",
+        "english": "Ghost Face Día De Los Muertos",
+        "type": "outfit",
+        "file": "OK_outfit_018.png"
+      },
+      {
+        "id": 2141,
+        "character": "Элоди Ракото",
+        "english": "Nebula's Search",
+        "type": "outfit",
+        "file": "S24_outfit_029.png"
+      },
+      {
+        "id": 2142,
+        "character": "Ли Юнчин",
+        "english": "GlowGetter's Mission",
+        "type": "outfit",
+        "file": "S25_outfit_034.png"
+      },
+      {
+        "id": 10002,
+        "character": "Ведьма",
+        "english": "Birch",
+        "type": "coschar",
+        "file": "CC002_charSelect_portrait.png"
+      },
+      {
+        "id": 10006,
+        "character": "Мор",
+        "english": "Ferryman",
+        "type": "coschar",
+        "file": "CC006_charSelect_portrait.png"
+      },
+      {
+        "id": 10018,
+        "character": "Они",
+        "english": "Armoured Titan",
+        "type": "coschar",
+        "file": "CC018_charSelect_portrait.png"
+      },
+      {
+        "id": 10022,
+        "character": "Художница",
+        "english": "Jabberwock",
+        "type": "coschar",
+        "file": "CC022_charSelect_portrait.png"
+      },
+      {
+        "id": 10024,
+        "character": "Рыцарь",
+        "english": "Draugr",
+        "type": "coschar",
+        "file": "CC024_charSelect_portrait.png"
+      },
+      {
+        "id": 10029,
+        "character": "Хороший парень",
+        "english": "Good Gal",
+        "type": "coschar",
+        "file": "CC029_charSelect_portrait.png"
+      },
+      {
+        "id": 10030,
+        "character": "Доктор",
+        "english": "Pharaoh Eddie",
+        "type": "coschar",
+        "file": "CC030_charSelect_portrait.png"
+      },
+      {
+        "id": 10031,
+        "character": "Стрелок",
+        "english": "Stranger Eddie",
+        "type": "coschar",
+        "file": "CC031_charSelect_portrait.png"
+      },
+      {
+        "id": 10032,
+        "character": "Грязь",
+        "english": "Eddie's Tribute",
+        "type": "coschar",
+        "file": "CC032_charSelect_portrait.png"
+      },
+      {
+        "id": 10033,
+        "character": "Они",
+        "english": "Samurai Eddie",
+        "type": "coschar",
+        "file": "CC033_charSelect_portrait.png"
+      },
+      {
+        "id": 10036,
+        "character": "Феликс Рихтер",
+        "english": "Blitz",
+        "type": "coschar",
+        "file": "CC036_charSelect_portrait.png"
+      },
+      {
+        "id": 10037,
+        "character": "Адам Фрэнсис",
+        "english": "Wamai",
+        "type": "coschar",
+        "file": "CC037_charSelect_portrait.png"
+      },
+      {
+        "id": 10038,
+        "character": "Мэг Томас",
+        "english": "Annie Leonhart",
+        "type": "coschar",
+        "file": "CC038_charSelect_portrait.png"
+      },
+      {
+        "id": 10039,
+        "character": "Феликс Рихтер",
+        "english": "Armin Arlert",
+        "type": "coschar",
+        "file": "CC039_charSelect_portrait.png"
+      },
+      {
+        "id": 10040,
+        "character": "Дуайт Фэйрфилд",
+        "english": "Eren Yeager",
+        "type": "coschar",
+        "file": "CC040_charSelect_portrait.png"
+      },
+      {
+        "id": 10041,
+        "character": "Зарина Кассир",
+        "english": "Hange Zoë",
+        "type": "coschar",
+        "file": "CC041_charSelect_portrait.png"
+      },
+      {
+        "id": 10042,
+        "character": "Кейт Денсон",
+        "english": "Historia Reiss",
+        "type": "coschar",
+        "file": "CC042_charSelect_portrait.png"
+      },
+      {
+        "id": 10043,
+        "character": "Эйс Висконти",
+        "english": "Kenny Ackerman",
+        "type": "coschar",
+        "file": "CC043_charSelect_portrait.png"
+      },
+      {
+        "id": 10044,
+        "character": "Джейк Парк",
+        "english": "Levi Ackerman",
+        "type": "coschar",
+        "file": "CC044_charSelect_portrait.png"
+      },
+      {
+        "id": 10045,
+        "character": "Юи Кимура",
+        "english": "Mikasa Ackerman",
+        "type": "coschar",
+        "file": "CC045_charSelect_portrait.png"
+      },
+      {
+        "id": 10047,
+        "character": "Алан Уэйк",
+        "english": "Saga Anderson",
+        "type": "coschar",
+        "file": "CC047_charSelect_portrait.png"
+      },
+      {
+        "id": 10049,
+        "character": "Алан Уэйк",
+        "english": "Mr Scratch",
+        "type": "coschar",
+        "file": "CC049_charSelect_portrait.png"
+      },
+      {
+        "id": 10055,
+        "character": "Тёмный властелин",
+        "english": "True Form",
+        "type": "coschar",
+        "file": "CC055_charSelect_portrait.png"
+      },
+      {
+        "id": 10057,
+        "character": "Дух",
+        "english": "Tomie Kawakami",
+        "type": "coschar",
+        "file": "CC057_charSelect_portrait.png"
+      },
+      {
+        "id": 10070,
+        "character": "Стив Харрингтон",
+        "english": "Robin Buckley",
+        "type": "coschar",
+        "file": "CC070_charSelect_portrait.png"
+      },
+      {
+        "id": 10071,
+        "character": "Тревор Бельмонт",
+        "english": "Leon Belmont",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10072,
+        "character": "Тревор Бельмонт",
+        "english": "Simon Belmont",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10073,
+        "character": "Кейт Денсон",
+        "english": "Maria Renard",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10074,
+        "character": "Микаэла Рид",
+        "english": "Sypha Belnades",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10075,
+        "character": "Феликс Рихтер",
+        "english": "Jonathan Morris",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10076,
+        "character": "Юи Кимура",
+        "english": "Shanoa",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10077,
+        "character": "Медсестра",
+        "english": "Death",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10078,
+        "character": "Трюкач",
+        "english": "Souichi Tsujii",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10079,
+        "character": "Близнецы",
+        "english": "Kinkao & Minkao Hikizuri",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10080,
+        "character": "Ли Юнчин",
+        "english": "Terumi Fujino",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10081,
+        "character": "Кейт Денсон",
+        "english": "Marionette",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10082,
+        "character": "Юи Кимура",
+        "english": "Tsukiko Izumisawa",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10083,
+        "character": "Ренато Лира",
+        "english": "Hideyoshi Nagachika",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10084,
+        "character": "Нея Карлссон",
+        "english": "Eto Yoshimura",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10085,
+        "character": "Юи Кимура",
+        "english": "Touka Kirishima",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10086,
+        "character": "Кейт Денсон",
+        "english": "Yennefer of Vengerberg",
+        "type": "coschar",
+        "file": "CC086_charSelect_portrait.png"
+      },
+      {
+        "id": 10087,
+        "character": "Сейбл Уорд",
+        "english": "Ciri",
+        "type": "coschar",
+        "file": "CC087_charSelect_portrait.png"
+      },
+      {
+        "id": 10088,
+        "character": "Микаэла Рид",
+        "english": "Triss Merigold",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10089,
+        "character": "Рыцарь",
+        "english": "Eredin Bréacc Glas",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10091,
+        "character": "Юи Кимура",
+        "english": "Kaoru",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10092,
+        "character": "Легион",
+        "english": "Robbie The Rabbit",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10093,
+        "character": "Первый",
+        "english": "One",
+        "type": "coschar",
+        "file": "CC093_charSelect_portrait.png"
+      },
+      {
+        "id": 10097,
+        "character": "Талита Лира",
+        "english": "Sasha Braus",
+        "type": "coschar",
+        "file": "CC097_charSelect_portrait.png"
+      },
+      {
+        "id": 10098,
+        "character": "Медсестра",
+        "english": "Collector",
+        "type": "coschar",
+        "file": "CC098_charSelect_portrait.png"
+      },
+      {
+        "id": 10099,
+        "character": "Мэг Томас",
+        "english": "Hellion",
+        "type": "coschar",
+        "file": "CC099_charSelect_portrait.png"
+      },
+      {
+        "id": 10100,
+        "character": "Дэвид Кинг",
+        "english": "Highwayman",
+        "type": "coschar",
+        "file": "CC100_charSelect_portrait.png"
+      },
+      {
+        "id": 10101,
+        "character": "Витторио Тоскано",
+        "english": "Leper",
+        "type": "coschar",
+        "file": "CC101_charSelect_portrait.png"
+      },
+      {
+        "id": 10102,
+        "character": "Зарина Кассир",
+        "english": "Plague Doctor",
+        "type": "coschar",
+        "file": "CC102_charSelect_portrait.png"
+      },
+      {
+        "id": 10103,
+        "character": "Мор",
+        "english": "Prophet",
+        "type": "coschar",
+        "file": "CC103_charSelect_portrait.png"
+      },
+      {
+        "id": 10104,
+        "character": "Шерил Мейсон",
+        "english": "Shimizu Hinako",
+        "type": "coschar",
+        "file": "CC104_charSelect_portrait.png"
+      },
+      {
+        "id": 10108,
+        "character": "Фенг Мин",
+        "english": "2B",
+        "type": "coschar",
+        "file": "CC108_charSelect_portrait.png"
+      },
+      {
+        "id": 10109,
+        "character": "Юи Кимура",
+        "english": "A2",
+        "type": "coschar",
+        "file": "CC109_charSelect_portrait.png"
+      },
+      {
+        "id": 10110,
+        "character": "Легион",
+        "english": "Emil",
+        "type": "coschar",
+        "file": "CC110_charSelect_portrait.png"
+      },
+      {
+        "id": 10111,
+        "character": "Гоуст Фейс",
+        "english": "Lilith",
+        "type": "coschar",
+        "file": "CC111_charSelect_portrait.png"
+      },
+      {
+        "id": 10114,
+        "character": "Дэвид Кинг",
+        "english": "Barbarian",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10115,
+        "character": "Зарина Кассир",
+        "english": "Sorceress",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10116,
+        "character": "Тори Кейн",
+        "english": "Necromancer",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10117,
+        "character": "Дуайт Фэйрфилд",
+        "english": "Scooby-Doo",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10118,
+        "character": "Рик Граймс",
+        "english": "Negan Smith",
+        "type": "coschar",
+        "file": ""
+      },
+      {
+        "id": 10119,
+        "character": "Дух",
+        "english": "Bubble Head Nurse",
+        "type": "coschar",
+        "file": ""
+      }
+    ],
+    "suspicious_records": []
+  },
+  "perks": {
+    "distinct_by_side": {
+      "KILLER": 144,
+      "SURVIVOR": 176
+    },
+    "missing_in_ru_icon_reference": {
+      "KILLER": [],
+      "SURVIVOR": []
+    },
+    "reference_note": "Presence in icon map does not prove the spelling in the current game client."
+  },
+  "addons": {
+    "playable_count_by_owner": {
+      "KILLER:Аниматроник": 16,
+      "KILLER:Близнецы": 14,
+      "KILLER:Ведьма": 12,
+      "KILLER:Гоуст Фейс": 20,
+      "KILLER:Грязь": 15,
+      "KILLER:Гуль": 20,
+      "KILLER:Демогоргон": 16,
+      "KILLER:Деревенщина": 21,
+      "KILLER:Доктор": 2,
+      "KILLER:Дух": 20,
+      "KILLER:Егерь": 18,
+      "KILLER:Каннибал": 20,
+      "KILLER:Клоун": 20,
+      "KILLER:Кошмар": 20,
+      "KILLER:Красу": 17,
+      "KILLER:Ксеноморф": 15,
+      "KILLER:Кукловод": 20,
+      "KILLER:Легион": 20,
+      "KILLER:Лич": 16,
+      "KILLER:Медсестра": 8,
+      "KILLER:Мор": 17,
+      "KILLER:Неведомое": 20,
+      "KILLER:Немезис": 20,
+      "KILLER:Они": 15,
+      "KILLER:Онрё": 14,
+      "KILLER:Охотник": 20,
+      "KILLER:Охотница": 17,
+      "KILLER:Палач": 15,
+      "KILLER:Первый": 20,
+      "KILLER:Правосудие": 20,
+      "KILLER:Призрак": 19,
+      "KILLER:Рыцарь": 16,
+      "KILLER:Свинья": 15,
+      "KILLER:Сенобит": 17,
+      "KILLER:Сингулярность": 15,
+      "KILLER:Слэшер": 20,
+      "KILLER:Стрелок": 14,
+      "KILLER:Тень": 20,
+      "KILLER:Торговка черепами": 20,
+      "KILLER:Трюкач": 12,
+      "KILLER:Тёмный властелин": 20,
+      "KILLER:Хороший парень": 20,
+      "KILLER:Художница": 20,
+      "KILLER:Чума": 20,
+      "SURVIVOR:Аптечки": 14,
+      "SURVIVOR:Карты": 5,
+      "SURVIVOR:Ключи": 5,
+      "SURVIVOR:Предметы с туманом": 5,
+      "SURVIVOR:Фонарики": 12,
+      "SURVIVOR:Ящики с инструментами": 11
+    },
+    "missing_in_ru_en_reference": {},
+    "missing_mapping_count": 0,
+    "reference_note": "Name map is historical; re-check questionable spellings with the Russian game client."
+  },
+  "errors": [],
+  "warnings": []
+}

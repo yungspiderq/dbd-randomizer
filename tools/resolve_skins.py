@@ -57,7 +57,11 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from char_map_ru import KILLER_EN_RU, SURVIVOR_EN_RU, RARITIES   # noqa: E402
-import dbd_data as DATA                                          # noqa: E402
+import dbd_data as DATA
+try:
+    import dbd_skins as _PREVIOUS_SKINS
+except ImportError:
+    _PREVIOUS_SKINS = None                                          # noqa: E402
 # RU-названия (заполняется tools/fetch_ru_skins.py). Импорт МОДУЛЕМ, а не
 # `from … import A, B`: таблицы добавлялись постепенно, и ImportError на одной
 # из них обнулял бы обе.
@@ -160,8 +164,11 @@ def character_names(datatable_wt):
     collect("killers", KILLER_EN_RU, killers)
     collect("survivors", SURVIVOR_EN_RU, survivors)
     if unknown:
-        raise SystemExit("Нет русского имени для персонажей (дополните tools/char_map_ru.py): "
-                         + ", ".join(unknown))
+        # wiki.gg may already contain PTB characters not available on live DBD.
+        # Those characters are intentionally not in our checked Russian live roster.
+        # Never invent their localization or add their cosmetics to live builds.
+        print("В wiki.gg найдены персонажи вне текущей RU-базы (PTB/не выпущены): "
+              + ", ".join(unknown) + ". Их наборы пропущены.")
     # страховка: имя обязано совпадать с тем, что в базе приложения
     bad = [ru for ru in killers.values() if ru not in DATA.KILLERS]
     bad += [ru for ru in survivors.values() if ru not in DATA.SURVIVORS]
@@ -173,6 +180,77 @@ def character_names(datatable_wt):
 # ============================================================================
 # файлы картинок
 # ============================================================================
+def preserve_catalog_ids(records, previous):
+    """Keep persistent skin IDs stable when wiki.gg renumbers its Lua rows.
+
+    Match source records by exact outfit file first, then by the unique tuple
+    (character, kind, English name, release date). Never trust a raw wiki ID if
+    it now points to a different character or cosmetic.
+    """
+    from collections import defaultdict
+
+    index_file = defaultdict(list)
+    index_label = defaultdict(list)
+    for sid, old in previous.items():
+        family = (old.get("kind"), old.get("side"), old.get("char"))
+        filename = str(old.get("file") or "").casefold().strip()
+        if filename:
+            index_file[family + (filename,)].append(sid)
+        name = str(old.get("name") or "").casefold().strip()
+        if name:
+            index_label[family + (name, str(old.get("date") or ""))].append(sid)
+
+    reserved = set(previous)
+    used = set()
+    max_new_outfit = max((r["id"] for r in records if r["kind"] == "outfit"), default=0)
+    next_outfit = max([max_new_outfit, *(s for s in reserved if s < COSCHAR_ID_OFFSET)] or [0]) + 1
+    max_new_coschar = max((r["id"] for r in records if r["kind"] == "coschar"), default=COSCHAR_ID_OFFSET)
+    next_coschar = max([max_new_coschar, *(s for s in reserved if s >= COSCHAR_ID_OFFSET)] or [COSCHAR_ID_OFFSET]) + 1
+    unmatched = []
+    matched = 0
+    for record in records:
+        original = record["id"]
+        record["wiki_id"] = original
+        family = (record["kind"], record["side"], record["char"])
+        filename = str(record.get("file") or "").casefold().strip()
+        name = str(record.get("name") or "").casefold().strip()
+        possible = []
+        if filename:
+            possible = [i for i in index_file[family + (filename,)] if i not in used]
+        if len(possible) != 1:
+            possible = [i for i in index_label[family + (name, str(record.get("date") or ""))]
+                        if i not in used] if name else []
+        if len(possible) == 1:
+            record["id"] = possible[0]
+            used.add(record["id"])
+            matched += 1
+        else:
+            unmatched.append(record)
+    fresh = 0
+    for record in unmatched:
+        wiki_id = record["id"]
+        if wiki_id not in reserved and wiki_id not in used:
+            chosen = wiki_id
+        elif record["kind"] == "outfit":
+            while next_outfit in reserved or next_outfit in used:
+                next_outfit += 1
+            if next_outfit >= COSCHAR_ID_OFFSET:
+                raise RuntimeError("Exhausted stable outfit ID range")
+            chosen = next_outfit
+            next_outfit += 1
+        else:
+            while next_coschar in reserved or next_coschar in used:
+                next_coschar += 1
+            chosen = next_coschar
+            next_coschar += 1
+        record["id"] = chosen
+        used.add(chosen)
+        fresh += 1
+    print(f"Стабильные ID: найдено прежних наборов {matched}, новых {fresh}, "
+          f"старых записей вне свежего каталога {len(reserved - used)}")
+    return records
+
+
 def file_exists_map(names):
     """{имя файла: True/False} — проверка через action=query с кэшем на диске."""
     os.makedirs(CACHE, exist_ok=True)
@@ -486,7 +564,7 @@ def write_module(path, skins, char_skins, skin_files, fakes_by_char, game_versio
                      f"'kind': {q(s['kind'])}")
             if s.get("name_ru"):
                 fh.write(f", 'name_ru': {q(s['name_ru'])}")
-                if s.get("ru_from") in ("piece", "manual", "coschar"):
+                if s.get("ru_from") in ("piece", "manual", "coschar", "previous"):
                     fh.write(f", 'name_ru_from': {q(s['ru_from'])}")
             if s.get("date"):
                 fh.write(f", 'date': {q(s['date'])}")
@@ -531,6 +609,8 @@ def main(force=False):
 
     outfits, fakes = parse_outfits(cos_wt, killers_ru, survivors_ru)
     coschars = parse_coschars(cos_wt, killers_ru, survivors_ru)
+    previous_rows = getattr(_PREVIOUS_SKINS, "SKINS_BY_ID", {}) if _PREVIOUS_SKINS else {}
+    preserve_catalog_ids(coschars + outfits, previous_rows)
     pieces = parse_pieces(pieces_wt)
     piece_names = parse_piece_names(pieces_wt)
     print(f"наборов: {len(outfits)}, скинов персонажей: {len(coschars)}, "
@@ -562,6 +642,10 @@ def main(force=False):
     # непокрытых — по русским именам их элементов (статьи «(кастомизация)»).
     for rec in coschars + outfits:
         rec["name_ru"] = SKIN_RU_NAMES.get(rec["file"].strip().lower(), "") if rec["file"] else ""
+        old = previous_rows.get(rec["id"], {})
+        if (not rec["name_ru"] and old.get("name_ru")
+                and old.get("char") == rec["char"] and old.get("side") == rec["side"]):
+            rec["name_ru"], rec["ru_from"] = old["name_ru"], "previous"
     by_pieces, unmatched_pieces = ru_names_by_pieces(outfits, pieces, piece_names)
     n_by_pieces = 0
     for rec in outfits:
