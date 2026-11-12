@@ -61,6 +61,18 @@ class QtBackendTests(unittest.TestCase):
             finally:
                 another.close()
 
+    def test_doctor_owned_only_two_rare_addons_shows_actionable_explanation(self):
+        self.bridge.setRole("killer")
+        self.bridge.db["owned"]["killer_addons"] = [
+            "Радужный король", "Радужный ферзь"]
+        self.bridge.cfg["options"]["respect_owned"] = True
+        with patch.object(self.bridge, "available_characters", return_value=["Доктор"]):
+            self.bridge.generate()
+        self.assertEqual(set(self.bridge.build["addons"]),
+                         {"Радужный король", "Радужный ферзь"})
+        self.bridge._drain()  # status messages are queued for the GUI thread
+        self.assertIn("отметьте остальные аддоны", self.bridge.status)
+
     def test_native_backend_no_tk_and_both_roles(self):
         self.assertEqual(self.bridge.role, "survivor")
         self.bridge.generate()

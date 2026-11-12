@@ -2658,7 +2658,7 @@ ApplicationWindow {
                         OptionRow { title: "Подбирать аддоны"; keyName: "addons" }
                         OptionRow { title: "Случайная внешность"; keyName: "appearance" }
                         OptionRow { title: "Случайный челлендж"; keyName: "challenge" }
-                        OptionRow { title: "Только открытые навыки"; keyName: "owned" }
+                        OptionRow { title: "Только отмеченные навыки и аддоны"; keyName: "owned" }
                         OptionRow { title: "Класс режима 2v8"; keyName: "classes" }
                         OptionRow { title: "Сухой прогон (без кликов)"; keyName: "dry" }
                         OptionRow { title: "Проверять текст результата (нужна область OCR)"; keyName: "ocr" }

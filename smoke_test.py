@@ -329,6 +329,63 @@ class TestDoctorAddonPool(unittest.TestCase):
             seen.update(build["addons"])
         self.assertEqual(seen, set(doctor["killers"]["Доктор"]["addons"]))
 
+    def test_current_revision_two_red_only_saved_doctor_pool_recovers(self):
+        import dbd_data as D
+        legacy = ["Радужный король", "Радужный ферзь"]
+        with tempfile.TemporaryDirectory() as directory:
+            file = os.path.join(directory, "dbd_database.json")
+            saved = R.db_defaults()   # current revision, so no full reset
+            saved["killers"]["Доктор"]["addons"] = legacy[:]
+            with open(file, "w", encoding="utf-8") as out:
+                json.dump(saved, out, ensure_ascii=False)
+            with mock.patch.object(R, "DB_FILE", file):
+                recovered = R.load_db()
+            self.assertTrue(recovered.get("_db_doctor_addons_repaired"))
+            self.assertEqual(recovered["killers"]["Доктор"]["addons"],
+                             D.KILLERS["Доктор"]["addons"])
+            self.assertTrue(os.path.isfile(file + ".doctor-addons.bak"))
+            with open(file, encoding="utf-8") as inp:
+                self.assertEqual(
+                    json.load(inp)["killers"]["Доктор"]["addons"],
+                    D.KILLERS["Доктор"]["addons"])
+            seen = set()
+            for _ in range(180):
+                build = R.make_killer_build(
+                    recovered, ["Доктор"], addons_enabled=True, skin_enabled=False)
+                seen.update(build["addons"])
+            self.assertGreater(len(seen), 10)
+            self.assertTrue(seen - set(legacy))
+
+    def test_doctor_custom_subset_and_other_killers_are_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = os.path.join(directory, "dbd_database.json")
+            saved = R.db_defaults()
+            saved["killers"]["Доктор"]["addons"] = [
+                '"Дисциплина" - класс II', "Радужный король"]
+            saved["killers"]["Правосудие"]["addons"] = ["Череп искателя"]
+            with open(file, "w", encoding="utf-8") as out:
+                json.dump(saved, out, ensure_ascii=False)
+            with mock.patch.object(R, "DB_FILE", file):
+                loaded = R.load_db()
+            self.assertNotIn("_db_doctor_addons_repaired", loaded)
+            self.assertEqual(loaded["killers"]["Доктор"]["addons"],
+                             saved["killers"]["Доктор"]["addons"])
+            self.assertEqual(loaded["killers"]["Правосудие"]["addons"],
+                             ["Череп искателя"])
+
+    def test_doctor_owned_whitelist_is_explained_not_silently_bypassed(self):
+        db = R.db_defaults()
+        db["owned"]["killer_addons"] = ["Радужный король", "Радужный ферзь"]
+        limited = R.make_killer_build(
+            db, ["Доктор"], respect_owned=True, skin_enabled=False)
+        self.assertEqual(set(limited["addons"]),
+                         {"Радужный король", "Радужный ферзь"})
+        full = set()
+        for _ in range(160):
+            full.update(R.make_killer_build(
+                db, ["Доктор"], respect_owned=False, skin_enabled=False)["addons"])
+        self.assertGreater(len(full), 10)
+
     def test_saved_old_db_and_owned_list_migrate(self):
         import dbd_data as D
         with tempfile.TemporaryDirectory() as directory:
