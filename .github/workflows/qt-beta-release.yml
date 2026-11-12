@@ -1,15 +1,15 @@
-name: Qt RC1 - verify and build release candidate
+name: Qt RC2 - verify, Doctor addon regression and power challenges
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "release/qt-rc1-qualification"]
-    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_skins.py", "tools/skin_names_ru.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_rc1_candidate_e2e.py", "docs/RC1_TEST_PLAN_RU.md", "qml_preview/test_shortcut_windows.py", ".github/workflows/qt-beta-release.yml"]
+    branches: ["preview/qml-redesign-2026-11-10", "feature/qt-rc2-killer-power-challenges"]
+    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_data.py", "dbd_killer_challenges.py", "dbd_icons.py", "smoke_test.py", "tools/addon_names_ru_en.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_rc2_candidate_e2e.py", ".github/workflows/qt-beta-release.yml"]
   pull_request:
     branches: ["preview/qml-redesign-2026-11-10"]
   workflow_dispatch:
     inputs:
       publish_prerelease:
-        description: "Publish RC1 as a GitHub Pre-release ONLY after explicit approval"
+        description: "Publish RC2 as GitHub Pre-release only after passing Windows CI and approval"
         type: boolean
         default: false
         required: true
@@ -50,6 +50,9 @@ jobs:
           python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
       - name: Targeted legacy regression tests
         run: python -m unittest smoke_test.TestConfig smoke_test.TestGeneration smoke_test.TestAutomation -q
+      - name: Verify complete Doctor add-on pool and killer power challenge selection
+        run: |
+          python -m unittest smoke_test.TestDoctorAddonPool smoke_test.TestKillerPowerChallenges -v
       - name: Verify Russian catalog and persistent cosmetic IDs
         run: |
           python tools/catalog_audit.py --strict
@@ -118,36 +121,36 @@ jobs:
           "$hash  DBDRandomizerQtBeta.zip" | Set-Content -Path "dist/DBDRandomizerQtBeta.zip.sha256" -Encoding ascii
           Write-Host "Portable ZIP size: $([math]::Round((Get-Item 'dist/DBDRandomizerQtBeta.zip').Length / 1MB, 2)) MiB"
 
-      - name: Verify upgrade from published Beta22 to RC1 candidate ZIP
+      - name: Verify upgrade from published RC1 to RC2 candidate ZIP
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           QT_QPA_PLATFORM: offscreen
         run: |
-          $old = Join-Path $env:RUNNER_TEMP "qt-beta22-original"
+          $old = Join-Path $env:RUNNER_TEMP "qt-rc1-original"
           New-Item -ItemType Directory -Force -Path $old | Out-Null
-          gh release download v2.28.0-qt-beta.22 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
-          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published Beta22 release" }
-          python tests/qt_rc1_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
-          if ($LASTEXITCODE -ne 0) { throw "Beta22 to RC1 candidate updater E2E failed" }
+          gh release download v3.0.0-qt-rc.1 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published RC1 release" }
+          python tests/qt_rc2_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
+          if ($LASTEXITCODE -ne 0) { throw "RC1 to RC2 candidate updater E2E failed" }
 
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DBDRandomizerQtRC1-Portable-Windows
+          name: DBDRandomizerQtRC2-Portable-Windows
           path: |
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
 
       - name: Publish or update GitHub prerelease
-        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10' && ((github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish rc1 prerelease]')))
+        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10' && github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v3.0.0-qt-rc.1"
+          $tag = "v3.0.0-qt-rc.2"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt RC 1 — Release Candidate for Testing" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt RC 2 — Killer Power Challenges and Doctor Fix" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }
