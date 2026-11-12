@@ -101,6 +101,7 @@ class QtBridge(QObject):
         self._selected_addon = {"side": "", "character": "", "category": "", "name": ""}
         self._skin_character = next(iter(self.db["survivors"]), "")
         self._skin_filter = ""
+        self._skin_name_filter = "all"
         self._classes = {}
         self._community = []
         self._challenge = None
@@ -651,10 +652,17 @@ class QtBridge(QObject):
     def skinCharacters(self):
         if not core.SKINS:
             return []
-        return [{"name": name, "side": "K" if name in self.db["killers"] else "S",
-                 "count": len(ids)}
-                for name, ids in sorted(core.SKINS.CHAR_SKINS.items())
-                if name in self.db["killers"] or name in self.db["survivors"]]
+        result = []
+        for name, ids in sorted(core.SKINS.CHAR_SKINS.items()):
+            if name not in self.db["killers"] and name not in self.db["survivors"]:
+                continue
+            local = sum(bool((core.SKINS.SKINS_BY_ID.get(sid) or {}).get("name_ru"))
+                        for sid in ids)
+            result.append({"name": name,
+                           "side": "K" if name in self.db["killers"] else "S",
+                           "count": len(ids), "translated": local,
+                           "missingRussian": len(ids) - local})
+        return result
 
     def _skin_ids(self):
         return list(core.SKINS.CHAR_SKINS.get(self._skin_character, [])) if core.SKINS else []
@@ -668,7 +676,14 @@ class QtBridge(QObject):
     def skinStats(self):
         ids = self._skin_ids()
         owned = self._owned_skin_ids()
-        return {"total": len(ids), "owned": sum(sid in owned for sid in ids)}
+        translated = sum(bool((core.SKINS.SKINS_BY_ID.get(sid) or {}).get("name_ru"))
+                         for sid in ids) if core.SKINS else 0
+        return {"total": len(ids), "owned": sum(sid in owned for sid in ids),
+                "translated": translated, "missingRussian": len(ids) - translated}
+
+    @Property(str, notify=skinsChanged)
+    def skinNameFilter(self):
+        return self._skin_name_filter
 
     @Property("QVariantList", notify=skinsChanged)
     def skins(self):
@@ -676,9 +691,22 @@ class QtBridge(QObject):
             return []
         result = []
         owned = self._owned_skin_ids()
+        source_labels = {
+            "piece": "Сопоставлено по элементам",
+            "manual": "Ручное подтверждение",
+            "coschar": "Сопоставлено по набору",
+            "previous": "Сохранено из прошлой базы",
+            "file": "Русская вики (по изображению)",
+        }
         for sid in self._skin_ids():
             info = core.SKINS.SKINS_BY_ID.get(sid) or {}
-            name = tidy(info.get("name_ru") or info.get("name") or sid)
+            russian = tidy(info.get("name_ru") or "")
+            has_russian = bool(russian)
+            if self._skin_name_filter == "ru" and not has_russian:
+                continue
+            if self._skin_name_filter == "missing" and has_russian:
+                continue
+            name = russian or tidy(info.get("name") or sid)
             english = tidy(info.get("name", ""))
             rarity = tidy(info.get("rarity_ru") or core.SKINS.RARITY_RU.get(info.get("rarity"), ""))
             typ = "Скин персонажа" if info.get("kind") == "coschar" else "Набор одежды"
@@ -686,7 +714,11 @@ class QtBridge(QObject):
             search = core._norm(" ".join((str(sid), name, english, rarity, typ, date, self._skin_character)))
             if self._skin_filter and core._norm(self._skin_filter) not in search:
                 continue
+            provenance = str(info.get("name_ru_from") or ("file" if has_russian else ""))
             result.append({"id": int(sid), "name": name, "english": english,
+                           "russian": russian, "hasRussian": has_russian,
+                           "russianSource": source_labels.get(provenance, "Источник не указан")
+                               if has_russian else "Русское название пока не найдено",
                            "owned": sid in owned, "rarity": rarity, "type": typ, "date": date})
         return result
 
@@ -1034,8 +1066,18 @@ class QtBridge(QObject):
 
     @Slot(str)
     def filterSkins(self, term):
-        self._skin_filter = term.strip()
-        self.skinsChanged.emit()
+        term = term.strip()
+        if self._skin_filter != term:
+            self._skin_filter = term
+            self.skinsChanged.emit()
+
+    @Slot(str)
+    def setSkinNameFilter(self, value):
+        if value not in ("all", "ru", "missing"):
+            return
+        if self._skin_name_filter != value:
+            self._skin_name_filter = value
+            self.skinsChanged.emit()
 
     @Slot(int)
     def toggleSkin(self, sid):
