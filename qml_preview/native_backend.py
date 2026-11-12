@@ -955,9 +955,20 @@ class QtBridge(QObject):
             self._history = self._history[:12]
             self.historyChanged.emit()
             self._save()
+            note = ""
+            if (self.build["side"] == "KILLER" and self.build["char"] == "Доктор"
+                    and self._option("respect_owned")):
+                owned_addons = set(self.db.get("owned", {}).get("killer_addons") or ())
+                playable = set(core._playable_addons(
+                    self.db["killers"]["Доктор"]["addons"]))
+                eligible = playable & owned_addons if owned_addons else playable
+                if eligible == {"Радужный король", "Радужный ферзь"}:
+                    note = (". Только эти два аддона отмечены в списке открытых. "
+                            "Отключите «Только отмеченные навыки и аддоны» "
+                            "или отметьте остальные аддоны.")
             self._notify("Билд готов: " + self.build["char"] +
                          (". Несовместимых закреплений снято: " + str(dropped_pins)
-                          if dropped_pins else ""))
+                          if dropped_pins else "") + note)
         except Exception as e:
             self._notify("Генерация: " + str(e))
 
