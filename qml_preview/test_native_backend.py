@@ -70,6 +70,7 @@ class QtBackendTests(unittest.TestCase):
             self.bridge.generate()
         self.assertEqual(set(self.bridge.build["addons"]),
                          {"Радужный король", "Радужный ферзь"})
+        self.bridge._drain()  # status messages are queued for the GUI thread
         self.assertIn("отметьте остальные аддоны", self.bridge.status)
 
     def test_native_backend_no_tk_and_both_roles(self):
