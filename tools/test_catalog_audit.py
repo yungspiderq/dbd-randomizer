@@ -106,5 +106,28 @@ class CacheRefreshTests(unittest.TestCase):
         self.assertEqual(survivor_ids, {1: known_s[1]})
 
 
+    def test_wiki_renumbering_never_reassigns_old_skin_ids(self):
+        from tools import resolve_skins
+        previous = {
+            200: {"kind": "outfit", "side": "KILLER",
+                  "char": "A", "file": "a_outfit.png", "name": "A set", "date": "01.01.2025"},
+            201: {"kind": "outfit", "side": "SURVIVOR",
+                  "char": "B", "file": "b_outfit.png", "name": "B set", "date": "01.01.2025"},
+        }
+        rows = [
+            {"id": 200, "kind": "outfit", "side": "SURVIVOR",
+             "char": "B", "file": "b_outfit.png", "name": "B set", "date": "01.01.2025"},
+            {"id": 201, "kind": "outfit", "side": "KILLER",
+             "char": "A", "file": "a_outfit.png", "name": "A set", "date": "01.01.2025"},
+            {"id": 201, "kind": "outfit", "side": "KILLER",
+             "char": "C", "file": "c_outfit.png", "name": "C set", "date": "01.10.2026"},
+        ]
+        with patch("builtins.print"):
+            resolve_skins.preserve_catalog_ids(rows, previous)
+        self.assertEqual([row["id"] for row in rows[:2]], [201, 200])
+        self.assertGreater(rows[2]["id"], 201)
+        self.assertEqual(len({row["id"] for row in rows}), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
