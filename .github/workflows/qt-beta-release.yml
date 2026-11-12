@@ -3,7 +3,7 @@ name: Qt Beta23 Bridge - verify and publish prerelease
 on:
   push:
     branches: ["release/qt-beta23-rc-updater-bridge"]
-    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_skins.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_beta23_bridge_e2e.py", "tests/qt_beta23_bridge_discovery.py", ".github/workflows/qt-beta-release.yml"]
+    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_skins.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_beta23_bridge_e2e.py", "tests/qt_beta23_bridge_discovery.py", "tests/qt_beta23_to_rc1_e2e.py", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
     inputs:
       publish_prerelease:
@@ -134,6 +134,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published Beta22 release" }
           python tests/qt_beta23_bridge_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
           if ($LASTEXITCODE -ne 0) { throw "Beta22 to Beta23 bridge updater E2E failed" }
+
+      - name: Verify Beta23 updater installs the published RC1 and retains shortcut repair
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $rc = Join-Path $env:RUNNER_TEMP "qt-rc1-published"
+          New-Item -ItemType Directory -Force -Path $rc | Out-Null
+          gh release download v3.0.0-qt-rc.1 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $rc
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download the published RC1 ZIP" }
+          python tests/qt_beta23_to_rc1_e2e.py --bridge-zip "dist/DBDRandomizerQtBeta.zip" --rc1-zip "$rc/DBDRandomizerQtBeta.zip"
+          if ($LASTEXITCODE -ne 0) { throw "Beta23 to published RC1 upgrade regression failed" }
 
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
