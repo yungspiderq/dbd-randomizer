@@ -918,6 +918,29 @@ def load_db():
             dump_db(db)
         except Exception:
             pass
+    # Fifth repair: a legacy Doctor catalog contained only the two iridescent
+    # add-ons. It is nonempty, so the generic empty-pool repair above never
+    # runs. Only recover this exact known-bad signature; preserve deliberate
+    # custom short lists for other killers, and back up the original file.
+    doctor = db["killers"].get("Доктор")
+    if isinstance(doctor, dict):
+        current = doctor.get("addons")
+        legacy = {"Радужный король", "Радужный ферзь"}
+        canonical = list(DATA.KILLERS["Доктор"]["addons"])
+        if (isinstance(current, list) and len(current) == 2
+                and set(current) == legacy
+                and len(canonical) > 2):
+            if os.path.isfile(DB_FILE):
+                try:
+                    shutil.copy2(DB_FILE, DB_FILE + ".doctor-addons.bak")
+                except OSError:
+                    pass
+            doctor["addons"] = canonical
+            db["_db_doctor_addons_repaired"] = True
+            try:
+                dump_db(db)
+            except OSError:
+                pass
     return db
 
 
