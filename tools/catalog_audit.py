@@ -73,8 +73,17 @@ def audit(baseline=None):
                 continue
             if prev.get("char") != current.get("char") or prev.get("side") != current.get("side"):
                 errors.append("skin ID reassigned to another character: " + str(ident))
+            if prev.get("kind") and prev.get("kind") != current.get("kind"):
+                errors.append("skin ID changed cosmetic type: " + str(ident))
+            old_file, new_file = str(prev.get("file") or "").casefold(), str(current.get("file") or "").casefold()
+            old_name, new_name = str(prev.get("name") or "").casefold(), str(current.get("name") or "").casefold()
+            # A renamed English label OR a changed preview can be legitimate,
+            # but changing both simultaneously is suspicious even if the
+            # character is unchanged. Block automatic updates for manual review.
+            if old_file and new_file and old_name and new_name and old_file != new_file and old_name != new_name:
+                errors.append("skin ID may have changed identity: " + str(ident))
             if prev.get("name_ru") and not current.get("name_ru"):
-                errors.append("verified RU name lost for skin ID " + str(ident))
+                errors.append("known RU name lost for skin ID " + str(ident))
 
     perk_missing = {}
     perk_total = {}
@@ -160,7 +169,10 @@ def audit(baseline=None):
 
 def baseline_snapshot():
     return {"skins": {
-        str(ident): {"char": info.get("char"), "side": info.get("side"), "name_ru": info.get("name_ru", "")}
+        str(ident): {"char": info.get("char"), "side": info.get("side"),
+                     "kind": info.get("kind"), "name": info.get("name"),
+                     "file": info.get("file"), "date": info.get("date"),
+                     "name_ru": info.get("name_ru", "")}
         for ident, info in SKINS.SKINS_BY_ID.items()
     }}
 
