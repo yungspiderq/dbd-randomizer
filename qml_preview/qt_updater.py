@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 
 REPO = "yungspiderq/dbd-randomizer"
 BASE = f"https://api.github.com/repos/{REPO}/releases"
-CURRENT_TAG = "v2.28.0-qt-beta.22"
+CURRENT_TAG = "v3.0.0-qt-rc.1"
 ASSET = "DBDRandomizerQtBeta.zip"
 APP_EXE = "DBDRandomizerQtBeta.exe"
 PACKAGE_ROOT = "DBDRandomizerQtBeta"
@@ -49,8 +49,20 @@ def _get(url, timeout=30):
 
 
 def _key(tag):
-    match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)-qt-beta\.(\d+)", str(tag))
-    return tuple(map(int, match.groups())) if match else None
+    """Order old beta, new Qt RC and stable tags without accepting unknown channels.
+
+    Numeric components are always compared as numbers:
+    beta.22 < rc.1 < final for the same major/minor/patch.
+    The stable tag is vMAJOR.MINOR.PATCH (without an extra Qt suffix).
+    """
+    match = re.fullmatch(
+        r"v(\d+)\.(\d+)\.(\d+)(?:-qt-(beta|rc)\.(\d+))?", str(tag)
+    )
+    if not match:
+        return None
+    major, minor, patch, channel, sequence = match.groups()
+    rank = {"beta": 0, "rc": 1, None: 2}[channel]
+    return (int(major), int(minor), int(patch), rank, int(sequence or 0))
 
 
 def check():
