@@ -51,8 +51,8 @@ class UpdaterTests(unittest.TestCase):
         self.assertIsNone(u._key("v999.0.0-malicious"))
         self.assertEqual(u.ASSET, "DBDRandomizerQtBeta.zip")
 
-    def test_rc1_version_does_not_offer_itself(self):
-        self.assertEqual(u.CURRENT_TAG, "v3.0.0-qt-rc.1")
+    def test_rc2_version_does_not_offer_itself(self):
+        self.assertEqual(u.CURRENT_TAG, "v3.0.0-qt-rc.2")
         def release(tag):
             return {"draft": False, "tag_name": tag,
                     "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
@@ -65,11 +65,11 @@ class UpdaterTests(unittest.TestCase):
                          "/releases/download/" + tag + "/" + u.ASSET + ".sha256"},
                     ]}
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.22")]).encode())):
+                release(u.CURRENT_TAG), release("v3.0.0-qt-rc.1")]).encode())):
             self.assertIsNone(u.check())
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release("v3.0.0-qt-rc.2"), release(u.CURRENT_TAG)]).encode())):
-            self.assertEqual(u.check()["tag"], "v3.0.0-qt-rc.2")
+                release("v3.0.0-qt-rc.3"), release(u.CURRENT_TAG)]).encode())):
+            self.assertEqual(u.check()["tag"], "v3.0.0-qt-rc.3")
 
     def test_incomplete_release_without_checksum_is_not_offered(self):
         def release(tag, checksum):
@@ -84,8 +84,8 @@ class UpdaterTests(unittest.TestCase):
                                "/releases/download/" + tag + "/" + u.ASSET + ".sha256"})
             return {"draft": False, "tag_name": tag, "assets": assets,
                     "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag}
-        invalid = release("v3.0.0-qt-rc.3", False)
-        complete = release("v3.0.0-qt-rc.2", True)
+        invalid = release("v3.0.0-qt-rc.4", False)
+        complete = release("v3.0.0-qt-rc.3", True)
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([invalid, complete]).encode())):
             self.assertEqual(u.check()["tag"], complete["tag_name"])
@@ -296,7 +296,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_newer_release_requires_portable_asset(self):
         base = {
-            "draft": False, "tag_name": "v3.0.0-qt-rc.2",
+            "draft": False, "tag_name": "v3.0.0-qt-rc.3",
             "name": "New Version",
             "html_url": "https://github.com/" + u.REPO + "/releases/tag/new",
             "assets": [

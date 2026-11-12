@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt RC 1"
+    title: "DBD Ultimate Search Randomizer | Qt RC 2"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -344,7 +344,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • RC 1"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • RC 2"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -700,6 +700,14 @@ ApplicationWindow {
                                         }
                                     }
                                     Text {
+                                        visible: !!backend.detail.challengeKiller
+                                        text: "ДЛЯ " + backend.detail.challengeKiller.toUpperCase()
+                                              + " · СИЛА: " + backend.detail.challengePower
+                                        width: parent.width
+                                        color: "#e9aa80"; font.pixelSize: 11
+                                        font.bold: true; wrapMode: Text.Wrap
+                                    }
+                                    Text {
                                         text: backend.detail.challenge
                                         width: parent.width
                                         color: "#f6ebee"
@@ -737,7 +745,7 @@ ApplicationWindow {
                                     UiButton {
                                         width: Math.min(230, parent.width)
                                         height: 34
-                                        label: "ДРУГОЙ ЧЕЛЛЕНДЖ + БИЛД"
+                                        label: backend.advanced.challengeType === "power" && backend.detail.challengeKind === "power" ? "ДРУГОЕ ИСПЫТАНИЕ" : "ДРУГОЙ ЧЕЛЛЕНДЖ + БИЛД"
                                         onClicked: backend.rerollChallenge()
                                     }
                                 }
@@ -2681,6 +2689,29 @@ ApplicationWindow {
                         UiField { width: parent.width; text: backend.advanced.resultIndex; onEditingFinished: backend.setAdvanced("resultIndex", text) }
                         Text { text: "Клавиша аварийного стопа"; color: win.muted; font.pixelSize: 11 }
                         UiField { width: parent.width; text: backend.advanced.abortKey; onEditingFinished: backend.setAdvanced("abortKey", text) }
+                        Text { text: "Тип челленджей"; color: win.muted; font.pixelSize: 11 }
+                        Row {
+                            width: parent.width
+                            spacing: 5
+                            Repeater {
+                                model: [
+                                    { key: "mixed", text: "Смешанные" },
+                                    { key: "general", text: "Обычные" },
+                                    { key: "power", text: "Способности" }
+                                ]
+                                UiButton {
+                                    width: (parent.width - 10) / 3
+                                    height: 34; label: modelData.text
+                                    primary: backend.advanced.challengeType === modelData.key
+                                    onClicked: backend.setAdvanced("challengeType", modelData.key)
+                                }
+                            }
+                        }
+                        Text {
+                            width: parent.width
+                            text: "Задания на силы привязаны к конкретному маньяку. Для выживших используются обычные челленджи."
+                            color: win.muted; font.pixelSize: 10; wrapMode: Text.Wrap
+                        }
                         Text { text: "Сложность челленджа"; color: win.muted; font.pixelSize: 11 }
                         Row {
                             spacing: 5

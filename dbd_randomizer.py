@@ -586,6 +586,7 @@ OPTION_DEFAULTS = {
     "class_enabled":   False,       # добавлять к билду случайный класс «2 против 8»
     "challenge_enabled": False,     # добавлять к билду случайный челендж
     "challenge_diff":  "any",       # any | easy | medium | hard — пул сложности
+    "challenge_type": "mixed",      # mixed | general | power (power only for killers)
     "hover_verify":    True,        # сверять фактическую позицию курсора с целевой
     "hover_retry":     True,        # повторно наводить, если курсор не долетел до слота
 }
@@ -1073,19 +1074,34 @@ CLASS_SIDES = (("SURVIVOR", "Выживший"), ("KILLER", "Убийца"))
 CHALLENGE_DIFFS = (("any", "any"), ("easy", 1), ("medium", 2), ("hard", 3))
 
 
-def pick_challenge(side, diff="any", avoid=None):
-    """Случайный челендж для стороны и сложности (None, если пул пуст).
+def challenge_candidates(side, diff="any", character=None, kind="general"):
+    """Eligible trials for role, difficulty and the *actual* selected killer.
 
-    `side` — SURVIVOR/KILLER: берутся челенджи этой стороны и общие (ANY).
-    `diff` — "any" или 1/2/3 (лёгкий/средний/тяжёлый).
-    `avoid` — имя или коллекция имён, которые не нужно предлагать (история
-    последних выпадений): при непустом остатке пула они исключаются.
+    'general' (default) stays backward-compatible with old Tk and API callers.
+    'power' requires a killer name to avoid an impossible challenge.
+    'all' includes both kinds, but still filters by actual killer.
     """
-    if side not in ("SURVIVOR", "KILLER"):
-        return None
-    pool = [c for c in (getattr(DATA, "CHALLENGES", []) or [])
-            if c.get("side") in (side, "ANY")
-            and (diff == "any" or c.get("diff") == diff)]
+    if side not in ("SURVIVOR", "KILLER") or kind not in ("general", "power", "all"):
+        return []
+    pool = []
+    for challenge in (getattr(DATA, "CHALLENGES", []) or []):
+        if challenge.get("side") not in (side, "ANY"):
+            continue
+        if diff != "any" and challenge.get("diff") != diff:
+            continue
+        target = challenge.get("killer")
+        if target:
+            if side != "KILLER" or target != character or kind == "general":
+                continue
+        elif kind == "power":
+            continue
+        pool.append(challenge)
+    return pool
+
+
+def pick_challenge(side, diff="any", avoid=None, character=None, kind="general"):
+    """Random valid challenge, excluding recent names when alternatives exist."""
+    pool = challenge_candidates(side, diff, character, kind)
     if avoid:
         bad = {avoid} if isinstance(avoid, str) else set(avoid)
         fresh = [c for c in pool if c.get("ru") not in bad]
@@ -1103,18 +1119,13 @@ def challenge_text(c):
     return f"{name} ({diff})" if diff else name
 
 
-def reroll_challenge(side, diff="any", avoid=None):
-    """Челендж, отличный от предыдущего (если в пуле больше одного)."""
-    if side not in ("SURVIVOR", "KILLER"):
-        return None
-    pool = [c for c in (getattr(DATA, "CHALLENGES", []) or [])
-            if c.get("side") in (side, "ANY")
-            and (diff == "any" or c.get("diff") == diff)
-            and (avoid is None or c.get("ru") not in
-                 ({avoid} if isinstance(avoid, str) else set(avoid)))]
-    if not pool:
-        return pick_challenge(side, diff)
-    return random.choice(pool)
+def reroll_challenge(side, diff="any", avoid=None, character=None, kind="general"):
+    """Try another eligible trial; never fall back to a different killer."""
+    pool = challenge_candidates(side, diff, character, kind)
+    if avoid:
+        bad = {avoid} if isinstance(avoid, str) else set(avoid)
+        pool = [c for c in pool if c.get("ru") not in bad]
+    return random.choice(pool) if pool else None
 
 
 def pick_class(side):

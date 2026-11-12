@@ -444,6 +444,7 @@ class QtBridge(QObject):
             "resultIndex": str(self._option("result_index") or 1),
             "abortKey": str(self._option("abort_key") or "f9"),
             "challengeDiff": str(self._option("challenge_diff") or "any"),
+            "challengeType": str(self._option("challenge_type") or "mixed"),
         }
 
     @Property("QVariantList", notify=perksChanged)
@@ -638,6 +639,9 @@ class QtBridge(QObject):
                 "challengeText": tidy(challenge_data.get("text")),
                 "challengeWhy": tidy(challenge_data.get("why")),
                 "challengeDifficulty": tidy(difficulty),
+                "challengeKiller": tidy(challenge_data.get("killer")),
+                "challengePower": tidy(challenge_data.get("power")),
+                "challengeKind": tidy(challenge_data.get("kind") or "general"),
                 "challengeRestrictions": restrictions,
                 "class": tidy(cl.get("ru")) if isinstance(cl, dict) else "",
                 "hasBuild": bool(b)}
@@ -860,6 +864,10 @@ class QtBridge(QObject):
             if value not in ("any", "easy", "medium", "hard"):
                 return
             self.cfg["options"]["challenge_diff"] = value
+        elif name == "challengeType":
+            if value not in ("mixed", "general", "power"):
+                return
+            self.cfg["options"]["challenge_type"] = value
         elif name == "abortKey":
             if not re.fullmatch(r"f(?:[1-9]|1[0-2])", value.lower()):
                 self._notify("Выберите безопасную клавишу F1–F12.")
@@ -896,11 +904,18 @@ class QtBridge(QObject):
             if not names:
                 raise ValueError("Отметьте хотя бы одного персонажа этой стороны.")
             ch = preset_challenge
-            if ch is None and self._option("challenge_enabled"):
-                hist = self.cfg.get("challenge_history", [])
-                ch = core.pick_challenge(self._role, self.challenge_diff_value(), avoid=hist)
-                if ch:
-                    self.cfg["challenge_history"] = [ch["ru"]] + [x for x in hist if x != ch["ru"]][:11]
+            hist = list(self.cfg.get("challenge_history") or [])
+            trial_mode = self._option("challenge_type") or "mixed"
+            power_trial = (ch is None and bool(self._option("challenge_enabled"))
+                           and self._role == "KILLER"
+                           and (trial_mode == "power"
+                                or (trial_mode == "mixed" and random.random() < 0.5)))
+            if ch is None and self._option("challenge_enabled") and not power_trial:
+                ch = core.pick_challenge(self._role, self.challenge_diff_value(),
+                                         avoid=hist, kind="general")
+            # Generic challenges may constrain loadouts; power trials are
+            # assigned only AFTER the real killer is selected (including the
+            # adaptive rotation mode) and never modify equip slots.
             fx = core.challenge_fx(ch, self._role, self.cfg) if ch else {}
             kw = dict(perk_mode=self._mode, respect_owned=bool(self._option("respect_owned")),
                       addons_enabled=bool(self._option("addons_enabled")),
@@ -912,8 +927,18 @@ class QtBridge(QObject):
             else:
                 func = core.make_killer_build if self._role == "KILLER" else core.make_survivor_build
                 self.build = func(self.db, names, **kw)
+            if power_trial:
+                ch = core.pick_challenge(
+                    self._role, self.challenge_diff_value(), avoid=hist,
+                    character=self.build["char"], kind="power")
             if ch:
+                target = ch.get("killer")
+                if target and target != self.build["char"]:
+                    raise ValueError("Челлендж способности не подходит выбранному маньяку.")
                 self.build["challenge"] = ch
+                self.cfg["challenge_history"] = (
+                    [ch["ru"]] + [x for x in hist if x != ch["ru"]]
+                )[:12]
             if self._option("class_enabled"):
                 self.build["class"] = core.pick_class(self._role)
             self._locks, dropped_pins = reconcile_pins(
@@ -1001,10 +1026,39 @@ class QtBridge(QObject):
     def rerollChallenge(self):
         if not self.build:
             return
-        ch = core.reroll_challenge(self.build["side"], self.challenge_diff_value(),
-                                   avoid={(self.build.get("challenge") or {}).get("ru", "")})
+        current = (self.build.get("challenge") or {})
+        mode = self._option("challenge_type") or "mixed"
+        side = self.build["side"]
+        char = self.build["char"]
+        diff = self.challenge_diff_value()
+        if side == "KILLER" and mode in ("power", "mixed"):
+            ch = core.reroll_challenge(
+                side, diff, avoid={current.get("ru", "")},
+                character=char, kind="power" if mode == "power" else "all")
+            if ch and ch.get("kind") == "power":
+                # Changing just an ability trial must not roll a different
+                # killer or overwrite loadout, locks, or adaptive rotation.
+                self.build["challenge"] = ch
+                self.cfg["challenge_history"] = (
+                    [ch["ru"]] + [name for name in self.cfg.get("challenge_history", [])
+                                  if name != ch["ru"]]
+                )[:12]
+                self._sync()
+                self._save()
+                self._notify("Испытание способности: " + ch["ru"])
+                return
+            if ch:
+                self._generate(preset_challenge=ch)
+                return
+            if mode == "power":
+                self._notify("Для этого маньяка и сложности пока нет другого испытания.")
+                return
+        ch = core.reroll_challenge(
+            side, diff, avoid={current.get("ru", "")}, kind="general")
         if ch:
             self._generate(preset_challenge=ch)
+        else:
+            self._notify("Других испытаний выбранной сложности пока нет.")
 
     @Slot()
     def copyBuild(self):
