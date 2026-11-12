@@ -56,10 +56,8 @@ jobs:
             --strict
           python -m unittest tools.test_catalog_audit -v
 
-      - name: Run existing database regression checks
-        run: |
-          python -m unittest smoke_test.TestConfig smoke_test.TestGeneration -q
-
+      # Legacy GUI tests run in the existing Windows Qt CI, which already
+      # installs Windows input dependencies. Ubuntu checks only data and names.
       - name: Upload verified audit and candidate databases
         uses: actions/upload-artifact@v4
         with:
