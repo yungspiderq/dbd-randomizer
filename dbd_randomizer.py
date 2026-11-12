@@ -335,10 +335,12 @@ class _Input:
             pass
         return False
 
-    def _settle_on(self, x, y, tries=3, tol=2, delay=0.01):
+    def _settle_on(self, x, y, tries=3, tol=2, delay=0.01, guard=None):
         """Доводит курсор до (x, y), сверяясь с его фактическим положением."""
         pdi = self.pydirectinput
         for _ in range(max(1, tries)):
+            if guard:
+                guard()
             try:
                 cx, cy = self.position()
             except Exception:
@@ -357,13 +359,15 @@ class _Input:
             return False
 
     def move(self, x, y, steps=6, step_delay=0.006, wiggle=2, settle=0.12,
-             verify=True):
+             verify=True, guard=None):
         """Наводит курсор на (x, y) так, чтобы игра это наведение увидела.
 
         Возвращает True, если курсор встал в точку (или проверка недоступна).
         """
         if not self.available:
             raise InputUnavailable(self.reason)
+        if guard:
+            guard()
         x, y = int(x), int(y)
         pdi = self.pydirectinput
         steps = max(1, int(steps))
@@ -373,44 +377,59 @@ class _Input:
         except Exception:
             cx, cy = x, y
         if steps <= 1 or not hasattr(pdi, "moveTo"):
+            if guard:
+                guard()
             if hasattr(pdi, "moveTo"):
                 pdi.moveTo(x, y)
             time.sleep(step_delay)
         else:
             for i in range(1, steps + 1):
+                if guard:
+                    guard()
                 t = i / steps
                 pdi.moveTo(int(cx + (x - cx) * t), int(cy + (y - cy) * t))
                 time.sleep(step_delay)
         landed = True
         if verify:
-            landed = self._settle_on(x, y)
+            landed = self._settle_on(x, y, guard=guard)
         # микро-сдвиг: два коротких движения рядом с целью -> игра точно получит
         # событие «курсор здесь» и подсветит слот до клика
         wiggle = int(wiggle or 0)
         if wiggle > 0 and hasattr(pdi, "moveTo"):
             for dx, dy in ((wiggle, 0), (-wiggle, 0), (0, 0)):
+                if guard:
+                    guard()
                 pdi.moveTo(x + dx, y + dy)
                 time.sleep(max(step_delay, 0.008))
             if verify:
-                landed = self._settle_on(x, y) and landed
+                landed = self._settle_on(x, y, guard=guard) and landed
         if settle:
             time.sleep(max(0.0, float(settle)))
+        if guard:
+            guard()
         return landed
 
     def click(self, x, y, hold=0.06, steps=6, step_delay=0.006, wiggle=2,
-              settle=0.12, verify=True):
+              settle=0.12, verify=True, guard=None):
         """Клик с честным наведением. Возвращает True, если курсор был в точке."""
         if not self.available:
             raise InputUnavailable(self.reason)
         pdi = self.pydirectinput
         landed = self.move(x, y, steps=steps, step_delay=step_delay, wiggle=wiggle,
-                           settle=settle, verify=verify)
+                           settle=settle, verify=verify, guard=guard)
         if not landed:
             # Never send a click to a position the cursor failed to reach.
             return False
+        if guard:
+            guard()
         pdi.mouseDown()
-        time.sleep(max(0.02, hold))
-        pdi.mouseUp()
+        try:
+            time.sleep(max(0.02, hold))
+            if guard:
+                guard()
+        finally:
+            # Always release the button, including after F9 / focus loss.
+            pdi.mouseUp()
         return landed
 
     # -- безопасная привязка к выбранному окну без поиска игры ---------------
@@ -453,22 +472,33 @@ class _Input:
             time.sleep(hold)
             pdi.keyUp(name)
 
-    def hotkey(self, *keys, hold=0.02):
+    def hotkey(self, *keys, hold=0.02, guard=None):
         if not self.available:
             raise InputUnavailable(self.reason)
         pdi = self.pydirectinput
-        for k in keys:
-            pdi.keyDown(k)
+        pressed = []
+        try:
+            for k in keys:
+                if guard:
+                    guard()
+                pdi.keyDown(k)
+                pressed.append(k)
+                time.sleep(hold)
+            if guard:
+                guard()
             time.sleep(hold)
-        time.sleep(hold)
-        for k in reversed(keys):
-            pdi.keyUp(k)
-            time.sleep(hold)
+        finally:
+            # Do not leave Ctrl/Shift held if the target changes mid-shortcut.
+            for k in reversed(pressed):
+                pdi.keyUp(k)
+                time.sleep(hold)
 
-    def paste(self, text, verify=True, retries=6, restore=False):
+    def paste(self, text, verify=True, retries=6, restore=False, guard=None):
         """Копирует текст в буфер и вставляет Ctrl+V. Возвращает True при успехе."""
         if not self.available:
             raise InputUnavailable(self.reason)
+        if guard:
+            guard()
         old = None
         if restore:
             try:
@@ -493,7 +523,7 @@ class _Input:
             except Exception:
                 ok = False
         if ok:
-            self.hotkey("ctrl", "v")
+            self.hotkey("ctrl", "v", guard=guard)
         if restore and ok:
             # даём игре забрать текст из буфера, прежде чем вернуть прежнее содержимое
             time.sleep(0.12)

@@ -59,6 +59,14 @@ class WindowsInstallTests(unittest.TestCase):
         self.assertFalse(self.stage_parent.exists())
         self.assertIn("SUCCESS", (self.target / "dbd_update_progress.log").read_text(encoding="utf-8-sig"))
 
+    def test_generated_helper_is_removed_after_success(self):
+        generated = self.parent / ".dbd_qt_install_testonly.ps1"
+        generated.write_text(u.UPGRADE_SCRIPT, encoding="utf-8-sig")
+        self.script = generated
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertFalse(generated.exists())
+
     def test_installer_refuses_old_backup_without_destroying_files(self):
         (self.target / ".dbd_qt_previous.exe").write_bytes(b"PRECIOUS_BACKUP")
         result = self.invoke()
