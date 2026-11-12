@@ -93,6 +93,17 @@ def check():
                         and 1_000_000 < a["size"] <= MAX_DOWNLOAD), None)
         if not archive:
             continue
+        # Never advertise an incomplete upload that cannot pass stage()'s
+        # mandatory SHA-256 verification. Without this gate, the UI shows
+        # "Update available" but installation immediately fails.
+        checksum = next(
+            (a.get("browser_download_url") for a in assets
+             if isinstance(a, dict) and a.get("name") == ASSET + ".sha256"
+             and isinstance(a.get("browser_download_url"), str)), ""
+        )
+        digest = str(archive.get("digest") or "")
+        if not (re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest) or checksum):
+            continue
         if newest is None or version > _key(newest["tag_name"]):
             newest = release
     if newest is None:
