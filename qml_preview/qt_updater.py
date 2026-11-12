@@ -325,9 +325,33 @@ try {
     Move-WithRetry $sourceExe $exe
     $newExeMoved = $true
 
+    # Optional shortcut tools never affect the transactional EXE/runtime swap.
+    # Preserve them in the installed portable folder for a manually repaired
+    # desktop shortcut after extracting RC1 in a fresh directory.
+    foreach ($helper in @("Repair DBD Randomizer Shortcut.ps1", "Update DBD Randomizer Shortcut.cmd")) {
+        $from = Join-Path $StagedDir $helper
+        if (Test-Path -LiteralPath $from -PathType Leaf) {
+            try {
+                Copy-Item -LiteralPath $from -Destination (Join-Path $TargetDir $helper) -Force -ErrorAction Stop
+            } catch {
+                Write-Progress ("Shortcut helper copy failed: " + $_.Exception.Message)
+            }
+        }
+    }
     $phase = "launching updated application"
     Write-Progress $phase
     if (-not $SkipLaunch) {
+        # An in-place update may retain an old shortcut targeting pythonw or
+        # a removed Tk script. Repair it after EXE validation, without failing
+        # the program installation if Windows denies shortcut access.
+        $repair = Join-Path $TargetDir "Repair DBD Randomizer Shortcut.ps1"
+        if (Test-Path -LiteralPath $repair -PathType Leaf) {
+            try {
+                & $repair -InstallDir $TargetDir | Out-Null
+            } catch {
+                Write-Progress ("Shortcut repair failed: " + $_.Exception.Message)
+            }
+        }
         Start-Process -FilePath $exe -WorkingDirectory $TargetDir -ErrorAction Stop
     }
     $success = $true
