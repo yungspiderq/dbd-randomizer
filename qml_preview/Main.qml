@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt Beta 21"
+    title: "DBD Ultimate Search Randomizer | Qt Beta 22"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -344,7 +344,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 21"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • BETA 22"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -1619,11 +1619,21 @@ ApplicationWindow {
                                 spacing: 9
                                 UiButton {
                                     width: (parent.width - 9) / 2; label: "ВЫЖИВАЮЩИЕ"; primary: skinPage.sideKey === "S"
-                                    onClicked: { skinPage.sideKey = "S"; skinPage.selectedSkinId = -1 }
+                                    onClicked: {
+                                        skinPage.sideKey = "S"; skinPage.selectedSkinId = -1
+                                        var available = backend.skinCharacters.filter(function(c) { return c.side === "S" })
+                                        if (available.length && backend.skinCharacter !== available[0].name)
+                                            backend.setSkinCharacter(available[0].name)
+                                    }
                                 }
                                 UiButton {
                                     width: (parent.width - 9) / 2; label: "МАНЬЯКИ"; primary: skinPage.sideKey === "K"
-                                    onClicked: { skinPage.sideKey = "K"; skinPage.selectedSkinId = -1 }
+                                    onClicked: {
+                                        skinPage.sideKey = "K"; skinPage.selectedSkinId = -1
+                                        var available = backend.skinCharacters.filter(function(c) { return c.side === "K" })
+                                        if (available.length && backend.skinCharacter !== available[0].name)
+                                            backend.setSkinCharacter(available[0].name)
+                                    }
                                 }
                             }
                             Row {
@@ -1659,7 +1669,7 @@ ApplicationWindow {
                                                 width: skinCharList.width
                                                 height: 57
                                                 title: modelData.name
-                                                subtitle: modelData.count + " наборов"
+                                                subtitle: modelData.translated + " из " + modelData.count + " RU-названий"
                                                 artKey: modelData.name
                                                 artLabel: modelData.side
                                                 selected: backend.skinCharacter === modelData.name
@@ -1685,7 +1695,7 @@ ApplicationWindow {
                                         spacing: 10
                                         Text { text: backend.skinCharacter || "Выберите персонажа"; color: "#eef2f7"; font.pixelSize: 15; font.bold: true }
                                         Text {
-                                            text: backend.skinStats.owned + " из " + backend.skinStats.total + " наборов выбрано"
+                                            text: backend.skinStats.owned + " из " + backend.skinStats.total + " выбрано · RU: " + backend.skinStats.translated + " · без RU: " + backend.skinStats.missingRussian
                                             color: win.muted; font.pixelSize: 11
                                         }
                                         Rectangle {
@@ -1715,7 +1725,11 @@ ApplicationWindow {
                                                         text: skinPage.previewSkin ? (skinPage.previewSkin.rarity + " · " + skinPage.previewSkin.type) : ""
                                                         color: "#c69b96"; width: parent.width; font.pixelSize: 10; wrapMode: Text.WordWrap
                                                     }
-                                                    Text { text: skinPage.previewSkin ? skinPage.previewSkin.date : ""; color: win.muted; font.pixelSize: 10 }
+                                                    Text {
+                                                        text: skinPage.previewSkin ? skinPage.previewSkin.russianSource : ""
+                                                        color: "#aeb9c9"; font.pixelSize: 9
+                                                        width: parent.width; elide: Text.ElideRight
+                                                    }
                                                     Text {
                                                         text: skinPage.previewSkin && skinPage.previewSkin.owned ? "ЕСТЬ В КОЛЛЕКЦИИ" : "НЕ В КОЛЛЕКЦИИ"
                                                         color: skinPage.previewSkin && skinPage.previewSkin.owned ? "#dfb3a2" : "#8d9bad"
@@ -1743,13 +1757,32 @@ ApplicationWindow {
                                             placeholderText: "Поиск по RU/EN названию, редкости, дате"
                                             onTextChanged: skinSearchDebounce.restart()
                                         }
+                                        Row {
+                                            width: parent.width
+                                            spacing: 5
+                                            UiButton {
+                                                width: (parent.width - 10) / 3; height: 30
+                                                label: "ВСЕ НАЗВАНИЯ"; primary: backend.skinNameFilter === "all"
+                                                onClicked: { skinPage.selectedSkinId = -1; backend.setSkinNameFilter("all") }
+                                            }
+                                            UiButton {
+                                                width: (parent.width - 10) / 3; height: 30
+                                                label: "С RU"; primary: backend.skinNameFilter === "ru"
+                                                onClicked: { skinPage.selectedSkinId = -1; backend.setSkinNameFilter("ru") }
+                                            }
+                                            UiButton {
+                                                width: (parent.width - 10) / 3; height: 30
+                                                label: "БЕЗ RU"; primary: backend.skinNameFilter === "missing"
+                                                onClicked: { skinPage.selectedSkinId = -1; backend.setSkinNameFilter("missing") }
+                                            }
+                                        }
                                         ListView {
                                             id: skinsList
                                         reuseItems: true
                                         cacheBuffer: 96
                                             objectName: "outfitsCatalog"
                                             width: parent.width
-                                            height: skinContent.height - 330
+                                            height: skinContent.height - 368
                                             clip: true
                                             spacing: 7
                                             model: backend.skins
@@ -1776,10 +1809,14 @@ ApplicationWindow {
                                                     placeholder: "SKIN"
                                                 }
                                                 Column {
-                                                    x: 70; y: 10
+                                                    x: 70; y: 7
                                                     width: parent.width - 107
-                                                    spacing: 5
+                                                    spacing: 3
                                                     Text { text: modelData.name; width: parent.width; elide: Text.ElideRight; color: "#f1f3f9"; font.pixelSize: 11; font.bold: true }
+                                                    Text {
+                                                        text: modelData.hasRussian ? "EN: " + modelData.english : "Нет русского названия в базе"
+                                                        width: parent.width; elide: Text.ElideRight; color: modelData.hasRussian ? "#97aac2" : "#d7b7a2"; font.pixelSize: 9
+                                                    }
                                                     Text { text: modelData.rarity + " · " + modelData.type; width: parent.width; elide: Text.ElideRight; color: "#9aaabe"; font.pixelSize: 10 }
                                                     Text { text: modelData.date; color: "#7d8b9e"; font.pixelSize: 9 }
                                                 }

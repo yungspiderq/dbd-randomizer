@@ -34,6 +34,30 @@ class CatalogAuditTests(unittest.TestCase):
             report = catalog_audit.audit(baseline)
         self.assertTrue(any("verified RU name lost" in item for item in report["errors"]))
 
+    def test_baseline_detects_same_character_skin_swap(self):
+        baseline = catalog_audit.baseline_snapshot()
+        ident = next(k for k, row in baseline["skins"].items()
+                     if row.get("name") and row.get("file"))
+        fake = dict(catalog_audit.SKINS.SKINS_BY_ID)
+        fake[int(ident)] = {**fake[int(ident)],
+                            "name": "Unrelated cosmetic",
+                            "file": "Unrelated_Outfit_999.png"}
+        with patch.object(catalog_audit.SKINS, "SKINS_BY_ID", fake):
+            report = catalog_audit.audit(baseline)
+        self.assertTrue(any("may have changed identity" in error
+                            for error in report["errors"]))
+
+    def test_baseline_allows_translation_update_without_identity_change(self):
+        baseline = catalog_audit.baseline_snapshot()
+        ident = next(k for k, row in baseline["skins"].items()
+                     if row.get("name") and row.get("file"))
+        fake = dict(catalog_audit.SKINS.SKINS_BY_ID)
+        fake[int(ident)] = {**fake[int(ident)]}
+        fake[int(ident)]["name_ru"] = "Новое проверенное имя"
+        with patch.object(catalog_audit.SKINS, "SKINS_BY_ID", fake):
+            report = catalog_audit.audit(baseline)
+        self.assertFalse(any(str(ident) in error for error in report["errors"]))
+
     def test_baseline_detects_character_id_reassignment(self):
         baseline = catalog_audit.baseline_snapshot()
         ident = next(iter(baseline["skins"]))

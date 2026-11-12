@@ -685,6 +685,52 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual(self.bridge.skinStats["owned"], stats["total"])
         self.assertIn(self.bridge.randomSkinId(), [x["id"] for x in self.bridge.skins])
 
+    def test_skin_localization_coverage_and_filters_preserve_ownership(self):
+        if not core.SKINS:
+            self.skipTest("No skins database")
+        candidate = next((x for x in self.bridge.skinCharacters
+                          if x["translated"] > 0 and x["missingRussian"] > 0), None)
+        self.assertIsNotNone(candidate)
+        self.bridge.setSkinCharacter(candidate["name"])
+        stats = self.bridge.skinStats
+        self.assertEqual(stats["translated"] + stats["missingRussian"], stats["total"])
+        self.assertEqual(stats["owned"], stats["total"])
+        self.assertEqual(self.bridge.skinNameFilter, "all")
+        self.assertEqual(len(self.bridge.skins), stats["total"])
+        self.bridge.setSkinNameFilter("ru")
+        translated = self.bridge.skins
+        self.assertEqual(len(translated), stats["translated"])
+        self.assertTrue(all(row["hasRussian"] and row["russian"]
+                            and row["russianSource"] for row in translated))
+        self.assertTrue(all(row["english"] for row in translated))
+        self.bridge.setSkinNameFilter("missing")
+        missing = self.bridge.skins
+        self.assertEqual(len(missing), stats["missingRussian"])
+        self.assertTrue(all(not row["hasRussian"] and not row["russian"]
+                            and row["english"] == row["name"] for row in missing))
+        self.bridge.filterSkins(missing[0]["english"])
+        self.assertIn(missing[0]["id"], [row["id"] for row in self.bridge.skins])
+        self.bridge.filterSkins("")
+        self.bridge.setSkinNameFilter("not-a-filter")
+        self.assertEqual(self.bridge.skinNameFilter, "missing")
+        self.assertEqual(self.bridge.skinStats["owned"], stats["total"])
+        self.bridge.setSkinNameFilter("all")
+        self.assertEqual(len(self.bridge.skins), stats["total"])
+        # Filtration is visual only; random draw still uses ownership selections.
+        self.assertIn(self.bridge.randomSkinId(),
+                      [row["id"] for row in self.bridge.skins])
+
+    def test_skin_character_coverage_totals_match_global_catalog(self):
+        if not core.SKINS:
+            self.skipTest("No skins database")
+        rows = self.bridge.skinCharacters
+        self.assertTrue(rows)
+        self.assertTrue(all(x["translated"] + x["missingRussian"] == x["count"]
+                            for x in rows))
+        self.assertEqual(sum(x["count"] for x in rows), len(core.SKINS.SKINS_BY_ID))
+        self.assertEqual(sum(x["translated"] for x in rows),
+                         sum(bool(v.get("name_ru")) for v in core.SKINS.SKINS_BY_ID.values()))
+
     def test_addons_have_real_names_and_two_labeled_slots(self):
         self.bridge.setRole("killer")
         self.bridge.generate()
