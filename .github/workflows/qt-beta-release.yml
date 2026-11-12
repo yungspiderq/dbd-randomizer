@@ -1,15 +1,15 @@
-name: Qt beta - verify, build and publish prerelease
+name: Qt RC1 - verify and build release candidate
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "feature/qt-beta22-skin-localization-review"]
-    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_skins.py", "tools/skin_names_ru.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_beta22_candidate_e2e.py", ".github/workflows/qt-beta-release.yml"]
+    branches: ["preview/qml-redesign-2026-11-10", "release/qt-rc1-qualification"]
+    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_skins.py", "tools/skin_names_ru.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_rc1_candidate_e2e.py", "docs/RC1_TEST_PLAN_RU.md", ".github/workflows/qt-beta-release.yml"]
   pull_request:
     branches: ["preview/qml-redesign-2026-11-10"]
   workflow_dispatch:
     inputs:
       publish_prerelease:
-        description: "Publish Beta 22 after explicit approval and successful Windows CI"
+        description: "Publish RC1 as a GitHub Pre-release ONLY after explicit approval"
         type: boolean
         default: false
         required: true
@@ -113,36 +113,36 @@ jobs:
           "$hash  DBDRandomizerQtBeta.zip" | Set-Content -Path "dist/DBDRandomizerQtBeta.zip.sha256" -Encoding ascii
           Write-Host "Portable ZIP size: $([math]::Round((Get-Item 'dist/DBDRandomizerQtBeta.zip').Length / 1MB, 2)) MiB"
 
-      - name: Verify upgrade from published Beta21 to Beta22 candidate ZIP
+      - name: Verify upgrade from published Beta22 to RC1 candidate ZIP
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           QT_QPA_PLATFORM: offscreen
         run: |
-          $old = Join-Path $env:RUNNER_TEMP "qt-beta21-original"
+          $old = Join-Path $env:RUNNER_TEMP "qt-beta22-original"
           New-Item -ItemType Directory -Force -Path $old | Out-Null
-          gh release download v2.28.0-qt-beta.21 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
-          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published Beta21 release" }
-          python tests/qt_beta22_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
-          if ($LASTEXITCODE -ne 0) { throw "Beta21 to Beta22 candidate updater E2E failed" }
+          gh release download v2.28.0-qt-beta.22 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published Beta22 release" }
+          python tests/qt_rc1_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
+          if ($LASTEXITCODE -ne 0) { throw "Beta22 to RC1 candidate updater E2E failed" }
 
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DBDRandomizerQtBeta22-Portable-Windows
+          name: DBDRandomizerQtRC1-Portable-Windows
           path: |
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
 
       - name: Publish or update GitHub prerelease
-        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10' && ((github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish beta22 prerelease]')))
+        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10' && github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.22"
+          $tag = "v3.0.0-qt-rc.1"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 22 — Skin Localization Review" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt RC 1 — Release Candidate for Testing" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }
