@@ -2134,6 +2134,11 @@ CHALLENGES = [
     },
 ]
 
+# Personal power trials are kept separate from the older general challenges.
+# Each record is tied to a *real* killer in this exact catalog.
+from dbd_killer_challenges import build_killer_power_challenges
+CHALLENGES.extend(build_killer_power_challenges(KILLERS))
+
 CHALLENGE_DIFFS = {1: "лёгкий", 2: "средний", 3: "тяжёлый"}
 CHALLENGE_DIFF_SHORT = {1: "🟢", 2: "🟡", 3: "🔴"}
 # === CHALLENGES END ===
