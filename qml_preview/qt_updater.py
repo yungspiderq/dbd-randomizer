@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 
 REPO = "yungspiderq/dbd-randomizer"
 BASE = f"https://api.github.com/repos/{REPO}/releases"
-CURRENT_TAG = "v2.28.0-qt-beta.22"
+CURRENT_TAG = "v2.28.0-qt-beta.23"
 ASSET = "DBDRandomizerQtBeta.zip"
 APP_EXE = "DBDRandomizerQtBeta.exe"
 PACKAGE_ROOT = "DBDRandomizerQtBeta"
@@ -49,8 +49,21 @@ def _get(url, timeout=30):
 
 
 def _key(tag):
-    match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)-qt-beta\.(\d+)", str(tag))
-    return tuple(map(int, match.groups())) if match else None
+    """Preserve the legacy beta sequence and discover RC/future stable builds.
+
+    Qt beta and RC tags share their portable ZIP layout. Historic v2 Stable
+    tags belong to the old Tk app, and must never be offered to Qt users.
+    """
+    match = re.fullmatch(
+        r"v(\d+)\.(\d+)\.(\d+)(?:-qt-(beta|rc)\.(\d+))?", str(tag)
+    )
+    if not match:
+        return None
+    major, minor, patch, channel, sequence = match.groups()
+    if channel is None and int(major) < 3:
+        return None
+    rank = {"beta": 0, "rc": 1, None: 2}[channel]
+    return (int(major), int(minor), int(patch), rank, int(sequence or 0))
 
 
 def check():
@@ -76,6 +89,16 @@ def check():
                         and isinstance(a.get("size"), int)
                         and 1_000_000 < a["size"] <= MAX_DOWNLOAD), None)
         if not archive:
+            continue
+        # Skip releases with an unfinished upload. The installer enforces
+        # SHA-256, so advertising a ZIP without its checksum is misleading.
+        checksum = next(
+            (a.get("browser_download_url") for a in assets
+             if isinstance(a, dict) and a.get("name") == ASSET + ".sha256"
+             and isinstance(a.get("browser_download_url"), str)), ""
+        )
+        digest = str(archive.get("digest") or "")
+        if not (re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest) or checksum):
             continue
         if newest is None or version > _key(newest["tag_name"]):
             newest = release
