@@ -5,7 +5,7 @@ an actual match. Keys are exact Russian killer names from dbd_data.KILLERS.
 Avoid mechanical prerequisites such as add-ons or particular perks.
 """
 
-# Each entry: two independently selectable trials: (short title, clear rule).
+# Each entry: two distinctive trials; a middle-difficulty practice trial is added in the builder.
 # The first is approachable; the second requires multiple power interactions.
 KILLER_POWER_TRIALS = {
     "Охотник": [
@@ -469,4 +469,21 @@ def build_killer_power_challenges(killers):
                         else "Усложнённое испытание на владение силой."),
                 "text": rule,
             })
+        # Medium trial with a concrete power and two distinct match moments.
+        # Other trials above remain more individual to each killer.
+        rows.append({
+            "ru": "Контроль силы: " + killer,
+            "side": "KILLER",
+            "diff": 2,
+            "kind": "power",
+            "killer": killer,
+            "power": power,
+            "why": "Два осмысленных применения силы лучше одного случайного.",
+            "text": (
+                "В одном матче используй силу «" + power +
+                "» в двух отдельных эпизодах погони или подготовки к ней. "
+                "После каждого применения проверь, помогло ли оно выбрать маршрут "
+                "или обнаружить выжившего."
+            ),
+        })
     return rows
