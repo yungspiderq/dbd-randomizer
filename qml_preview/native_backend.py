@@ -1329,16 +1329,21 @@ class QtBridge(QObject):
                 p.drawText(20,40,"Щёлкните по нужному месту · Esc — отмена")
             def mousePressEvent(self,_):
                 pos=QCursor.pos()
-                controller.editCoord(key,"x",str(pos.x()))
-                controller.editCoord(key,"y",str(pos.y()))
+                try:
+                    x,y=core.INPUT.position()
+                except Exception:
+                    x,y=pos.x(),pos.y()
+                controller.editCoord(key,"x",str(x))
+                controller.editCoord(key,"y",str(y))
                 controller.saveSettings()
                 self.close()
             def keyPressEvent(self,event):
                 if event.key()==Qt.Key_Escape:
                     self.close()
         self._overlay=Overlay()
-        self._overlay.setGeometry(QGuiApplication.primaryScreen().geometry())
-        self._overlay.showFullScreen()
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        self._overlay.setGeometry(screen.geometry())
+        self._overlay.show()
         self._overlay.activateWindow()
 
     @Slot()
@@ -1374,6 +1379,27 @@ class QtBridge(QObject):
             return int(value["x"]),int(value["y"])
         except (KeyError,ValueError,TypeError):
             return None
+
+    def _outside_desktop(self, keys):
+        """Report impossible physical coordinates, supporting multi-monitor layouts."""
+        if sys.platform != "win32":
+            return []
+        try:
+            api = core.ctypes.windll.user32
+            left, top = int(api.GetSystemMetrics(76)), int(api.GetSystemMetrics(77))
+            width, height = int(api.GetSystemMetrics(78)), int(api.GetSystemMetrics(79))
+            if width <= 0 or height <= 0:
+                return []
+            invalid = []
+            for key in dict.fromkeys(keys):
+                point = self._coord(key)
+                if point is not None and not (
+                    left <= point[0] < left + width and top <= point[1] < top + height
+                ):
+                    invalid.append(key)
+            return invalid
+        except Exception:
+            return []
 
     def _ocr_region(self):
         val=self.cfg["coords"].get("ocr_region",{})
@@ -1431,7 +1457,7 @@ class QtBridge(QObject):
         if self._option("dry_run"):
             self._notify("DRY: клик "+label+" "+str(coord))
             return True
-        params=dict(hold=self._timing("hold"),steps=int(self._timing("move_steps")),
+        params=dict(guard=self._assert_input_ready,hold=self._timing("hold"),steps=int(self._timing("move_steps")),
                     step_delay=self._timing("move_step_delay"),settle=self._timing("hover_settle"),
                     wiggle=int(self._timing("wiggle")),verify=bool(self._option("hover_verify")))
         if core.INPUT.click(coord[0],coord[1],**params):
@@ -1449,7 +1475,8 @@ class QtBridge(QObject):
             self._notify("DRY: ввод "+text)
             return True
         return core.INPUT.paste(text,verify=self._option("verify_clipboard"),
-                                restore=self._option("restore_clipboard"))
+                                restore=self._option("restore_clipboard"),
+                                guard=self._assert_input_ready)
 
     def _search_and_select(self,target):
         search=self._coord("search")
@@ -1479,7 +1506,7 @@ class QtBridge(QObject):
                     self._sleep(0.08)
             if not self._option("dry_run"):
                 self._assert_input_ready()
-                core.INPUT.hotkey("ctrl","a")
+                core.INPUT.hotkey("ctrl","a",guard=self._assert_input_ready)
                 self._sleep(0.03)
             if not self._paste(target):
                 continue
@@ -1540,6 +1567,9 @@ class QtBridge(QObject):
             return
         try:
             steps=self._equip_steps()
+            if not steps:
+                self._notify("Экипировка не требуется: нет действий для отправки.")
+                return
             needed=["search","first_result"]+[x[0] for x in steps]
             missing=[x for x in needed if not self._coord(x)]
             if missing:
@@ -1548,6 +1578,12 @@ class QtBridge(QObject):
             if not self._option("dry_run") and not core.INPUT.available:
                 self._notify("Ввод недоступен: "+core.INPUT.reason)
                 return
+            if not self._option("dry_run"):
+                outside = self._outside_desktop(needed)
+                if outside:
+                    self._notify("Координаты вне границ экрана: " + ", ".join(outside) +
+                                 ". Проверьте разрешение и настройте позиции заново.")
+                    return
             self._stop.clear()
             self._running = True
             self.runningChanged.emit()
