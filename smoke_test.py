@@ -290,11 +290,69 @@ class TestGeneration(unittest.TestCase):
                 R.dump_db(fresh)
                 db = R.load_db()
             self.assertNotIn("Палитра", db["killers"]["Художница"]["addons"])
-            self.assertNotIn("«Порядок» — заметки Картера", db["killers"]["Доктор"]["addons"])
+            self.assertIn('"Порядок" - заметки Картера', db["killers"]["Доктор"]["addons"])
+            self.assertEqual(len(db["killers"]["Доктор"]["addons"]), 20)
             self.assertTrue(db.get("_db_dropped_removed"))
             for info in db["killers"].values():
                 offered = set(R._playable_addons(info.get("addons", [])))
                 self.assertFalse(set(D.REMOVED_FROM_GAME) & offered)
+
+
+class TestDoctorAddonPool(unittest.TestCase):
+    """Regression: outdated Doctor data left exactly 2 iridescent add-ons."""
+
+    def test_all_twenty_addons_remain_playable_and_mapped(self):
+        import dbd_data as D
+        import dbd_icons as I
+        from tools.addon_names_ru_en import ADDON_RU_EN
+
+        addons = D.KILLERS["Доктор"]["addons"]
+        self.assertEqual(len(addons), 20)
+        self.assertEqual(len(set(addons)), 20)
+        self.assertEqual(len(R._playable_addons(addons)), 20)
+        self.assertFalse(set(addons) & set(D.REMOVED_FROM_GAME))
+        self.assertTrue(all(a in ADDON_RU_EN["Доктор"] for a in addons))
+        for name in ('"Дисциплина" - заметки Картера',
+                     '"Порядок" - заметки Картера',
+                     '"Спокойствие" - заметки Картера',
+                     '"Усмирение" - заметки Картера'):
+            self.assertIn(name, addons)
+            self.assertIn(name, I.ADDON_ICONS)
+
+    def test_doctor_generation_not_locked_to_two_iridescents(self):
+        doctor = R.db_defaults()
+        seen = set()
+        for _ in range(300):
+            build = R.make_killer_build(
+                doctor, ["Доктор"], addons_enabled=True, skin_enabled=False
+            )
+            self.assertEqual(build["char"], "Доктор")
+            self.assertEqual(len(set(build["addons"])), 2)
+            seen.update(build["addons"])
+        self.assertEqual(seen, set(doctor["killers"]["Доктор"]["addons"]))
+
+    def test_saved_old_db_and_owned_list_migrate(self):
+        import dbd_data as D
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "dbd_database.json")
+            old = R.db_defaults()
+            old["db_revision"] = 2
+            old["killers"]["Доктор"]["addons"] = [
+                "Радужный король", "Радужный ферзь",
+                "«Дисциплина» — заметки Картера",
+            ]
+            old["owned"]["killer_addons"] = [
+                "Радужный король", "«Дисциплина» — заметки Картера",
+            ]
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(old, fh, ensure_ascii=False)
+            with mock.patch.object(R, "DB_FILE", path):
+                migrated = R.load_db()
+            self.assertEqual(migrated["db_revision"], D.DB_REVISION)
+            self.assertEqual(len(migrated["killers"]["Доктор"]["addons"]), 20)
+            self.assertIn('"Дисциплина" - заметки Картера',
+                          migrated["owned"]["killer_addons"])
+            self.assertTrue(os.path.exists(path + ".bak"))
 
 
 class TestAddonRenameMigration(unittest.TestCase):
