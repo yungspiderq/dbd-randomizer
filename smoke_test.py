@@ -312,12 +312,10 @@ class TestDoctorAddonPool(unittest.TestCase):
         self.assertEqual(len(R._playable_addons(addons)), 20)
         self.assertFalse(set(addons) & set(D.REMOVED_FROM_GAME))
         self.assertTrue(all(a in ADDON_RU_EN["Доктор"] for a in addons))
-        for name in ('"Дисциплина" - заметки Картера',
-                     '"Порядок" - заметки Картера',
-                     '"Спокойствие" - заметки Картера',
-                     '"Усмирение" - заметки Картера'):
-            self.assertIn(name, addons)
-            self.assertIn(name, I.ADDON_ICONS)
+        for name in addons:
+            self.assertIn(name, I.ADDON_ICONS, "Нет иконки для " + name)
+            self.assertTrue(I.ADDON_ICONS[name].startswith("IconAddon_"))
+            self.assertTrue(I.ADDON_ICONS[name].endswith(".png"))
 
     def test_doctor_generation_not_locked_to_two_iridescents(self):
         doctor = R.db_defaults()
