@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 
 REPO = "yungspiderq/dbd-randomizer"
 BASE = f"https://api.github.com/repos/{REPO}/releases"
-CURRENT_TAG = "v2.28.0-qt-beta.19"
+CURRENT_TAG = "v2.28.0-qt-beta.20"
 ASSET = "DBDRandomizerQtBeta.zip"
 APP_EXE = "DBDRandomizerQtBeta.exe"
 PACKAGE_ROOT = "DBDRandomizerQtBeta"
