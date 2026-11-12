@@ -160,8 +160,11 @@ def character_names(datatable_wt):
     collect("killers", KILLER_EN_RU, killers)
     collect("survivors", SURVIVOR_EN_RU, survivors)
     if unknown:
-        raise SystemExit("Нет русского имени для персонажей (дополните tools/char_map_ru.py): "
-                         + ", ".join(unknown))
+        # wiki.gg may already contain PTB characters not available on live DBD.
+        # Those characters are intentionally not in our checked Russian live roster.
+        # Never invent their localization or add their cosmetics to live builds.
+        print("В wiki.gg найдены персонажи вне текущей RU-базы (PTB/не выпущены): "
+              + ", ".join(unknown) + ". Их наборы пропущены.")
     # страховка: имя обязано совпадать с тем, что в базе приложения
     bad = [ru for ru in killers.values() if ru not in DATA.KILLERS]
     bad += [ru for ru in survivors.values() if ru not in DATA.SURVIVORS]
