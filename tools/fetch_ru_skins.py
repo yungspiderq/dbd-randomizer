@@ -111,16 +111,32 @@ def cache_path(title):
     return os.path.join(CACHE, safe + ".wiki")
 
 
-def fetch_wikitext(title, pageid):
+def fetch_wikitext(title, pageid, refresh=False):
+    """Refresh a wiki article without destroying a usable offline cached copy."""
     path = cache_path(title)
-    if os.path.exists(path) and os.path.getsize(path) > 0:
+    cached = os.path.isfile(path) and os.path.getsize(path) > 0
+    if cached and not refresh:
         with open(path, encoding="utf-8") as fh:
             return fh.read()
-    d = api(action="parse", pageid=pageid, prop="wikitext")
-    wt = d["parse"]["wikitext"]
+    try:
+        d = api(action="parse", pageid=pageid, prop="wikitext")
+        wt = d["parse"]["wikitext"]
+        if not isinstance(wt, str) or not wt.strip():
+            raise ValueError("Empty wiki article returned")
+    except Exception:
+        if cached:
+            with open(path, encoding="utf-8") as fh:
+                return fh.read()
+        raise
     os.makedirs(CACHE, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(wt)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(wt)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
     time.sleep(PAUSE)
     return wt
 
@@ -292,7 +308,7 @@ def process(path, kind, file_to_ru, piece_to_ru, page_stats, title):
     if kind == "custom":
         outfits, pieces = parse_page(wt), parse_pieces_page(wt)
         for key, (_fn, name) in outfits.items():
-            file_to_ru.setdefault(key, name)
+            file_to_ru[key] = name
         for key, name in pieces.items():
             piece_to_ru.setdefault(key, name)
         page_stats[title] = len(outfits)
@@ -305,8 +321,10 @@ def process(path, kind, file_to_ru, piece_to_ru, page_stats, title):
 
 
 def main(argv):
-    only, limit = None, None
+    only, limit, refresh = None, None, False
     for a in argv:
+        if a == "--refresh":
+            refresh = True
         if a.startswith("--only="):
             only = set(x.strip() for x in a.split("=", 1)[1].split(",") if x.strip())
         elif a.startswith("--pages="):
@@ -324,9 +342,7 @@ def main(argv):
     # что уже лежит в кэше — сеть для этого не нужна
     cached = {t: cache_path(t) for t in wanted
               if os.path.exists(cache_path(t)) and os.path.getsize(cache_path(t)) > 0}
-    todo_local = [(t, None, cached[t], wanted[t]) for t in sorted(cached)]
-
-    rest = [t for t in wanted if t not in cached]
+    rest = list(wanted) if refresh else [t for t in wanted if t not in cached]
     found, offline = {}, False
     if rest:
         try:
@@ -345,6 +361,10 @@ def main(argv):
     todo_remote = [(t, found[t], None, wanted[t]) for t in sorted(found)]
     if limit:
         todo_remote = todo_remote[:limit]
+    # Never discard an existing cached article because a refresh was unavailable.
+    remote_titles = {t for t, _, _, _ in todo_remote}
+    todo_local = [(t, None, cached[t], wanted[t])
+                  for t in sorted(cached) if t not in remote_titles]
     missing = ([] if offline else
                sorted(t for t in wanted if t not in found and t not in cached))
 
@@ -360,7 +380,7 @@ def main(argv):
         try:
             if path is None:
                 path = cache_path(title)
-                fetch_wikitext(title, pageid)
+                fetch_wikitext(title, pageid, refresh=refresh)
             n_out, n_pieces = process(path, kind, file_to_ru, piece_to_ru,
                                       page_stats, title)
         except Exception as exc:
