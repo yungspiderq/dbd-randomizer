@@ -2,14 +2,14 @@ name: Qt beta - verify, build and publish prerelease
 
 on:
   push:
-    branches: ["preview/qml-redesign-2026-11-10", "feature/qt-beta21-ru-catalog-audit"]
-    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_skins.py", "tools/skin_names_ru.py", "tools/catalog_audit.py", "tests/qt_beta21_candidate_e2e.py", ".github/workflows/qt-beta-release.yml"]
+    branches: ["preview/qml-redesign-2026-11-10", "feature/qt-beta22-skin-localization-review"]
+    paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_skins.py", "tools/skin_names_ru.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_beta22_candidate_e2e.py", ".github/workflows/qt-beta-release.yml"]
   pull_request:
     branches: ["preview/qml-redesign-2026-11-10"]
   workflow_dispatch:
     inputs:
       publish_prerelease:
-        description: "Publish Beta 21 after explicit approval and successful Windows CI"
+        description: "Publish Beta 22 after explicit approval and successful Windows CI"
         type: boolean
         default: false
         required: true
@@ -50,6 +50,10 @@ jobs:
           python -c "import dbd_randomizer as d; db=d.db_defaults(); a=d.make_killer_build(db,list(db['killers'])); b=d.make_survivor_build(db,list(db['survivors'])); assert len(a['perks'])==4 and len(b['perks'])==4; assert len(a['addons'])==2 and len(b['addons'])==2; print('Core generation OK')"
       - name: Targeted legacy regression tests
         run: python -m unittest smoke_test.TestConfig smoke_test.TestGeneration smoke_test.TestAutomation -q
+      - name: Verify Russian catalog and persistent cosmetic IDs
+        run: |
+          python tools/catalog_audit.py --strict
+          python -m unittest tools.test_catalog_audit -v
       - name: Native Qt backend regression tests
         env:
           QT_QPA_PLATFORM: offscreen
@@ -109,36 +113,36 @@ jobs:
           "$hash  DBDRandomizerQtBeta.zip" | Set-Content -Path "dist/DBDRandomizerQtBeta.zip.sha256" -Encoding ascii
           Write-Host "Portable ZIP size: $([math]::Round((Get-Item 'dist/DBDRandomizerQtBeta.zip').Length / 1MB, 2)) MiB"
 
-      - name: Verify upgrade from published Beta20 to Beta21 candidate ZIP
+      - name: Verify upgrade from published Beta21 to Beta22 candidate ZIP
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           QT_QPA_PLATFORM: offscreen
         run: |
-          $old = Join-Path $env:RUNNER_TEMP "qt-beta20-original"
+          $old = Join-Path $env:RUNNER_TEMP "qt-beta21-original"
           New-Item -ItemType Directory -Force -Path $old | Out-Null
-          gh release download v2.28.0-qt-beta.20 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
-          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published Beta20 release" }
-          python tests/qt_beta21_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
-          if ($LASTEXITCODE -ne 0) { throw "Beta20 to Beta21 candidate updater E2E failed" }
+          gh release download v2.28.0-qt-beta.21 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published Beta21 release" }
+          python tests/qt_beta22_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
+          if ($LASTEXITCODE -ne 0) { throw "Beta21 to Beta22 candidate updater E2E failed" }
 
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DBDRandomizerQtBeta21-Portable-Windows
+          name: DBDRandomizerQtBeta22-Portable-Windows
           path: |
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
 
       - name: Publish or update GitHub prerelease
-        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10' && ((github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish beta21 prerelease]')))
+        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10' && ((github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish beta22 prerelease]')))
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v2.28.0-qt-beta.21"
+          $tag = "v2.28.0-qt-beta.22"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             gh release upload $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --clobber --repo "${{ github.repository }}"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 21 — Russian Cosmetic Catalog Refresh" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt Beta 22 — Skin Localization Review" --notes-file "qml_preview/RELEASE_NOTES.md" --prerelease
           }
