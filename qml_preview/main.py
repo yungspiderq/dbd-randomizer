@@ -21,7 +21,7 @@ def main():
     # The native Windows style does not permit the customized QML controls.
     # Basic respects our fully custom buttons, fields, themes, and popups.
     QQuickStyle.setStyle("Basic")
-    app.setApplicationName("DBD Randomizer Qt RC 1")
+    app.setApplicationName("DBD Randomizer Qt RC 2")
     frozen = bool(getattr(sys, "frozen", False))
     packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
     icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
