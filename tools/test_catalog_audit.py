@@ -80,5 +80,31 @@ class CacheRefreshTests(unittest.TestCase):
                     fetch_ru_skins.fetch_wikitext("Missing article", 123, refresh=True)
 
 
+    def test_live_catalog_excludes_unknown_ptb_characters(self):
+        from tools import resolve_skins
+        from tools.char_map_ru import KILLER_EN_RU, SURVIVOR_EN_RU
+        from tools import catalog_audit as audit
+        known_k = next((en, ru) for en, ru in KILLER_EN_RU.items()
+                       if ru in audit.DATA.KILLERS)
+        known_s = next((en, ru) for en, ru in SURVIVOR_EN_RU.items()
+                       if ru in audit.DATA.SURVIVORS)
+        entries = {
+            "killers": (
+                '{id = 1, name = "' + known_k[0] + '"}, '
+                '{id = 45, name = "Unreleased PTB Killer"},'
+            ),
+            "survivors": (
+                '{id = 1, name = "' + known_s[0] + '"}, '
+                '{id = 55, name = "Unreleased PTB Survivor"},'
+            ),
+        }
+        with patch.object(resolve_skins, "lua_block",
+                          side_effect=lambda _src, table: entries[table]), \
+             patch("builtins.print"):
+            killer_ids, survivor_ids = resolve_skins.character_names("")
+        self.assertEqual(killer_ids, {1: known_k[1]})
+        self.assertEqual(survivor_ids, {1: known_s[1]})
+
+
 if __name__ == "__main__":
     unittest.main()
