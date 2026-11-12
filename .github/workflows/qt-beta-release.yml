@@ -131,7 +131,7 @@ jobs:
             dist/DBDRandomizerQtBeta.zip.sha256
 
       - name: Publish or update GitHub prerelease
-        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10' && github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
+        if: github.ref == 'refs/heads/preview/qml-redesign-2026-11-10' && ((github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish beta20 prerelease]')))
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
