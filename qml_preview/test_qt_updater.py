@@ -56,14 +56,42 @@ class UpdaterTests(unittest.TestCase):
         def release(tag):
             return {"draft": False, "tag_name": tag,
                     "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
-                    "assets": [{"name": u.ASSET, "size": 20000000,
-                                "browser_download_url": "https://github.com/" + u.REPO + "/releases/download/" + tag + "/" + u.ASSET}]}
+                    "assets": [
+                        {"name": u.ASSET, "size": 20000000,
+                         "browser_download_url": "https://github.com/" + u.REPO +
+                         "/releases/download/" + tag + "/" + u.ASSET},
+                        {"name": u.ASSET + ".sha256",
+                         "browser_download_url": "https://github.com/" + u.REPO +
+                         "/releases/download/" + tag + "/" + u.ASSET + ".sha256"},
+                    ]}
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
                 release(u.CURRENT_TAG), release("v2.28.0-qt-beta.22")]).encode())):
             self.assertIsNone(u.check())
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
                 release("v3.0.0-qt-rc.2"), release(u.CURRENT_TAG)]).encode())):
             self.assertEqual(u.check()["tag"], "v3.0.0-qt-rc.2")
+
+    def test_incomplete_release_without_checksum_is_not_offered(self):
+        def release(tag, checksum):
+            assets = [
+                {"name": u.ASSET, "size": 20000000,
+                 "browser_download_url": "https://github.com/" + u.REPO +
+                 "/releases/download/" + tag + "/" + u.ASSET}
+            ]
+            if checksum:
+                assets.append({"name": u.ASSET + ".sha256",
+                               "browser_download_url": "https://github.com/" + u.REPO +
+                               "/releases/download/" + tag + "/" + u.ASSET + ".sha256"})
+            return {"draft": False, "tag_name": tag, "assets": assets,
+                    "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag}
+        invalid = release("v3.0.0-qt-rc.3", False)
+        complete = release("v3.0.0-qt-rc.2", True)
+        with patch.object(u, "_get", return_value=io.BytesIO(
+                json.dumps([invalid, complete]).encode())):
+            self.assertEqual(u.check()["tag"], complete["tag_name"])
+        with patch.object(u, "_get", return_value=io.BytesIO(
+                json.dumps([invalid]).encode())):
+            self.assertIsNone(u.check())
 
     def test_semantic_release_order_beta_rc_stable(self):
         beta = u._key("v3.0.0-qt-beta.30")
