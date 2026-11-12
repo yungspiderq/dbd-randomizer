@@ -61,6 +61,10 @@ def _key(tag):
     if not match:
         return None
     major, minor, patch, channel, sequence = match.groups()
+    # Historic v2.x Stable releases use the legacy Tk UI, not the Qt portable
+    # installation. Never offer them as updates for the Qt channel.
+    if channel is None and int(major) < 3:
+        return None
     rank = {"beta": 0, "rc": 1, None: 2}[channel]
     return (int(major), int(minor), int(patch), rank, int(sequence or 0))
 
