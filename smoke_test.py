@@ -355,6 +355,49 @@ class TestDoctorAddonPool(unittest.TestCase):
             self.assertTrue(os.path.exists(path + ".bak"))
 
 
+class TestKillerPowerChallenges(unittest.TestCase):
+    """No impossible power challenge should be given to another killer."""
+
+    def test_all_killers_have_three_unique_power_trials(self):
+        from collections import Counter
+        import dbd_data as D
+        powers = [c for c in D.CHALLENGES if c.get("kind") == "power"]
+        self.assertEqual(len(powers), len(D.KILLERS) * 3)
+        names = [c["ru"] for c in powers]
+        self.assertEqual(len(names), len(set(names)))
+        counts = Counter(c["killer"] for c in powers)
+        self.assertEqual(set(counts), set(D.KILLERS))
+        self.assertTrue(all(n == 3 for n in counts.values()))
+        for name, info in D.KILLERS.items():
+            related = [c for c in powers if c["killer"] == name]
+            self.assertEqual({c["diff"] for c in related}, {1, 2, 3})
+            self.assertTrue(all(c["power"] == info["power"] for c in related))
+
+    def test_power_pools_match_only_chosen_killer(self):
+        import dbd_data as D
+        for killer in D.KILLERS:
+            for difficulty in (1, 2, 3, "any"):
+                pool = R.challenge_candidates("KILLER", difficulty,
+                                               character=killer, kind="power")
+                self.assertTrue(pool)
+                self.assertTrue(all(c["killer"] == killer for c in pool))
+                for _ in range(5):
+                    c = R.pick_challenge("KILLER", difficulty,
+                                         character=killer, kind="power")
+                    self.assertEqual(c["killer"], killer)
+            self.assertFalse(R.challenge_candidates("SURVIVOR", "any",
+                                                     character=killer, kind="power"))
+        self.assertFalse(R.challenge_candidates("KILLER", "any", kind="power"))
+        self.assertFalse(any(c.get("killer") for c in
+                             R.challenge_candidates("KILLER", "any", kind="general")))
+
+    def test_general_reroll_never_assigns_wrong_character_trial(self):
+        for _ in range(40):
+            c = R.reroll_challenge("KILLER", "any")
+            self.assertFalse(c.get("killer"))
+        self.assertIsNone(R.reroll_challenge("SURVIVOR", "any", kind="power"))
+
+
 class TestAddonRenameMigration(unittest.TestCase):
     """Переименования RU-локализации (ADDON_RENAMES): пулы и «только открытое у
     меня» лечатся даже из файла совпадающей ревизии («Последний Каваны»,
@@ -2490,7 +2533,9 @@ class TestChallenges(unittest.TestCase):
         self.assertEqual(dup, [])
 
     def test_pick_challenge_avoids_history(self):
-        names = {c["ru"] for c in R.DATA.CHALLENGES if c["side"] in ("KILLER", "ANY")}
+        # Calls without a selected killer must not include character-only tasks.
+        names = {c["ru"] for c in R.DATA.CHALLENGES
+                 if c["side"] in ("KILLER", "ANY") and not c.get("killer")}
         almost = set(list(names)[:-1])
         ch = R.pick_challenge("KILLER", "any", avoid=almost)
         self.assertIn(ch["ru"], names - almost, "история не исключила повторы")
