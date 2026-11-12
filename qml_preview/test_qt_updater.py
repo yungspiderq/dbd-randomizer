@@ -46,24 +46,81 @@ class UpdaterTests(unittest.TestCase):
             path.write_text("2026-11-11 first failure\n2026-11-11 Move-Item failed: Access denied\n", encoding="utf-8")
             self.assertIn("Access denied", u.last_install_error(folder))
 
-    def test_version_parsing_requires_our_beta_tags(self):
+    def test_version_parsing_preserves_beta_and_supports_rc(self):
         self.assertLess(u._key("v2.28.0-qt-beta.10"), u._key(u.CURRENT_TAG))
+        self.assertLess(u._key("v2.28.0-qt-beta.22"), u._key(u.CURRENT_TAG))
+        self.assertLess(u._key(u.CURRENT_TAG), u._key("v3.0.0-qt-rc.1"))
+        self.assertLess(u._key("v3.0.0-qt-rc.1"), u._key("v3.0.0"))
+        self.assertIsNone(u._key("v2.28.0"))  # Legacy Tk stable
+        self.assertIsNone(u._key("v3.0.0-qt-preview.1"))
         self.assertIsNone(u._key("v999.0.0-malicious"))
         self.assertEqual(u.ASSET, "DBDRandomizerQtBeta.zip")
 
-    def test_beta22_version_does_not_offer_itself(self):
-        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.22")
+    def test_beta23_version_does_not_offer_itself(self):
+        self.assertEqual(u.CURRENT_TAG, "v2.28.0-qt-beta.23")
         def release(tag):
             return {"draft": False, "tag_name": tag,
                     "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
-                    "assets": [{"name": u.ASSET, "size": 20000000,
-                                "browser_download_url": "https://github.com/" + u.REPO + "/releases/download/" + tag + "/" + u.ASSET}]}
+                    "assets": [
+                        {"name": u.ASSET, "size": 20000000,
+                         "browser_download_url": "https://github.com/" + u.REPO +
+                         "/releases/download/" + tag + "/" + u.ASSET},
+                        {"name": u.ASSET + ".sha256",
+                         "browser_download_url": "https://github.com/" + u.REPO +
+                         "/releases/download/" + tag + "/" + u.ASSET + ".sha256"},
+                    ]}
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.21")]).encode())):
+                release(u.CURRENT_TAG), release("v2.28.0-qt-beta.22")]).encode())):
             self.assertIsNone(u.check())
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release("v2.28.0-qt-beta.23"), release(u.CURRENT_TAG)]).encode())):
-            self.assertEqual(u.check()["tag"], "v2.28.0-qt-beta.23")
+                release("v3.0.0-qt-rc.1"), release(u.CURRENT_TAG)]).encode())):
+            self.assertEqual(u.check()["tag"], "v3.0.0-qt-rc.1")
+
+    def test_shipped_beta22_recognizes_beta23_bridge_but_not_rc1(self):
+        # Reproduce the exact old _key grammar included in published Beta22.
+        def legacy_key(tag):
+            m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)-qt-beta\.(\d+)", tag)
+            return tuple(map(int, m.groups())) if m else None
+        beta22 = "v2.28.0-qt-beta.22"
+        beta23 = "v2.28.0-qt-beta.23"
+        rc1 = "v3.0.0-qt-rc.1"
+        self.assertIsNone(legacy_key(rc1))
+        self.assertGreater(legacy_key(beta23), legacy_key(beta22))
+        self.assertIsNotNone(u._key(rc1))
+
+    def test_bridge_detects_existing_rc1_release_with_sha256(self):
+        tag = "v3.0.0-qt-rc.1"
+        release = {
+            "draft": False, "prerelease": True, "tag_name": tag,
+            "name": "Qt Release Candidate 1",
+            "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
+            "assets": [
+                {"name": u.ASSET, "size": 198892767,
+                 "browser_download_url": "https://github.com/" + u.REPO +
+                 "/releases/download/" + tag + "/" + u.ASSET},
+                {"name": u.ASSET + ".sha256", "size": 91,
+                 "browser_download_url": "https://github.com/" + u.REPO +
+                 "/releases/download/" + tag + "/" + u.ASSET + ".sha256"},
+            ],
+        }
+        with patch.object(u, "_get", return_value=io.BytesIO(
+                json.dumps([release]).encode("utf-8"))):
+            found = u.check()
+        self.assertEqual(found["tag"], tag)
+        self.assertTrue(found["checksum_url"].endswith(".sha256"))
+
+    def test_bridge_ignores_unfinished_rc_upload(self):
+        tag = "v3.0.0-qt-rc.2"
+        release = {
+            "draft": False, "tag_name": tag,
+            "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
+            "assets": [{"name": u.ASSET, "size": 180000000,
+                        "browser_download_url": "https://github.com/" + u.REPO +
+                        "/releases/download/" + tag + "/" + u.ASSET}],
+        }
+        with patch.object(u, "_get", return_value=io.BytesIO(
+                json.dumps([release]).encode("utf-8"))):
+            self.assertIsNone(u.check())
 
     def test_beta19_discovers_beta20_prerelease_with_checksum(self):
         tag = "v2.28.0-qt-beta.20"
@@ -215,7 +272,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_newer_release_requires_portable_asset(self):
         base = {
-            "draft": False, "tag_name": "v2.28.0-qt-beta.23",
+            "draft": False, "tag_name": "v3.0.0-qt-rc.1",
             "name": "New Version",
             "html_url": "https://github.com/" + u.REPO + "/releases/tag/new",
             "assets": [
@@ -228,7 +285,7 @@ class UpdaterTests(unittest.TestCase):
             ]
         }
         latest = dict(base)
-        latest["tag_name"] = "v2.28.0-qt-beta.24"
+        latest["tag_name"] = "v3.0.0"
         latest["assets"] = [{"name": "DBDRandomizerQtBeta.exe", "size": 20000000}]
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([base, latest]).encode())):
