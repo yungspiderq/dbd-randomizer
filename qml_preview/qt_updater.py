@@ -321,9 +321,30 @@ try {
     Move-WithRetry $sourceExe $exe
     $newExeMoved = $true
 
+    # RC1 stores optional desktop shortcut helpers beside its EXE. Retain
+    # them when installing from a Beta23 updater; failure must not turn a
+    # verified program update into an unnecessary runtime rollback.
+    foreach ($helper in @("Repair DBD Randomizer Shortcut.ps1", "Update DBD Randomizer Shortcut.cmd")) {
+        $from = Join-Path $StagedDir $helper
+        if (Test-Path -LiteralPath $from -PathType Leaf) {
+            try {
+                Copy-Item -LiteralPath $from -Destination (Join-Path $TargetDir $helper) -Force -ErrorAction Stop
+            } catch {
+                Write-Progress ("Shortcut helper copy failed: " + $_.Exception.Message)
+            }
+        }
+    }
     $phase = "launching updated application"
     Write-Progress $phase
     if (-not $SkipLaunch) {
+        $repair = Join-Path $TargetDir "Repair DBD Randomizer Shortcut.ps1"
+        if (Test-Path -LiteralPath $repair -PathType Leaf) {
+            try {
+                & $repair -InstallDir $TargetDir | Out-Null
+            } catch {
+                Write-Progress ("Shortcut repair failed: " + $_.Exception.Message)
+            }
+        }
         Start-Process -FilePath $exe -WorkingDirectory $TargetDir -ErrorAction Stop
     }
     $success = $true
