@@ -742,6 +742,50 @@ class QtBackendTests(unittest.TestCase):
             self.assertEqual(addon["name"], self.bridge.build["addons"][pos - 1].strip())
             self.assertIsInstance(addon["filled"], bool)
 
+    def test_power_challenge_is_specific_to_randomly_selected_killer(self):
+        self.bridge.setRole("killer")
+        self.bridge.cfg["options"]["challenge_enabled"] = True
+        self.bridge.setAdvanced("challengeType", "power")
+        self.bridge.setAdvanced("challengeDiff", "medium")
+        self.assertEqual(self.bridge.advanced["challengeType"], "power")
+        seen = set()
+        for _ in range(70):
+            self.bridge.generate()
+            challenge = self.bridge.build["challenge"]
+            self.assertEqual(challenge["kind"], "power")
+            self.assertEqual(challenge["killer"], self.bridge.build["char"])
+            self.assertEqual(challenge["diff"], 2)
+            self.assertEqual(challenge["power"],
+                             self.bridge.db["killers"][self.bridge.build["char"]]["power"])
+            self.assertEqual(self.bridge.detail["challengeKiller"], self.bridge.build["char"])
+            seen.add(self.bridge.build["char"])
+        self.assertGreater(len(seen), 6, "power mode must still randomize killers")
+
+    def test_ability_reroll_does_not_reroll_killer_and_perks(self):
+        self.bridge.setRole("killer")
+        self.bridge.cfg["options"]["challenge_enabled"] = True
+        self.bridge.setAdvanced("challengeType", "power")
+        self.bridge.setAdvanced("challengeDiff", "any")
+        self.bridge.generate()
+        before = self.bridge.build.copy()
+        self.bridge.rerollChallenge()
+        after = self.bridge.build
+        self.assertEqual(after["char"], before["char"])
+        self.assertEqual(after["perks"], before["perks"])
+        self.assertEqual(after["addons"], before["addons"])
+        self.assertEqual(after["challenge"]["killer"], after["char"])
+        self.assertNotEqual(after["challenge"]["ru"], before["challenge"]["ru"])
+
+    def test_survivor_in_power_mode_gets_only_general_challenges(self):
+        self.bridge.setRole("survivor")
+        self.bridge.cfg["options"]["challenge_enabled"] = True
+        self.bridge.setAdvanced("challengeType", "power")
+        for _ in range(20):
+            self.bridge.generate()
+            c = self.bridge.build["challenge"]
+            self.assertNotIn("killer", c)
+            self.assertNotEqual(c.get("kind"), "power")
+
     def test_full_challenge_rule_difficulty_and_equipment_restrictions(self):
         challenge = next(ch for ch in core.DATA.CHALLENGES
                          if ch.get("side") == "SURVIVOR"
