@@ -83,7 +83,7 @@ def audit(baseline=None):
             if old_file and new_file and old_name and new_name and old_file != new_file and old_name != new_name:
                 errors.append("skin ID may have changed identity: " + str(ident))
             if prev.get("name_ru") and not current.get("name_ru"):
-                errors.append("known RU name lost for skin ID " + str(ident))
+                errors.append("verified RU name lost for skin ID " + str(ident))
 
     perk_missing = {}
     perk_total = {}
