@@ -745,7 +745,7 @@ ApplicationWindow {
                                     UiButton {
                                         width: Math.min(230, parent.width)
                                         height: 34
-                                        label: backend.detail.challengeKind === "power" ? "ДРУГОЕ ИСПЫТАНИЕ" : "ДРУГОЙ ЧЕЛЛЕНДЖ + БИЛД"
+                                        label: backend.advanced.challengeType === "power" && backend.detail.challengeKind === "power" ? "ДРУГОЕ ИСПЫТАНИЕ" : "ДРУГОЙ ЧЕЛЛЕНДЖ + БИЛД"
                                         onClicked: backend.rerollChallenge()
                                     }
                                 }
