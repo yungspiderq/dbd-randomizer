@@ -371,10 +371,13 @@ class QtBackendTests(unittest.TestCase):
 
     def test_favorites_filter_edit_and_remove(self):
         self.bridge.generate()
-        self.assertTrue(self.bridge.saveFavorite("Мои перки", "Сборки", "На ремонт"))
+        # Search a unique test marker: generic words like "ремонт" can also
+        # occur in the randomly generated second build's perks or add-ons.
+        marker = "uniquefavorite-search-marker-qtbridge-2026"
+        self.assertTrue(self.bridge.saveFavorite("Мои перки", "Сборки", marker))
         self.assertTrue(self.bridge.saveFavorite("Второй билд", "Проверка", "Что-то"))
         self.assertEqual(self.bridge.favoriteCount, 2)
-        self.bridge.setFavoriteSearch("ремонт")
+        self.bridge.setFavoriteSearch(marker)
         self.assertEqual(len(self.bridge.favorites), 1)
         self.bridge.setFavoriteSearch("")
         self.bridge.setFavoriteSide("KILLER")
