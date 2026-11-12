@@ -454,6 +454,60 @@ class QtBackendTests(unittest.TestCase):
             click.assert_not_called()
             paste.assert_not_called()
 
+    def test_focus_loss_during_cursor_travel_does_not_click(self):
+        from unittest.mock import MagicMock
+        pointer = MagicMock()
+        checkpoints = [0]
+        def guard():
+            checkpoints[0] += 1
+            if checkpoints[0] >= 3:
+                raise RuntimeError("focus lost during movement")
+        with patch.object(core.INPUT, "available", True), \
+             patch.object(core.INPUT, "pydirectinput", pointer), \
+             patch.object(core.INPUT, "position", return_value=(0, 0)):
+            with self.assertRaisesRegex(RuntimeError, "focus lost"):
+                core.INPUT.click(300, 300, steps=8, step_delay=0,
+                                 wiggle=0, settle=0, verify=False, guard=guard)
+        pointer.mouseDown.assert_not_called()
+        pointer.mouseUp.assert_not_called()
+
+    def test_mouse_release_and_modifier_release_on_focus_loss(self):
+        from unittest.mock import MagicMock
+        pointer = MagicMock()
+        with patch.object(core.INPUT, "available", True), \
+             patch.object(core.INPUT, "pydirectinput", pointer), \
+             patch.object(core.INPUT, "position", return_value=(1, 1)):
+            points = [0]
+            def guard_click():
+                points[0] += 1
+                if points[0] >= 4:
+                    raise RuntimeError("lost focus while mouse held")
+            with self.assertRaisesRegex(RuntimeError, "lost focus"):
+                core.INPUT.click(1, 1, steps=1, step_delay=0, wiggle=0,
+                                 settle=0, verify=False, hold=0, guard=guard_click)
+            pointer.mouseDown.assert_called_once()
+            pointer.mouseUp.assert_called_once()
+            pointer.reset_mock()
+            keys = [0]
+            def guard_key():
+                keys[0] += 1
+                if keys[0] >= 2:
+                    raise RuntimeError("focus changed while ctrl held")
+            with self.assertRaisesRegex(RuntimeError, "focus changed"):
+                core.INPUT.hotkey("ctrl", "a", hold=0, guard=guard_key)
+            pointer.keyDown.assert_called_once_with("ctrl")
+            pointer.keyUp.assert_called_once_with("ctrl")
+
+    def test_invalid_screen_coordinates_prevent_worker_start(self):
+        self.bridge.generate()
+        self.bridge.cfg["options"]["dry_run"] = False
+        with patch.object(self.bridge, "_outside_desktop", return_value=["slot1"]), \
+             patch.object(core.INPUT, "available", True), \
+             patch.object(self.bridge, "_automate") as worker:
+            self.bridge.equip()
+            worker.assert_not_called()
+            self.assertFalse(self.bridge.running)
+
     @unittest.skipUnless(sys.platform == "win32", "Win32 HWND required")
     def test_own_window_is_identified_by_current_process_id(self):
         from unittest.mock import MagicMock
