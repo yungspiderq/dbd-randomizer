@@ -118,7 +118,7 @@ def run(previous: Path, candidate: Path) -> None:
 
         smoke(destination / updater.APP_EXE, destination, "candidate Stable")
         retained = json.loads(config.read_text(encoding="utf-8-sig"))
-        assert retained["publish"]["nickname"] == "PERSIST-BETA22-TO-Stable"
+        assert retained["publish"]["nickname"] == "PERSIST-RC1-TO-STABLE"
         assert retained["options"]["side"] == "KILLER"
         assert retained["coords"]["slot1"]["x"] == "425"
         assert retained["skins"][skin_char] == [skin_ids[0]], (
