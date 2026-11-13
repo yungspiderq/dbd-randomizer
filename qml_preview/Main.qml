@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Randomizer Qt · v3.1.0"
+    title: "DBD Randomizer Qt · v3.1.1"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -539,7 +539,7 @@ ApplicationWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 5
                         Text { text: "DBD Randomizer"; color: win.colors.text; font.pixelSize: 16; font.weight: Font.DemiBold }
-                        Text { text: "QT QUICK • STABLE 3.1.0"; color: win.colors.muted; font.pixelSize: 10 }
+                        Text { text: "QT QUICK • STABLE 3.1.1"; color: win.colors.muted; font.pixelSize: 10 }
                     }
                 }
                 Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
@@ -656,6 +656,12 @@ ApplicationWindow {
                                 width: parent.width; spacing: 10
                                 UiButton { width: (parent.width - 10) / 2; label: "ВЫЖИВШИЙ"; iconName: "character"; primary: backend.role === "survivor"; onClicked: backend.setRole("survivor") }
                                 UiButton { width: (parent.width - 10) / 2; label: "МАНЬЯК"; iconName: "class"; primary: backend.role === "killer"; onClicked: backend.setRole("killer") }
+                            }
+                            OptionRow {
+                                id: buildEventItemsOption
+                                visible: backend.role === "survivor"
+                                title: "Ивентовые предметы (выжившие)"
+                                keyName: "event_items"
                             }
                             Row {
                                 width: parent.width
@@ -3025,6 +3031,11 @@ ApplicationWindow {
                         Item { width: 1; height: 4 }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         OptionRow { title: "Подбирать аддоны"; keyName: "addons" }
+                        OptionRow {
+                            visible: backend.role === "survivor"
+                            title: "Ивентовые предметы (выжившие)"
+                            keyName: "event_items"
+                        }
                         OptionRow { title: "Случайная внешность"; keyName: "appearance" }
                         OptionRow { title: "Случайный челлендж"; keyName: "challenge" }
                         OptionRow { title: "Только отмеченные навыки и аддоны"; keyName: "owned" }

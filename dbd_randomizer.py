@@ -582,6 +582,7 @@ OPTION_DEFAULTS = {
     "perk_mode":       "mixed",     # mixed | unique | general
     "respect_owned":   False,       # учитывать белые списки OWNED_*
     "addons_enabled":  True,
+    "event_items_enabled": True,  # выжившие: включать сезонные/юбилейные предметы
     "skin_enabled":    True,        # подбирать набор одежды к билду
     "class_enabled":   False,       # добавлять к билду случайный класс «2 против 8»
     "challenge_enabled": False,     # добавлять к билду случайный челендж
@@ -1227,6 +1228,43 @@ def _pick_perks_fx(db, side, name, perk_mode, respect_owned, available, fx):
     return out
 
 
+def _survivor_item_pool(entry, owned_items=None, respect_owned=False,
+                        event_items_enabled=True):
+    """Effective equipable survivor items after event and ownership filters.
+
+    Event toggle must never fall back to excluded items when a category empties.
+    Limited in-trial items, e.g. Fog Crystal, are not equipable even when ON.
+    """
+    event = getattr(DATA, "EVENT_SURVIVOR_ITEMS", frozenset())
+    limited = getattr(DATA, "LIMITED_SURVIVOR_ITEMS", frozenset())
+    items = [x for x in entry.get("items", [])
+             if x not in limited and (event_items_enabled or x not in event)]
+    return _filter_owned(items, owned_items, respect_owned)
+
+
+def killer_addon_diagnostic(db, name, respect_owned=False):
+    """Explain a narrowed pool without silently changing deliberate user edits."""
+    current = list(dict.fromkeys(_playable_addons(
+        db.get("killers", {}).get(name, {}).get("addons", []))))
+    reference = list(dict.fromkeys(_playable_addons(
+        DATA.KILLERS.get(name, {}).get("addons", []))))
+    notes = []
+    if reference and len(current) < len(reference) and set(current).issubset(reference):
+        notes.append(
+            "Локальная база содержит %d из %d аддонов %s. "
+            "Проверьте вручную сокращённый список в dbd_database.json." %
+            (len(current), len(reference), name))
+    allowed = set(db.get("owned", {}).get("killer_addons") or ())
+    if respect_owned and allowed and len(current) > 2:
+        eligible = [a for a in current if a in allowed]
+        if len(eligible) <= 2:
+            notes.append(
+                "Фильтр «Только отмеченные» оставил %d из %d аддонов %s. "
+                "отметьте остальные аддоны или отключите фильтр." %
+                (len(eligible), len(current), name))
+    return " ".join(notes)
+
+
 def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
                       addons_enabled=True, skin_enabled=True, owned_skins=None, fx=None):
     fx = fx or {}
@@ -1268,7 +1306,8 @@ def make_killer_build(db, available, perk_mode="mixed", respect_owned=False,
 
 
 def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False,
-                        addons_enabled=True, skin_enabled=True, owned_skins=None, fx=None):
+                        addons_enabled=True, skin_enabled=True, owned_skins=None,
+                        fx=None, event_items_enabled=True):
     fx = fx or {}
     owned = db.get("owned", {})
     avail = [a for a in sorted(available) if a not in set(fx.get("ban_chars") or ())]
@@ -1276,13 +1315,21 @@ def make_survivor_build(db, available, perk_mode="mixed", respect_owned=False,
 
     banned_cats = set(fx.get("ban_item_cats") or ())
     categories = [c for c in db["survivor_items"] if c not in banned_cats]
-    cat = random.choice(categories or list(db["survivor_items"]))
+    if not categories:
+        raise ValueError("Нет допустимых категорий предметов для условий челленджа.")
+    usable = {
+        c: _survivor_item_pool(db["survivor_items"][c],
+                               owned.get("survivor_items"), respect_owned,
+                               event_items_enabled)
+        for c in categories
+    }
+    eligible_cats = [c for c in categories if usable[c]]
+    cat = random.choice(eligible_cats or categories)
     entry = db["survivor_items"][cat]
-
-    item_pool = _filter_owned(entry.get("items", []), owned.get("survivor_items"), respect_owned)
+    item_pool = usable[cat]
     item = random.choice(item_pool) if item_pool else EMPTY
 
-    if addons_enabled:
+    if addons_enabled and item != EMPTY:
         addon_pool = _filter_owned(_playable_addons(entry.get("addons", [])),
                                    owned.get("survivor_addons"), respect_owned)
         addon_pool = _ban_addons(addon_pool, fx)
