@@ -725,6 +725,28 @@ SURVIVOR_ITEMS = {
     },
 }
 
+# Explicit event-only items currently present in SURVIVOR_ITEMS. Keep names
+# exact: text is used by the DBD item search and the shared randomizer.
+# Event items: anniversary, Masquerade, Halloween, Lunar New Year, Banquet.
+# Source: https://deadbydaylight.wiki.gg/wiki/Items
+EVENT_SURVIVOR_ITEMS = frozenset({
+    "Маскарадный фонарик", "Фонарик годовщины",
+    "Блуждающий огонек", "Банкетный фонарик",
+    "Маскарадная аптечка", "Аптечка годовщины",
+    "Ланчбокс всех святых", "Банкетная аптечка",
+    "Праздничный ящик с инструментами",
+    "Юбилейный ящик с инструментами",
+    "Маскарадный ящик с инструментами",
+    "Банкетный ящик с инструментами",
+    "Китайская хлопушка", "Новогодняя хлопушка",
+    "Хлопушка третьей годовщины",
+})
+
+# The Fog Crystal was an in-trial Limited Item, not equipable in the loadout;
+# unlike normal Fog Vials it must never be generated for auto-equipment.
+# Source: https://deadbydaylight.wiki.gg/wiki/Fog_Vials
+LIMITED_SURVIVOR_ITEMS = frozenset({"Туманный кристалл"})
+
 # ============================================================================
 # НЕОБЯЗАТЕЛЬНЫЕ «белые списки» того, что у вас реально открыто.
 # Пустой список = «считать, что открыто всё».
