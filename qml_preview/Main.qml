@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt v3.0.4"
+    title: "DBD Randomizer Qt · v3.1.0"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -34,6 +34,8 @@ ApplicationWindow {
     property color muted: colors.muted
     property color accent: colors.accent
     font.family: "Segoe UI"
+    // Graphite workspace: restrained chrome, character art as the hero.
+    property int designUnit: 4
     onClosing: backend.close()
 
     // Headless QML check for interactive scrollbar instances.
@@ -176,15 +178,17 @@ ApplicationWindow {
         property string label: ""
         property string iconName: ""
         property bool primary: false
+        property bool prominent: false
         signal clicked()
-        implicitHeight: 44
-        opacity: enabled ? 1 : 0.55
-        radius: 10
-        color: primary ? (over.containsMouse ? win.colors.accentHover : win.accent) :
-                         (over.containsMouse ? win.colors.buttonHover : win.colors.button)
-        border.width: primary ? 0 : 1
-        border.color: win.stroke
-        Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 170 : 0 } }
+        implicitHeight: 42
+        opacity: enabled ? 1 : 0.5
+        radius: 8
+        color: prominent ? (over.containsMouse ? "#ffffff" : "#e8eef2") :
+               primary ? win.colors.navActive :
+               (over.containsMouse ? win.colors.buttonHover : win.colors.button)
+        border.width: prominent ? 0 : 1
+        border.color: primary ? win.colors.accent : win.colors.stroke
+        Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 120 : 0 } }
         clip: true
         Row {
             width: Math.max(0, button.width - 16)
@@ -194,7 +198,7 @@ ApplicationWindow {
                 visible: !!button.iconName
                 width: 15; height: 15
                 kind: button.iconName
-                tint: button.primary ? "#111820" : "#dbe8fa"
+                tint: button.prominent ? "#141a20" : button.primary ? win.colors.accentSoft : win.colors.muted
                 anchors.verticalCenter: parent.verticalCenter
             }
             Text {
@@ -205,7 +209,7 @@ ApplicationWindow {
                 horizontalAlignment: Text.AlignHCenter
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
-                color: button.primary ? "#111820" : "#eef5fd"
+                color: button.prominent ? "#141a20" : button.primary ? win.colors.text : win.colors.muted
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -386,17 +390,17 @@ ApplicationWindow {
         property string iconName: "all"
         signal clicked()
         width: parent.width
-        height: 48
-        radius: 9
+        height: 40
+        radius: 8
         color: win.page === label ? win.colors.navActive : hover.containsMouse ? win.colors.navHover : "transparent"
         Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 170 : 0 } }
         Rectangle { width: 3; height: parent.height - 16; anchors.verticalCenter: parent.verticalCenter; color: win.accent; visible: win.page === nav.label; radius: 2 }
         Row {
             anchors.verticalCenter: parent.verticalCenter
-            x: 16
-            spacing: 14
-            MiniGlyph { width: 20; height: 20; kind: nav.iconName; tint: win.page === nav.label ? win.accent : "#8da0b6"; anchors.verticalCenter: parent.verticalCenter }
-            Text { text: nav.label; color: win.page === nav.label ? "white" : win.colors.muted; font.pixelSize: 13; font.weight: win.page === nav.label ? Font.Bold : Font.Normal }
+            x: 12
+            spacing: 12
+            MiniGlyph { width: 18; height: 18; kind: nav.iconName; tint: win.page === nav.label ? win.colors.accentSoft : win.colors.muted; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: nav.label; color: win.page === nav.label ? win.colors.text : win.colors.muted; font.pixelSize: 13; font.weight: win.page === nav.label ? Font.DemiBold : Font.Normal }
         }
         MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: nav.clicked() }
     }
@@ -502,7 +506,7 @@ ApplicationWindow {
         }
         spacing: 0
         Rectangle {
-            Layout.preferredWidth: 228
+            Layout.preferredWidth: 252
             Layout.fillHeight: true
             color: win.colors.sidebar
             border.color: win.colors.stroke
@@ -515,21 +519,31 @@ ApplicationWindow {
                 boundsBehavior: Flickable.StopAtBounds
                 Column {
                 id: sidebarContents
-                x: 18
-                y: 25
-                width: parent.width - 36
-                spacing: 8
-                Image {
-                    width: 51; height: 51
-                    source: "assets/app_icon.png"
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                    anchors.horizontalCenter: parent.horizontalCenter
+                x: 16
+                y: 20
+                width: parent.width - 32
+                spacing: 4
+                Row {
+                    width: parent.width
+                    height: 60
+                    spacing: 12
+                    Image {
+                        width: 40; height: 40
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: "assets/app_icon.png"
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                    }
+                    Column {
+                        width: parent.width - 52
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 5
+                        Text { text: "DBD Randomizer"; color: win.colors.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+                        Text { text: "QT QUICK • STABLE 3.1.0"; color: win.colors.muted; font.pixelSize: 10 }
+                    }
                 }
-                Item { width: 1; height: 12 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • STABLE 3.0.4"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
-                Item { height: 10 }
+                Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
+                Item { height: 12 }
                 NavItem { ordinal: 1; label: "Билд"; iconName: "dice"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; iconName: "builder"; onClicked: win.page = label }
                 NavItem { ordinal: 3; label: "Избранное"; iconName: "favorite"; onClicked: win.page = label }
@@ -540,19 +554,20 @@ ApplicationWindow {
                 NavItem { ordinal: 8; label: "Клики и тайминги"; iconName: "timings"; onClicked: win.page = label }
                 NavItem { ordinal: 9; label: "Классы 2v8"; iconName: "class"; onClicked: win.page = label }
                 NavItem { ordinal: 10; label: "Оформление"; iconName: "theme"; onClicked: win.page = label }
-                Item { height: 10 }
+                Item { height: 16 }
                 Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
-                Item { height: 10 }
-                UiButton { width: parent.width; label: "Новый билд"; onClicked: { win.page = "Билд"; backend.generate() } }
+                Item { height: 12 }
+                UiButton { width: parent.width; label: "Новый билд"; iconName: "dice"; onClicked: { win.page = "Билд"; backend.generate() } }
                 UiButton { width: parent.width; label: "Копировать билд"; onClicked: backend.copyBuild() }
                 Item { height: 10 }
                 Rectangle {
-                    width: parent.width; height: 74; radius: 10; color: win.colors.button
-                    border.color: "#534046"
+                    width: parent.width; height: 62; radius: 8
+                    color: win.colors.surface
+                    border.color: win.colors.stroke
                     Column {
-                        anchors.centerIn: parent; spacing: 8
-                        Text { text: "QT ИНТЕРФЕЙС"; color: win.colors.accentSoft; font.pixelSize: 10; font.weight: Font.Bold }
-                        Text { text: "Оригинальные игровые данные\nи Qt-интерфейс"; color: "#c1b9bc"; font.pixelSize: 11 }
+                        x: 12; y: 10; spacing: 6
+                        Text { text: "Мастерская билдов"; color: win.colors.text; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        Text { text: "Навыки · внешность · испытания"; color: win.colors.muted; font.pixelSize: 10 }
                     }
                 }
                 }
@@ -578,15 +593,15 @@ ApplicationWindow {
                     boundsBehavior: Flickable.StopAtBounds
                     Column {
                         id: content
-                        x: 26; y: 25
+                        x: 32; y: 28
                         SequentialAnimation {
                             id: pageReveal
                             NumberAnimation {
                                 target: content
                                 property: "opacity"
-                                from: 0.58
+                                from: 0.94
                                 to: 1.0
-                                duration: backend.animationsEnabled ? 240 : 0
+                                duration: backend.animationsEnabled ? 140 : 0
                                 easing.type: Easing.OutCubic
                             }
                         }
@@ -602,10 +617,36 @@ ApplicationWindow {
                                 work.contentY = 0
                             }
                         }
-                        width: work.width - 52
-                        spacing: 18
-                        Text { text: win.page === "Билд" ? "Генератор билда" : win.page; font.pixelSize: 27; font.weight: Font.Bold; color: win.colors.text }
-                        Text { text: "Новый интерфейс с оригинальной базой DBD и автоматизацией"; font.pixelSize: 12; color: win.muted }
+                        width: Math.max(0, work.width - 64)
+                        spacing: 20
+                        Row {
+                            width: parent.width; spacing: 16
+                            Text {
+                                text: win.page === "Билд" ? "Генератор билдов" : win.page
+                                width: parent.width - 112
+                                font.pixelSize: 29
+                                font.weight: Font.DemiBold
+                                color: win.colors.text
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: "DBD / 3.1"
+                                width: 96
+                                horizontalAlignment: Text.AlignRight
+                                anchors.verticalCenter: parent.verticalCenter
+                                font.pixelSize: 11
+                                color: win.colors.muted
+                            }
+                        }
+                        Text {
+                            width: parent.width
+                            text: win.page === "Билд"
+                                  ? "Персонаж, навыки и испытание для следующего матча"
+                                  : "Сборки и игровые данные"
+                            font.pixelSize: 13
+                            wrapMode: Text.Wrap
+                            color: win.colors.muted
+                        }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Column {
                             visible: win.page === "Билд"
