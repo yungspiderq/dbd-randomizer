@@ -34,7 +34,7 @@ def sha256(path: Path) -> str:
 
 def run(previous: Path, candidate: Path) -> None:
     assert sys.platform == "win32", "Windows runner required"
-    assert updater.CURRENT_TAG == "v3.0.0"
+    assert updater.CURRENT_TAG == "v3.0.1"
     previous = previous.resolve()
     candidate = candidate.resolve()
     verify_download(previous)
@@ -78,7 +78,7 @@ def run(previous: Path, candidate: Path) -> None:
         # across builds: check the visible QML version resource as well.
         qml = (staged / "_internal" / "qml_preview" / "Main.qml").read_text(
             encoding="utf-8")
-        assert "Qt v3.0.0" in qml, "Candidate QML still advertises an old version"
+        assert "Qt v3.0.1" in qml, "Candidate QML still advertises an old version"
 
         install_script = root / "apply_stable.ps1"
         install_script.write_text(updater.UPGRADE_SCRIPT, encoding="utf-8-sig")
