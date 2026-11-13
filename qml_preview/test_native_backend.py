@@ -73,6 +73,36 @@ class QtBackendTests(unittest.TestCase):
         self.bridge._drain()  # status messages are queued for the GUI thread
         self.assertIn("отметьте остальные аддоны", self.bridge.status)
 
+    def test_survivor_event_toggle_persists_and_affects_generation(self):
+        self.bridge.setRole("survivor")
+        self.assertTrue(self.bridge.options["event_items"])
+        self.bridge.toggleOption("event_items")
+        self.assertFalse(self.bridge.options["event_items"])
+        self.assertFalse(self.bridge.cfg["options"]["event_items_enabled"])
+        event = set(core.DATA.EVENT_SURVIVOR_ITEMS)
+        limited = set(core.DATA.LIMITED_SURVIVOR_ITEMS)
+        for _ in range(40):
+            self.bridge.generate()
+            self.assertNotIn(self.bridge.build["power_or_item"], event | limited)
+        self.bridge.toggleOption("event_items")
+        self.assertTrue(self.bridge.options["event_items"])
+        self.assertTrue(self.bridge.cfg["options"]["event_items_enabled"])
+        self.bridge.setRole("killer")
+        self.assertTrue(self.bridge.options["event_items"])
+        self.bridge.generate()
+        self.assertEqual(self.bridge.build["side"], "KILLER")
+
+    def test_restricted_pool_warning_for_any_killer(self):
+        self.bridge.setRole("killer")
+        first = self.bridge.db["killers"]["Охотник"]["addons"][0]
+        self.bridge.db["owned"]["killer_addons"] = [first]
+        self.bridge.cfg["options"]["respect_owned"] = True
+        with patch.object(self.bridge, "available_characters", return_value=["Охотник"]):
+            self.bridge.generate()
+        self.bridge._drain()
+        self.assertIn("Охотник", self.bridge.status)
+        self.assertIn("Только отмеченные", self.bridge.status)
+
     def test_native_backend_no_tk_and_both_roles(self):
         self.assertEqual(self.bridge.role, "survivor")
         self.bridge.generate()
