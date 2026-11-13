@@ -423,10 +423,10 @@ class QtBackendTests(unittest.TestCase):
 
     def test_favorites_filter_edit_and_remove(self):
         self.bridge.generate()
-        self.assertTrue(self.bridge.saveFavorite("Мои перки", "Сборки", "На ремонт"))
+        self.assertTrue(self.bridge.saveFavorite("Мои перки", "Сборки", "ci-unique-favorite-search-847211"))
         self.assertTrue(self.bridge.saveFavorite("Второй билд", "Проверка", "Что-то"))
         self.assertEqual(self.bridge.favoriteCount, 2)
-        self.bridge.setFavoriteSearch("ремонт")
+        self.bridge.setFavoriteSearch("ci-unique-favorite-search-847211")
         self.assertEqual(len(self.bridge.favorites), 1)
         self.bridge.setFavoriteSearch("")
         self.bridge.setFavoriteSide("KILLER")
