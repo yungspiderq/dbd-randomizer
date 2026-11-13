@@ -24,6 +24,7 @@ import qt_updater
 from addon_effects import AddonEffectLibrary
 from rotation_engine import RotationState, make_rotated_build
 from perk_cards import perk_info, reconcile_pins
+from perk_descriptions import description_for
 from stats_engine import BuildStatistics
 from favorites import FavoriteBuilds
 from appearance import SCALES, THEMES, normalize as normalize_appearance, palette as appearance_palette, write_to_options
@@ -628,13 +629,32 @@ class QtBridge(QObject):
              "disabled": bool(forbidden.get("addons"))}
             for i in range(2)
         ]
+        skin_id = skin.get("id") if isinstance(skin, dict) else None
+        try:
+            skin_id = int(skin_id) if skin_id is not None else None
+        except (TypeError, ValueError):
+            skin_id = None
+        skin_info = ((getattr(core.SKINS, "SKINS_BY_ID", {}) or {}).get(skin_id) or {}
+                     if skin_id is not None else {})
+        skin_label = (tidy(skin.get("display") or skin.get("name"))
+                      if isinstance(skin, dict) else tidy(skin))
         challenge_data = challenge if isinstance(challenge, dict) else {}
         difficulty = (getattr(core.DATA, "CHALLENGE_DIFFS", {}) or {}).get(challenge_data.get("diff"), "")
         return {"char": tidy(b.get("char", "")), "side": b.get("side", ""),
                 "power": tidy(b.get("power_or_item", "")), "category": tidy(b.get("category", "")),
                 "addons": [tidy(x) for x in addon_names],
                 "addonDetails": addon_details,
-                "skin": tidy(skin.get("display") or skin.get("name")) if isinstance(skin, dict) else tidy(skin),
+                "skin": skin_label,
+                "hasSkin": bool(skin_label),
+                "skinId": skin_id if skin_id is not None else -1,
+                "skinImageKey": "skin:" + str(skin_id) if skin_id is not None else "",
+                "skinEnglish": tidy(skin_info.get("name")),
+                "skinRarity": tidy(skin_info.get("rarity_ru") or
+                                   getattr(core.SKINS, "RARITY_RU", {}).get(
+                                       skin_info.get("rarity"), "")),
+                "skinType": "Скин персонажа" if skin_info.get("kind") == "coschar"
+                            else "Набор одежды" if skin_info else "",
+                "skinEnabled": bool(self._option("skin_enabled")),
                 "challenge": tidy(challenge_data.get("ru")),
                 "challengeText": tidy(challenge_data.get("text")),
                 "challengeWhy": tidy(challenge_data.get("why")),
@@ -1241,6 +1261,7 @@ class QtBridge(QObject):
             "owner": ", ".join(owners.get(name, [])),
             "kind": "Общий навык" if name in common else "Уникальный навык",
             "common": name in common,
+            "description": description_for(side, name),
         } for name in filtered[:90 if needle else 48]]
 
     @Slot(str, result="QVariantList")
