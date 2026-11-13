@@ -6,14 +6,16 @@ from __future__ import annotations
 
 import random
 
+from perk_descriptions import description_for
+
 
 def perk_info(db, side, name, *, empty=""):
     if not name or name == empty:
         return {"name": "Не выбран", "owner": "", "kind": "Пустой слот",
-                "common": False, "found": False}
+                "common": False, "found": False, "description": ""}
     if side not in ("KILLER", "SURVIVOR"):
         return {"name": name, "owner": "", "kind": "Неизвестная сторона",
-                "common": False, "found": False}
+                "common": False, "found": False, "description": ""}
     common = set(db.get("killer_common_perks" if side == "KILLER" else "surv_common_perks", []))
     chars = db.get("killers" if side == "KILLER" else "survivors", {})
     owners = []
@@ -24,7 +26,8 @@ def perk_info(db, side, name, *, empty=""):
     is_common = name in common
     return {"name": name, "owner": ", ".join(owners),
             "kind": "Общий навык" if is_common else "Уникальный навык" if owners else "Навык вне базы",
-            "common": is_common, "found": is_common or bool(owners)}
+            "common": is_common, "found": is_common or bool(owners),
+            "description": description_for(side, name)}
 
 
 def reconcile_pins(db, previous_build, locks, next_build, *, respect_owned=False,
