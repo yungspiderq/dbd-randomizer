@@ -413,20 +413,48 @@ class TestDoctorAddonPool(unittest.TestCase):
 class TestKillerPowerChallenges(unittest.TestCase):
     """No impossible power challenge should be given to another killer."""
 
-    def test_all_killers_have_three_unique_power_trials(self):
+    def test_all_killers_have_five_unique_power_trials(self):
         from collections import Counter
         import dbd_data as D
         powers = [c for c in D.CHALLENGES if c.get("kind") == "power"]
-        self.assertEqual(len(powers), len(D.KILLERS) * 3)
+        self.assertEqual(len(powers), len(D.KILLERS) * 5)
         names = [c["ru"] for c in powers]
         self.assertEqual(len(names), len(set(names)))
         counts = Counter(c["killer"] for c in powers)
         self.assertEqual(set(counts), set(D.KILLERS))
-        self.assertTrue(all(n == 3 for n in counts.values()))
+        self.assertTrue(all(n == 5 for n in counts.values()))
         for name, info in D.KILLERS.items():
             related = [c for c in powers if c["killer"] == name]
             self.assertEqual({c["diff"] for c in related}, {1, 2, 3})
+            from collections import Counter as DiffCounter
+            self.assertEqual(DiffCounter(c["diff"] for c in related),
+                             {1: 1, 2: 2, 3: 2})
             self.assertTrue(all(c["power"] == info["power"] for c in related))
+
+    def test_new_challenges_cover_themes_sides_and_power_requirements(self):
+        import dbd_data as D
+        from dbd_extra_general_challenges import EXTRA_GENERAL_CHALLENGES
+        from dbd_extra_power_challenges import EXTRA_KILLER_POWER_TRIALS
+        from collections import Counter
+        self.assertEqual(len(EXTRA_GENERAL_CHALLENGES), 75)
+        self.assertEqual(len(EXTRA_KILLER_POWER_TRIALS), len(D.KILLERS))
+        self.assertEqual(sum(map(len, EXTRA_KILLER_POWER_TRIALS.values())), 88)
+        self.assertGreaterEqual(len({c["theme"] for c in EXTRA_GENERAL_CHALLENGES}), 10)
+        counts = Counter((c["side"], c["diff"]) for c in EXTRA_GENERAL_CHALLENGES)
+        for side in ("KILLER", "SURVIVOR"):
+            for difficulty in (1, 2, 3):
+                self.assertGreaterEqual(counts[(side, difficulty)], 10)
+        for c in EXTRA_GENERAL_CHALLENGES:
+            self.assertIn(c["diff"], (1, 2, 3))
+            self.assertGreaterEqual(len(c["text"]), 30)
+            self.assertGreaterEqual(len(c["why"]), 10)
+            self.assertIn(c["side"], ("SURVIVOR", "KILLER", "ANY"))
+        power = [c for c in D.CHALLENGES if c.get("kind") == "power"]
+        for c in power:
+            self.assertTrue(c["killer"] in D.KILLERS)
+            self.assertEqual(c["power"], D.KILLERS[c["killer"]]["power"])
+            self.assertTrue(c["text"])
+        self.assertEqual(len({c["ru"] for c in D.CHALLENGES}), len(D.CHALLENGES))
 
     def test_power_pools_match_only_chosen_killer(self):
         import dbd_data as D

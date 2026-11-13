@@ -662,6 +662,9 @@ class QtBridge(QObject):
                 "challengeKiller": tidy(challenge_data.get("killer")),
                 "challengePower": tidy(challenge_data.get("power")),
                 "challengeKind": tidy(challenge_data.get("kind") or "general"),
+                "challengeTheme": tidy(challenge_data.get("theme") or
+                                       ("Способности" if challenge_data.get("kind") == "power"
+                                        else "Общие" if challenge_data else "")),
                 "challengeRestrictions": restrictions,
                 "class": tidy(cl.get("ru")) if isinstance(cl, dict) else "",
                 "hasBuild": bool(b)}

@@ -7,6 +7,8 @@ Avoid mechanical prerequisites such as add-ons or particular perks.
 
 # Each entry: two distinctive trials; a middle-difficulty practice trial is added in the builder.
 # The first is approachable; the second requires multiple power interactions.
+from dbd_extra_power_challenges import EXTRA_KILLER_POWER_TRIALS
+
 KILLER_POWER_TRIALS = {
     "Охотник": [
         [
@@ -486,4 +488,20 @@ def build_killer_power_challenges(killers):
                 "или обнаружить выжившего."
             ),
         })
+        # Two additional hand-written power goals for each killer: one
+        # medium and one hard. They do not require any add-ons or perks.
+        for extra_index, (title, rule) in enumerate(EXTRA_KILLER_POWER_TRIALS.get(killer, [])):
+            rows.append({
+                "ru": title + " — " + killer,
+                "side": "KILLER",
+                "diff": 2 if extra_index == 0 else 3,
+                "kind": "power",
+                "killer": killer,
+                "power": power,
+                "theme": "Способности",
+                "why": ("Практика использования силы в непривычной ситуации."
+                        if extra_index == 0 else
+                        "Углублённое владение силой в нескольких эпизодах матча."),
+                "text": rule,
+            })
     return rows
