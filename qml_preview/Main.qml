@@ -657,6 +657,12 @@ ApplicationWindow {
                                 UiButton { width: (parent.width - 10) / 2; label: "ВЫЖИВШИЙ"; iconName: "character"; primary: backend.role === "survivor"; onClicked: backend.setRole("survivor") }
                                 UiButton { width: (parent.width - 10) / 2; label: "МАНЬЯК"; iconName: "class"; primary: backend.role === "killer"; onClicked: backend.setRole("killer") }
                             }
+                            OptionRow {
+                                id: buildEventItemsOption
+                                visible: backend.role === "survivor"
+                                title: "Ивентовые предметы (выжившие)"
+                                keyName: "event_items"
+                            }
                             Row {
                                 width: parent.width
                                 spacing: 10
@@ -3025,6 +3031,11 @@ ApplicationWindow {
                         Item { width: 1; height: 4 }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         OptionRow { title: "Подбирать аддоны"; keyName: "addons" }
+                        OptionRow {
+                            visible: backend.role === "survivor"
+                            title: "Ивентовые предметы (выжившие)"
+                            keyName: "event_items"
+                        }
                         OptionRow { title: "Случайная внешность"; keyName: "appearance" }
                         OptionRow { title: "Случайный челлендж"; keyName: "challenge" }
                         OptionRow { title: "Только отмеченные навыки и аддоны"; keyName: "owned" }
