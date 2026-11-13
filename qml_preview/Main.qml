@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Randomizer Qt · v3.1.0"
+    title: "DBD Randomizer Qt · v3.1.1"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -539,7 +539,7 @@ ApplicationWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 5
                         Text { text: "DBD Randomizer"; color: win.colors.text; font.pixelSize: 16; font.weight: Font.DemiBold }
-                        Text { text: "QT QUICK • STABLE 3.1.0"; color: win.colors.muted; font.pixelSize: 10 }
+                        Text { text: "QT QUICK • STABLE 3.1.1"; color: win.colors.muted; font.pixelSize: 10 }
                     }
                 }
                 Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
