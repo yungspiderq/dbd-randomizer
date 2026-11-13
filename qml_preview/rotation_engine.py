@@ -193,21 +193,37 @@ def make_rotated_build(core, db, side, available, rotation, **kwargs):
             core._playable_addons(db["killers"][char].get("addons", [])),
             owned.get("killer_addons"), respect)
     else:
-        categories = [cat for cat in db["survivor_items"]
-                      if cat not in set(fx.get("ban_item_cats") or ())]
-        if not categories:
+        # Balanced rotation must use the same filtered inventory as normal
+        # generation. Event-only and in-trial items cannot reappear here.
+        event_enabled = bool(kwargs.get("event_items_enabled", True))
+        possible = [cat for cat in db["survivor_items"]
+                    if cat not in set(fx.get("ban_item_cats") or ())]
+        if not possible:
             raise ValueError("Нет доступных типов предметов для челленджа")
-        category = rotation.select(side, "categories", categories)[0]
-        data = db["survivor_items"][category]
-        items = core._filter_owned(data.get("items", []),
-                                   owned.get("survivor_items"), respect)
-        item = rotation.select(side, "items", items, scope=category)
+        usable = {
+            cat: core._survivor_item_pool(
+                db["survivor_items"][cat],
+                owned.get("survivor_items"), respect, event_enabled)
+            for cat in possible
+        }
+        categories = [cat for cat in possible if usable[cat]]
+        if categories:
+            category = rotation.select(side, "categories", categories)[0]
+            item = rotation.select(side, "items", usable[category], scope=category)
+        else:
+            # The user may own only event items. Never silently bypass the
+            # exclusion: show an empty item slot rather than inventing a draw.
+            category = build.get("category") if build.get("category") in possible else possible[0]
+            item = []
         build["power_or_item"] = item[0] if item else core.EMPTY
         build["category"] = category
         scope = category
-        addon_pool = core._filter_owned(
+        data = db["survivor_items"][category]
+        addon_pool = (core._filter_owned(
             core._playable_addons(data.get("addons", [])),
             owned.get("survivor_addons"), respect)
+            if item else [])
+
     if use_addons:
         addon_pool = core._ban_addons(addon_pool, fx)
         addons = rotation.select(side, "addons", addon_pool, 2, scope=scope)
