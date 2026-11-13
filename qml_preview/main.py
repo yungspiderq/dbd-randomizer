@@ -21,7 +21,7 @@ def main():
     # The native Windows style does not permit the customized QML controls.
     # Basic respects our fully custom buttons, fields, themes, and popups.
     QQuickStyle.setStyle("Basic")
-    app.setApplicationName("DBD Randomizer Qt 3.0.3")
+    app.setApplicationName("DBD Randomizer Qt 3.0.4")
     frozen = bool(getattr(sys, "frozen", False))
     packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
     icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
@@ -68,6 +68,48 @@ def main():
                 app.quit()
 
         QTimer.singleShot(350, verify_catalogs)
+    elif "--smoke-layout" in sys.argv:
+        window = engine.rootObjects()[0]
+
+        def verify_long_text_layout():
+            try:
+                from PySide6.QtCore import QMetaObject
+                from PySide6.QtTest import QTest
+                # Deliberately longer than any current 2v8 class description.
+                long_skill = (
+                    "Отслеживает окружающую область, обнаруживает союзников и "
+                    "объясняет взаимодействие с генераторами, лечением и поиском. "
+                ) * 35
+                backend._classes = {
+                    "SURVIVOR": {
+                        "ru": "Медик с расширенным названием класса и подробными навыками",
+                        "skills": [{"text": long_skill}, {"text": long_skill[:1200]}],
+                    },
+                    "KILLER": {
+                        "ru": "Наводящий ужас — продолжительное описание силы",
+                        "skills": [{"text": long_skill[:1900]},
+                                   {"text": long_skill[:1250]}],
+                    },
+                }
+                backend.detailChanged.emit()
+                window.setProperty("page", "Классы 2v8")
+                for width, height in ((1000, 700), (1350, 820)):
+                    window.resize(width, height)
+                    QTest.qWait(120)  # polish the wrapped Text and Column layout
+                    assert QMetaObject.invokeMethod(window, "verifyClassLayout")
+                    assert window.property("layoutSmokePassed"), (
+                        window.property("layoutSmokeError") or
+                        "class text overlaps adjacent content"
+                    )
+                print("Qt responsive layout smoke OK: full 2v8 text in 1000/1350px windows")
+            except Exception as exc:
+                print("Qt responsive layout smoke FAILED: " + repr(exc),
+                      file=sys.stderr)
+                appearance_check["ok"] = False
+            finally:
+                app.quit()
+
+        QTimer.singleShot(450, verify_long_text_layout)
     elif "--smoke-scrollbars" in sys.argv:
         window = engine.rootObjects()[0]
 

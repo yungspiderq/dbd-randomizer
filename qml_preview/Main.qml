@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt v3.0.3"
+    title: "DBD Ultimate Search Randomizer | Qt v3.0.4"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -185,7 +185,9 @@ ApplicationWindow {
         border.width: primary ? 0 : 1
         border.color: win.stroke
         Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 170 : 0 } }
+        clip: true
         Row {
+            width: Math.max(0, button.width - 16)
             anchors.centerIn: parent
             spacing: 6
             MiniGlyph {
@@ -196,13 +198,19 @@ ApplicationWindow {
                 anchors.verticalCenter: parent.verticalCenter
             }
             Text {
+                id: buttonText
+                width: Math.max(0, parent.width - (button.iconName ? 21 : 0))
                 text: button.label
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
                 color: button.primary ? "#111820" : "#eef5fd"
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
+        ToolTip.visible: over.containsMouse && buttonText.truncated
+        ToolTip.text: button.label
         MouseArea {
             id: over
             anchors.fill: parent
@@ -359,6 +367,9 @@ ApplicationWindow {
                 rotation: -45; color: "#ffffff"
             }
         }
+        ToolTip.visible: catalogHover.containsMouse
+        ToolTip.delay: 650
+        ToolTip.text: catalogRow.title + (catalogRow.subtitle ? "\n" + catalogRow.subtitle : "")
         MouseArea {
             id: catalogHover
             anchors.fill: parent
@@ -517,7 +528,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • STABLE 3.0.3"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • STABLE 3.0.4"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; iconName: "dice"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; iconName: "builder"; onClicked: win.page = label }
@@ -625,14 +636,15 @@ ApplicationWindow {
                             Rectangle {
                                 id: rotationPanel
                                 width: parent.width
-                                height: 168
+                                height: Math.max(168, rotationBody.implicitHeight + 24)
                                 radius: 13
                                 color: win.colors.panel
                                 border.width: 1
                                 border.color: backend.rotationEnabled ? win.colors.accent : win.stroke
                                 Column {
-                                    anchors.fill: parent
-                                    anchors.margins: 12
+                                    id: rotationBody
+                                    x: 12; y: 12
+                                    width: parent.width - 24
                                     spacing: 9
                                     Row {
                                         width: parent.width
@@ -827,13 +839,14 @@ ApplicationWindow {
                             }
                             Rectangle {
                                 width: parent.width
-                                height: 144
+                                height: Math.max(144, addonsBody.implicitHeight + 26)
                                 radius: 13
                                 color: win.surface
                                 border.color: win.stroke
                                 Column {
-                                    anchors.fill: parent
-                                    anchors.margins: 13
+                                    id: addonsBody
+                                    x: 13; y: 13
+                                    width: parent.width - 26
                                     spacing: 10
                                     Text {
                                         text: "АДДОНЫ · НАЗВАНИЯ"
@@ -851,7 +864,7 @@ ApplicationWindow {
                                                 id: addonCard
                                                 property var addonInfo: modelData
                                                 width: (parent.width - 10) / 2
-                                                height: 91
+                                                height: Math.max(91, addonTextColumn.implicitHeight + 18)
                                                 radius: 10
                                                 color: win.colors.button
                                                 border.color: addonInfo.disabled ? "#a35d5b" : win.colors.stroke
@@ -865,6 +878,7 @@ ApplicationWindow {
                                                         placeholder: "ADD"
                                                     }
                                                     Column {
+                                                        id: addonTextColumn
                                                         width: parent.width - 74
                                                         spacing: 6
                                                         Text {
@@ -880,8 +894,6 @@ ApplicationWindow {
                                                             font.pixelSize: 12
                                                             font.bold: true
                                                             wrapMode: Text.Wrap
-                                                            maximumLineCount: 3
-                                                            elide: Text.ElideRight
                                                         }
                                                         Text {
                                                             visible: addonCard.addonInfo.disabled
@@ -2263,7 +2275,7 @@ ApplicationWindow {
                                     id: favoriteCard
                                     property var entry: modelData
                                     width: favoriteList.width
-                                    height: 172
+                                    height: Math.max(172, favoriteActions.y + favoriteActions.height + 14)
                                     radius: 13
                                     color: win.colors.panel
                                     border.color: favoriteHover.hovered ? win.accent : win.colors.stroke
@@ -2278,6 +2290,7 @@ ApplicationWindow {
                                         placeholder: "DBD"
                                     }
                                     Column {
+                                        id: favoriteTextBlock
                                         x: 89
                                         y: 13
                                         width: parent.width - 102
@@ -2311,18 +2324,22 @@ ApplicationWindow {
                                             text: favoriteCard.entry.note || "Без заметки"
                                             color: "#90a0b3"
                                             font.pixelSize: 11
-                                            elide: Text.ElideRight
+                                            wrapMode: Text.Wrap
                                         }
                                     }
                                     Text {
-                                        x: 13; y: 100
+                                        id: favoriteSavedAt
+                                        x: 13
+                                        y: Math.max(100, favoriteTextBlock.y + favoriteTextBlock.implicitHeight + 7)
                                         text: "Сохранено " + favoriteCard.entry.saved_at
                                         color: "#7c8c9e"
                                         font.pixelSize: 10
                                     }
                                     Row {
-                                        x: 12; y: 122
+                                        id: favoriteActions
+                                        x: 12; y: favoriteSavedAt.y + favoriteSavedAt.implicitHeight + 12
                                         width: parent.width - 24
+                                        height: 36
                                         spacing: 8
                                         UiButton {
                                             width: (parent.width - 24) / 4
@@ -2662,13 +2679,14 @@ ApplicationWindow {
                                         property var selectedRows: modelData.kind === "top" ? statsPage.stat.top : statsPage.stat.least
                                         property color rankingFill: modelData.kind === "top" ? win.colors.chart : win.colors.chartAlt
                                         width: (statsPage.width - 12) / 2
-                                        height: 576
+                                        height: Math.max(576, rankingBody.implicitHeight + 22)
                                         radius: 13
                                         color: win.colors.surface
                                         border.color: win.stroke
                                         Column {
-                                            anchors.fill: parent
-                                            anchors.margins: 11
+                                            id: rankingBody
+                                            x: 11; y: 11
+                                            width: parent.width - 22
                                             spacing: 9
                                             Text {
                                                 text: modelData.title
@@ -2863,22 +2881,59 @@ ApplicationWindow {
                             Text { width: parent.width; text: backend.logText; wrapMode: Text.Wrap; color: win.muted; font.pixelSize: 10 }
                         }
                         Column {
+                            id: classesPage
                             visible: win.page === "Классы 2v8"
                             width: parent.width; spacing: 12
-                            Text { text: "Случайные классы режима 2 против 8"; color: win.muted; font.pixelSize: 12 }
+                            Text {
+                                width: parent.width
+                                text: "Случайные классы режима 2 против 8"
+                                color: win.muted; font.pixelSize: 12
+                                wrapMode: Text.Wrap
+                            }
                             UiButton { width: parent.width; label: "СГЕНЕРИРОВАТЬ КЛАССЫ"; primary: true; onClicked: backend.rollClasses() }
                             Repeater {
+                                id: classCardsRepeater
                                 model: backend.classDetails
                                 delegate: Rectangle {
-                                    width: parent.width; height: 126; radius: 13; color: win.surface; border.color: win.stroke
-                                    Column { x: 17; y: 14; width: parent.width - 34; spacing: 10
-                                        Text { text: modelData.side === "KILLER" ? "МАНЬЯК" : "ВЫЖИВШИЙ"; color: win.accent; font.bold: true; font.pixelSize: 10 }
-                                        Text { text: modelData.title; color: win.colors.text; font.bold: true; font.pixelSize: 17 }
-                                        Text { text: modelData.skills; width: parent.width; height: 57; wrapMode: Text.Wrap; color: "#b2c0d0"; font.pixelSize: 11 }
+                                    id: classCard
+                                    width: classesPage.width
+                                    property real requiredHeight: classBody.implicitHeight + 28
+                                    height: Math.max(126, requiredHeight)
+                                    radius: 13
+                                    color: win.surface
+                                    border.color: win.stroke
+                                    Column {
+                                        id: classBody
+                                        x: 17; y: 14
+                                        width: parent.width - 34
+                                        spacing: 10
+                                        Text {
+                                            text: modelData.side === "KILLER" ? "МАНЬЯК" : "ВЫЖИВШИЙ"
+                                            width: parent.width
+                                            color: win.accent; font.bold: true; font.pixelSize: 10
+                                        }
+                                        Text {
+                                            text: modelData.title
+                                            width: parent.width
+                                            wrapMode: Text.Wrap
+                                            color: win.colors.text; font.bold: true; font.pixelSize: 17
+                                        }
+                                        Text {
+                                            text: modelData.skills
+                                            width: parent.width
+                                            wrapMode: Text.Wrap
+                                            textFormat: Text.PlainText
+                                            color: "#b2c0d0"; font.pixelSize: 11
+                                        }
                                     }
                                 }
                             }
-                            UiButton { width: parent.width; label: "СКОПИРОВАТЬ КЛАССЫ"; onClicked: backend.copyClass() }
+                            UiButton {
+                                id: classesCopyButton
+                                width: parent.width
+                                label: "СКОПИРОВАТЬ КЛАССЫ"
+                                onClicked: backend.copyClass()
+                            }
                         }
 
                     }
@@ -3004,8 +3059,16 @@ ApplicationWindow {
                         UiButton { visible: backend.updateAvailable; enabled: !backend.updateBusy; width: parent.width; label: "СКАЧАТЬ И УСТАНОВИТЬ"; primary: true; onClicked: backend.installUpdate() }
 
                         Rectangle {
-                            width: parent.width; height: 83; color: "#251f24"; radius: 10; border.color: "#49353e"
-                            Text { anchors.fill: parent; anchors.margins: 13; wrapMode: Text.WordWrap; text: "Нажми «Экипировать» и вручную переключись в DBD во время отсчёта (не меньше 3 секунд). Поиск процесса игры отключён. При переключении в другое окно клики остановятся. Стоп: " + backend.advanced.abortKey.toUpperCase() + "."; color: "#dec0bf"; font.pixelSize: 11 }
+                            width: parent.width
+                            height: Math.max(83, settingsWarningText.implicitHeight + 26)
+                            color: "#251f24"; radius: 10; border.color: "#49353e"
+                            Text {
+                                id: settingsWarningText
+                                x: 13; y: 13; width: parent.width - 26
+                                wrapMode: Text.Wrap
+                                text: "Нажми «Экипировать» и вручную переключись в DBD во время отсчёта (не меньше 3 секунд). Поиск процесса игры отключён. При переключении в другое окно клики остановятся. Стоп: " + backend.advanced.abortKey.toUpperCase() + "."
+                                color: "#dec0bf"; font.pixelSize: 11
+                            }
                         }
                     }
                     }
@@ -3535,6 +3598,36 @@ ApplicationWindow {
                 elide: Text.ElideRight
             }
         }
+    }
+
+    property bool layoutSmokePassed: false
+    property string layoutSmokeError: ""
+    function verifyClassLayout() {
+        layoutSmokePassed = false;
+        layoutSmokeError = "";
+        if (classCardsRepeater.count < 2) {
+            layoutSmokeError = "Two classes were not rendered";
+            return;
+        }
+        var lowest = -1;
+        for (var i = 0; i < classCardsRepeater.count; ++i) {
+            var card = classCardsRepeater.itemAt(i);
+            if (!card || card.height + 0.5 < card.requiredHeight) {
+                layoutSmokeError = "Class card " + i + " does not fit its complete text";
+                return;
+            }
+            var top = card.mapToItem(classesPage, 0, 0).y;
+            if (top < lowest - 0.5) {
+                layoutSmokeError = "Class card " + i + " overlaps the previous card";
+                return;
+            }
+            lowest = top + card.height;
+        }
+        if (classesCopyButton.y < lowest + 8) {
+            layoutSmokeError = "Copy button overlaps the last class";
+            return;
+        }
+        layoutSmokePassed = true;
     }
 
     // QML state transitions exercised by CI without using game input.
