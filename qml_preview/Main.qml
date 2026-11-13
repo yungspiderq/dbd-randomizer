@@ -367,6 +367,9 @@ ApplicationWindow {
                 rotation: -45; color: "#ffffff"
             }
         }
+        ToolTip.visible: catalogHover.containsMouse
+        ToolTip.delay: 650
+        ToolTip.text: catalogRow.title + (catalogRow.subtitle ? "\n" + catalogRow.subtitle : "")
         MouseArea {
             id: catalogHover
             anchors.fill: parent
@@ -2272,7 +2275,7 @@ ApplicationWindow {
                                     id: favoriteCard
                                     property var entry: modelData
                                     width: favoriteList.width
-                                    height: 172
+                                    height: Math.max(172, favoriteActions.y + favoriteActions.height + 14)
                                     radius: 13
                                     color: win.colors.panel
                                     border.color: favoriteHover.hovered ? win.accent : win.colors.stroke
@@ -2287,6 +2290,7 @@ ApplicationWindow {
                                         placeholder: "DBD"
                                     }
                                     Column {
+                                        id: favoriteTextBlock
                                         x: 89
                                         y: 13
                                         width: parent.width - 102
@@ -2320,18 +2324,22 @@ ApplicationWindow {
                                             text: favoriteCard.entry.note || "Без заметки"
                                             color: "#90a0b3"
                                             font.pixelSize: 11
-                                            elide: Text.ElideRight
+                                            wrapMode: Text.Wrap
                                         }
                                     }
                                     Text {
-                                        x: 13; y: 100
+                                        id: favoriteSavedAt
+                                        x: 13
+                                        y: Math.max(100, favoriteTextBlock.y + favoriteTextBlock.implicitHeight + 7)
                                         text: "Сохранено " + favoriteCard.entry.saved_at
                                         color: "#7c8c9e"
                                         font.pixelSize: 10
                                     }
                                     Row {
-                                        x: 12; y: 122
+                                        id: favoriteActions
+                                        x: 12; y: favoriteSavedAt.y + favoriteSavedAt.implicitHeight + 12
                                         width: parent.width - 24
+                                        height: 36
                                         spacing: 8
                                         UiButton {
                                             width: (parent.width - 24) / 4
@@ -2671,13 +2679,14 @@ ApplicationWindow {
                                         property var selectedRows: modelData.kind === "top" ? statsPage.stat.top : statsPage.stat.least
                                         property color rankingFill: modelData.kind === "top" ? win.colors.chart : win.colors.chartAlt
                                         width: (statsPage.width - 12) / 2
-                                        height: 576
+                                        height: Math.max(576, rankingBody.implicitHeight + 22)
                                         radius: 13
                                         color: win.colors.surface
                                         border.color: win.stroke
                                         Column {
-                                            anchors.fill: parent
-                                            anchors.margins: 11
+                                            id: rankingBody
+                                            x: 11; y: 11
+                                            width: parent.width - 22
                                             spacing: 9
                                             Text {
                                                 text: modelData.title
