@@ -2147,6 +2147,10 @@ CHALLENGES = [
     },
 ]
 
+# Additional varied challenges keep the historical catalog and its IDs intact.
+from dbd_extra_general_challenges import EXTRA_GENERAL_CHALLENGES
+CHALLENGES.extend(EXTRA_GENERAL_CHALLENGES)
+
 # Personal power trials are kept separate from the older general challenges.
 # Each record is tied to a *real* killer in this exact catalog.
 from dbd_killer_challenges import build_killer_power_challenges
