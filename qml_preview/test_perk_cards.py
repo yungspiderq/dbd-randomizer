@@ -34,6 +34,27 @@ class PerkCardTests(unittest.TestCase):
         self.assertEqual(meta["kind"], "Общий навык")
         self.assertFalse(perk_info(self.db, "KILLER", core.EMPTY, empty=core.EMPTY)["found"])
 
+    def test_all_built_in_perks_have_nonempty_russian_summaries(self):
+        from perk_descriptions import description_for, PERK_DESCRIPTIONS
+        for side, characters, common in (
+            ("KILLER", self.db["killers"], self.db["killer_common_perks"]),
+            ("SURVIVOR", self.db["survivors"], self.db["surv_common_perks"]),
+        ):
+            all_perks = set(common)
+            for profile in characters.values():
+                all_perks.update(profile.get("perks", []) if isinstance(profile, dict)
+                                 else profile)
+            self.assertEqual(all_perks, set(PERK_DESCRIPTIONS[side]),
+                             "Descriptions drifted from the actual generator catalog")
+            for name in all_perks:
+                summary = description_for(side, name)
+                self.assertTrue(summary and len(summary) >= 30, name)
+                meta = perk_info(self.db, side, name, empty=core.EMPTY)
+                self.assertEqual(meta["description"], summary)
+        self.assertEqual(sum(len(d) for d in PERK_DESCRIPTIONS.values()), 320)
+        self.assertEqual(description_for("KILLER", "Навык, которого нет"), "")
+        self.assertEqual(description_for("SURVIVOR", ""), "")
+
     def test_pin_survives_full_generation_without_duplicate_skills(self):
         old = self._killer()
         nxt = self._killer(self.killer_names[1])
