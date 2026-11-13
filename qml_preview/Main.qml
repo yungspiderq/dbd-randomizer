@@ -572,10 +572,81 @@ ApplicationWindow {
                                             }
                                         }
                                         Text {
-                                            text: [backend.detail.skin, backend.detail["class"]].filter(Boolean).join(" · ")
+                                            text: backend.detail["class"] || ""
                                             width: parent.width
                                             elide: Text.ElideRight
                                             color: win.colors.accentSoft; font.pixelSize: 11
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                id: rolledSkinCard
+                                visible: backend.detail.hasBuild
+                                width: parent.width
+                                height: backend.detail.hasSkin ? 144 : 95
+                                radius: 13
+                                color: win.colors.panel
+                                border.color: backend.detail.hasSkin ? win.colors.accent : win.stroke
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 14
+                                    ArtThumb {
+                                        pixels: backend.detail.hasSkin ? 116 : 68
+                                        iconKey: backend.detail.skinImageKey || ""
+                                        placeholder: "SKIN"
+                                    }
+                                    Column {
+                                        width: parent.width - (backend.detail.hasSkin ? 132 : 84)
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 7
+                                        Text {
+                                            text: "ВЫПАВШИЙ СКИН"
+                                            color: win.colors.accentSoft
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            font.letterSpacing: 1
+                                        }
+                                        Text {
+                                            text: backend.detail.skin || "Скин не выбран"
+                                            width: parent.width
+                                            color: "#f0f4fa"
+                                            font.pixelSize: 17
+                                            font.bold: true
+                                            wrapMode: Text.Wrap
+                                            maximumLineCount: 2
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            visible: !!backend.detail.hasSkin
+                                            text: [backend.detail.skinRarity, backend.detail.skinType]
+                                                  .filter(Boolean).join(" · ") +
+                                                  (backend.detail.skinId >= 0 ? " · ID " + backend.detail.skinId : "")
+                                            width: parent.width
+                                            color: "#adbdd1"
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            visible: !!backend.detail.hasSkin &&
+                                                     !!backend.detail.skinEnglish &&
+                                                     backend.detail.skinEnglish !== backend.detail.skin
+                                            text: "EN: " + backend.detail.skinEnglish
+                                            width: parent.width
+                                            color: "#8fa3b8"
+                                            font.pixelSize: 10
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            visible: !backend.detail.hasSkin
+                                            text: backend.detail.skinEnabled
+                                                ? "В коллекции персонажа нет отмеченных скинов."
+                                                : "Включите «Случайная внешность» в настройках."
+                                            width: parent.width
+                                            color: "#98a8ba"
+                                            font.pixelSize: 11
+                                            wrapMode: Text.Wrap
                                         }
                                     }
                                 }
@@ -1426,6 +1497,10 @@ ApplicationWindow {
                                                     })
                                                     color: win.colors.accentSoft; font.pixelSize: 10; font.bold: true
                                                 }
+                                                ToolTip.visible: perkPickHover.containsMouse
+                                                ToolTip.delay: 700
+                                                ToolTip.text: modelData.name + "\\n" +
+                                                              (modelData.description || "Справка недоступна")
                                                 MouseArea {
                                                     id: perkPickHover
                                                     objectName: "builderPerkArea" + index
@@ -2990,11 +3065,24 @@ ApplicationWindow {
                 font.pixelSize: 13
             }
             Text {
-                text: "Описание игровых эффектов пока не хранится в базе приложения. Для актуальных значений открой справочник перков DBD."
+                text: "КРАТКОЕ ОПИСАНИЕ ЭФФЕКТА"
+                color: win.colors.accentSoft
+                font.pixelSize: 11
+                font.bold: true
+            }
+            Text {
+                text: perkPopup.info.description || "Для этого навыка краткая справка пока недоступна."
                 color: "#8c9eaf"
                 font.pixelSize: 11
                 width: parent.width
                 wrapMode: Text.Wrap
+            }
+            Text {
+                text: "Краткая справка без патч-зависимых чисел. Точные значения и условия проверяйте в игре или на DBD Wiki."
+                color: "#8094a9"
+                width: parent.width
+                wrapMode: Text.Wrap
+                font.pixelSize: 10
             }
             Row {
                 width: parent.width
