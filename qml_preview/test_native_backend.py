@@ -262,6 +262,46 @@ class QtBackendTests(unittest.TestCase):
         self.assertIn(info["kind"], ("Уникальный навык", "Общий навык"))
         self.assertTrue(info["found"])
         self.assertEqual(info["slot"], 1)
+        self.assertTrue(info["description"])
+        self.assertGreater(len(info["description"]), 30)
+
+    def test_rolled_skin_card_has_real_catalog_image_and_metadata(self):
+        from perk_descriptions import description_for
+        character, ident = next(
+            (name, ids[0]) for name, ids in core.SKINS.CHAR_SKINS.items() if ids
+        )
+        info = core.SKINS.SKINS_BY_ID[ident]
+        self.bridge.build = {
+            "char": character, "side": info["side"], "skin": {
+                "id": ident, "name": info["name"],
+                "display": info.get("name_ru") or info["name"]
+            },
+            "perks": [core.EMPTY] * 4, "addons": [],
+            "power_or_item": "", "forbidden": {}
+        }
+        self.bridge.cfg["options"]["skin_enabled"] = True
+        detail = self.bridge.detail
+        self.assertTrue(detail["hasSkin"])
+        self.assertEqual(detail["skinId"], ident)
+        self.assertEqual(detail["skinImageKey"], "skin:" + str(ident))
+        self.assertEqual(detail["skinEnglish"], info["name"])
+        self.assertEqual(detail["skin"], info.get("name_ru") or info["name"])
+        self.assertTrue(detail["skinType"])
+        self.assertTrue(detail["skinEnabled"])
+        self.assertTrue(detail["hasBuild"])
+        self.bridge.build["skin"] = None
+        detail = self.bridge.detail
+        self.assertFalse(detail["hasSkin"])
+        self.assertEqual(detail["skinImageKey"], "")
+        self.assertTrue(description_for("SURVIVOR", "Связь"))
+
+    def test_search_perks_has_dedicated_description_for_every_result(self):
+        for side in ("KILLER", "SURVIVOR"):
+            found = self.bridge.searchPerks(side, "", "all", "")
+            self.assertTrue(found)
+            self.assertTrue(all(row["description"] for row in found))
+            for row in found:
+                self.assertGreater(len(row["description"]), 30)
 
     def test_pinned_perks_survive_full_generate_and_have_no_duplicates(self):
         self.bridge.setRole("killer")
