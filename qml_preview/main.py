@@ -21,7 +21,7 @@ def main():
     # The native Windows style does not permit the customized QML controls.
     # Basic respects our fully custom buttons, fields, themes, and popups.
     QQuickStyle.setStyle("Basic")
-    app.setApplicationName("DBD Randomizer Qt 3.0.1")
+    app.setApplicationName("DBD Randomizer Qt 3.0.2")
     frozen = bool(getattr(sys, "frozen", False))
     packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
     icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
@@ -68,6 +68,26 @@ def main():
                 app.quit()
 
         QTimer.singleShot(350, verify_catalogs)
+    elif "--smoke-scrollbars" in sys.argv:
+        window = engine.rootObjects()[0]
+
+        def verify_scrollbars():
+            try:
+                from PySide6.QtCore import QMetaObject
+                assert QMetaObject.invokeMethod(window, "verifyFastScroll")
+                app.processEvents()
+                assert window.property("scrollSmokePassed"), (
+                    window.property("scrollSmokeError") or "ScrollBar smoke returned false"
+                )
+                print("Qt draggable scrollbars smoke OK")
+            except Exception as exc:
+                print("Qt draggable scrollbars smoke FAILED: " + repr(exc),
+                      file=sys.stderr)
+                appearance_check["ok"] = False
+            finally:
+                app.quit()
+
+        QTimer.singleShot(350, verify_scrollbars)
     elif "--smoke-builder" in sys.argv:
         window = engine.rootObjects()[0]
 

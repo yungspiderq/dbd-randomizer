@@ -1,7 +1,7 @@
-"""Windows CI: verify upgrading the published RC1 portable package to a Stable candidate.
+"""Windows CI: verify upgrading published Stable v3.0.1 to v3.0.2.
 
 This is isolated from the user's machine and does not publish any release.
-The target is a real unpacked published RC1; candidate ZIP comes from the
+The target is a real unpacked published Stable; candidate ZIP comes from the
 same CI build that is about to become the Stable prerelease.
 """
 from __future__ import annotations
@@ -34,13 +34,13 @@ def sha256(path: Path) -> str:
 
 def run(previous: Path, candidate: Path) -> None:
     assert sys.platform == "win32", "Windows runner required"
-    assert updater.CURRENT_TAG == "v3.0.1"
+    assert updater.CURRENT_TAG == "v3.0.2"
     previous = previous.resolve()
     candidate = candidate.resolve()
     verify_download(previous)
     verify_download(candidate)
 
-    with tempfile.TemporaryDirectory(prefix="DBD RC1 to Stable E2E - ") as folder:
+    with tempfile.TemporaryDirectory(prefix="DBD Stable Upgrade E2E - ") as folder:
         root = Path(folder)
         prior_folder = root / "extract-rc1"
         prior_folder.mkdir()
@@ -49,7 +49,7 @@ def run(previous: Path, candidate: Path) -> None:
         install.rename(destination)
 
         previous_exe = destination / updater.APP_EXE
-        smoke(previous_exe, destination, "published RC1")
+        smoke(previous_exe, destination, "published v3.0.1")
 
         cfg = core.default_config()
         cfg["options"]["side"] = "KILLER"
@@ -78,7 +78,7 @@ def run(previous: Path, candidate: Path) -> None:
         # across builds: check the visible QML version resource as well.
         qml = (staged / "_internal" / "qml_preview" / "Main.qml").read_text(
             encoding="utf-8")
-        assert "Qt v3.0.1" in qml, "Candidate QML still advertises an old version"
+        assert "Qt v3.0.2" in qml, "Candidate QML still advertises an old version"
 
         install_script = root / "apply_stable.ps1"
         install_script.write_text(updater.UPGRADE_SCRIPT, encoding="utf-8-sig")
@@ -124,7 +124,7 @@ def run(previous: Path, candidate: Path) -> None:
         assert retained["skins"][skin_char] == [skin_ids[0]], (
             "Persistent cosmetic ownership changed during updater migration"
         )
-        print("PASS: real RC1 portable -> candidate Stable portable; both EXEs launched, "
+        print("PASS: real Stable v3.0.1 -> v3.0.2 portable; both EXEs launched, "
               "PowerShell install replaced both EXE/runtime, and settings survived", flush=True)
 
 
