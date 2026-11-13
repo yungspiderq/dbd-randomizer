@@ -186,7 +186,7 @@ class QtBackendTests(unittest.TestCase):
         original_rotation = self.bridge.rotationEnabled
         self.bridge.setAppearanceTheme("frost")
         self.assertEqual(self.bridge.appearanceTheme, "frost")
-        self.assertEqual(self.bridge.appearancePalette["accent"], "#4298e5")
+        self.assertEqual(self.bridge.appearancePalette["accent"], "#8fb3cd")
         self.bridge.setAppearanceScale(1.2)
         self.assertAlmostEqual(self.bridge.appearanceScale, 1.2)
         self.bridge.setAnimationsEnabled(False)
