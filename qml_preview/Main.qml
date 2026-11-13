@@ -472,7 +472,7 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             text: option.title
             elide: Text.ElideRight
-            color: "#d9dfe8"
+            color: win.colors.text
             font.pixelSize: 12
         }
         Rectangle {
@@ -691,8 +691,8 @@ ApplicationWindow {
                                         width: parent.width
                                         spacing: 8
                                         Text {
-                                            text: "РЕЖИМ РАНДОМИЗАТОРА"
-                                            color: "#cad6e5"
+                                            text: "Режим генерации"
+                                            color: win.colors.text
                                             font.pixelSize: 11
                                             font.bold: true
                                             font.letterSpacing: 1
@@ -700,7 +700,7 @@ ApplicationWindow {
                                         }
                                         Item { width: 1; height: 1 }
                                         Text {
-                                            text: backend.rotationEnabled ? "РОТАЦИЯ АКТИВНА" : "КЛАССИКА"
+                                            text: backend.rotationEnabled ? "Ротация активна" : "Обычный"
                                             color: backend.rotationEnabled ? win.colors.accentSoft : "#8493a5"
                                             font.pixelSize: 10
                                             font.bold: true
@@ -744,7 +744,7 @@ ApplicationWindow {
                                             width: parent.width - 120
                                             elide: Text.ElideRight
                                             anchors.verticalCenter: parent.verticalCenter
-                                            color: "#dfb0a9"
+                                            color: win.colors.accentSoft
                                             font.pixelSize: 10
                                         }
                                         UiButton {
@@ -820,9 +820,9 @@ ApplicationWindow {
                                 visible: backend.detail.hasBuild
                                 width: parent.width
                                 height: backend.detail.hasSkin ? 144 : 95
-                                radius: 13
+                                radius: 12
                                 color: win.colors.panel
-                                border.color: backend.detail.hasSkin ? win.colors.accent : win.stroke
+                                border.color: win.colors.stroke
                                 Row {
                                     anchors.fill: parent
                                     anchors.margins: 12
@@ -837,7 +837,7 @@ ApplicationWindow {
                                         anchors.verticalCenter: parent.verticalCenter
                                         spacing: 7
                                         Text {
-                                            text: "ВЫПАВШИЙ СКИН"
+                                            text: "Выбранная внешность"
                                             color: win.colors.accentSoft
                                             font.pixelSize: 11
                                             font.bold: true
@@ -846,7 +846,7 @@ ApplicationWindow {
                                         Text {
                                             text: backend.detail.skin || "Скин не выбран"
                                             width: parent.width
-                                            color: "#f0f4fa"
+                                            color: win.colors.text
                                             font.pixelSize: 17
                                             font.bold: true
                                             wrapMode: Text.Wrap
@@ -859,7 +859,7 @@ ApplicationWindow {
                                                   .filter(Boolean).join(" · ") +
                                                   (backend.detail.skinId >= 0 ? " · ID " + backend.detail.skinId : "")
                                             width: parent.width
-                                            color: "#adbdd1"
+                                            color: win.colors.muted
                                             font.pixelSize: 11
                                             elide: Text.ElideRight
                                         }
@@ -869,7 +869,7 @@ ApplicationWindow {
                                                      backend.detail.skinEnglish !== backend.detail.skin
                                             text: "EN: " + backend.detail.skinEnglish
                                             width: parent.width
-                                            color: "#8fa3b8"
+                                            color: win.colors.muted
                                             font.pixelSize: 10
                                             elide: Text.ElideRight
                                         }
@@ -879,7 +879,7 @@ ApplicationWindow {
                                                 ? "В коллекции персонажа нет отмеченных скинов."
                                                 : "Включите «Случайная внешность» в настройках."
                                             width: parent.width
-                                            color: "#98a8ba"
+                                            color: win.colors.muted
                                             font.pixelSize: 11
                                             wrapMode: Text.Wrap
                                         }
@@ -898,7 +898,7 @@ ApplicationWindow {
                                     width: parent.width - 26
                                     spacing: 10
                                     Text {
-                                        text: "АДДОНЫ · НАЗВАНИЯ"
+                                        text: "Улучшения"
                                         color: win.muted
                                         font.pixelSize: 11
                                         font.bold: true
@@ -932,14 +932,14 @@ ApplicationWindow {
                                                         spacing: 6
                                                         Text {
                                                             text: "АДДОН " + addonCard.addonInfo.slot
-                                                            color: "#8d9eaf"
+                                                            color: win.colors.muted
                                                             font.pixelSize: 10
                                                             font.bold: true
                                                         }
                                                         Text {
                                                             text: addonCard.addonInfo.filled ? addonCard.addonInfo.name : "Нет аддона"
                                                             width: parent.width
-                                                            color: "#edf2f8"
+                                                            color: win.colors.text
                                                             font.pixelSize: 12
                                                             font.bold: true
                                                             wrapMode: Text.Wrap
@@ -977,9 +977,9 @@ ApplicationWindow {
                                 visible: !!backend.detail.challenge
                                 width: parent.width
                                 height: Math.max(166, challengeContent.implicitHeight + 28)
-                                radius: 13
-                                color: "#221f29"
-                                border.color: "#6c4149"
+                                radius: 12
+                                color: win.colors.panel
+                                border.color: win.colors.stroke
                                 Column {
                                     id: challengeContent
                                     x: 15
@@ -990,7 +990,7 @@ ApplicationWindow {
                                         width: parent.width
                                         spacing: 10
                                         Text {
-                                            text: "УСЛОВИЕ ЧЕЛЛЕНДЖА"
+                                            text: "Испытание матча"
                                             color: win.colors.accentSoft
                                             font.pixelSize: 11
                                             font.bold: true
@@ -999,7 +999,7 @@ ApplicationWindow {
                                         }
                                         Text {
                                             text: backend.detail.challengeDifficulty ? "· " + backend.detail.challengeDifficulty.toUpperCase() + (backend.detail.challengeTheme ? " · " + backend.detail.challengeTheme.toUpperCase() : "") : ""
-                                            color: "#c9a8ab"
+                                            color: win.colors.muted
                                             font.pixelSize: 10
                                             font.bold: true
                                             anchors.verticalCenter: parent.verticalCenter
@@ -1016,7 +1016,7 @@ ApplicationWindow {
                                     Text {
                                         text: backend.detail.challenge
                                         width: parent.width
-                                        color: "#f6ebee"
+                                        color: win.colors.text
                                         font.pixelSize: 17
                                         font.bold: true
                                         wrapMode: Text.Wrap
@@ -1032,7 +1032,7 @@ ApplicationWindow {
                                         visible: !!backend.detail.challengeWhy
                                         text: backend.detail.challengeWhy
                                         width: parent.width
-                                        color: "#a995a6"
+                                        color: win.colors.muted
                                         font.pixelSize: 11
                                         font.italic: true
                                         wrapMode: Text.Wrap
@@ -1060,8 +1060,8 @@ ApplicationWindow {
                                 width: parent.width
                                 spacing: 8
                                 Text {
-                                    text: "НАВЫКИ · 4 СЛОТА"
-                                    color: "#b9c6d6"
+                                    text: "Навыки · 4 слота"
+                                    color: win.colors.muted
                                     font.pixelSize: 11
                                     font.bold: true
                                     font.letterSpacing: 1
@@ -1089,14 +1089,15 @@ ApplicationWindow {
                                         radius: 14
                                         color: win.colors.panel
                                         border.width: 1
-                                        border.color: card.perkInfo.locked ? win.colors.accentSoft :
-                                                      cardHover.containsMouse ? win.accent : win.colors.stroke
+                                        border.color: card.perkInfo.locked ? win.colors.accent :
+                                                       cardHover.containsMouse ? win.colors.inputStroke : win.colors.stroke
                                         Behavior on border.color { ColorAnimation { duration: backend.animationsEnabled ? 160 : 0 } }
                                         clip: true
 
                                         Rectangle {
                                             width: 4; height: parent.height
-                                            color: card.perkInfo.locked ? win.colors.accentSoft : win.accent
+                                            color: win.colors.accent
+                                            visible: card.perkInfo.locked
                                         }
                                         Rectangle {
                                             x: 4; y: 0; width: parent.width - 4; height: 35
@@ -1104,8 +1105,8 @@ ApplicationWindow {
                                         }
                                         Text {
                                             x: 15; y: 11
-                                            text: "СЛОТ 0" + (card.slotIndex + 1)
-                                            color: "#aab9ca"
+                                            text: "Слот " + (card.slotIndex + 1)
+                                            color: win.colors.muted
                                             font.pixelSize: 10
                                             font.bold: true
                                             font.letterSpacing: 1
@@ -1222,10 +1223,10 @@ ApplicationWindow {
                                                 NumberAnimation {
                                                     target: card
                                                     property: "scale"
-                                                    from: 0.94
-                                                    to: 1
-                                                    duration: backend.animationsEnabled ? 300 : 0
-                                                    easing.type: Easing.OutBack
+                                                    from: 0.985
+                                                     to: 1
+                                                     duration: backend.animationsEnabled ? 150 : 0
+                                                     easing.type: Easing.OutCubic
                                                 }
                                             }
                                         }
@@ -1249,18 +1250,19 @@ ApplicationWindow {
                                 spacing: 8
                                 UiButton {
                                     width: parent.width * 0.46 - 6
-                                    label: "СГЕНЕРИРОВАТЬ"
-                                    primary: true
+                                    label: "Сгенерировать"
+                                    iconName: "dice"
+                                    prominent: true
                                     onClicked: backend.generate()
                                 }
                                 UiButton {
                                     width: parent.width * 0.30 - 6
-                                    label: "ПЕРЕБРОСИТЬ СВОБОДНЫЕ"
+                                    label: "Перебросить свободные"
                                     onClicked: backend.rerollPerks()
                                 }
                                 UiButton {
                                     width: parent.width * 0.24 - 4
-                                    label: "КОПИРОВАТЬ"
+                                    label: "Копировать"
                                     onClicked: backend.copyBuild()
                                 }
                             }
@@ -1291,7 +1293,7 @@ ApplicationWindow {
                                 width: parent.width; height: 86; radius: 12; color: win.surface; border.color: win.stroke
                                 Column { anchors.fill: parent; anchors.margins: 15; spacing: 9
                                     Text { text: "ИСТОРИЯ"; color: win.muted; font.pixelSize: 11; font.bold: true }
-                                    Text { text: backend.history.length ? backend.history[0] : "Здесь появится последний билд"; width: parent.width; elide: Text.ElideRight; color: "#cdd5df"; font.pixelSize: 12 }
+                                    Text { text: backend.history.length ? backend.history[0] : "Здесь появится последний билд"; width: parent.width; elide: Text.ElideRight; color: win.colors.text; font.pixelSize: 12 }
                                 }
                             }
                         }
@@ -1430,7 +1432,7 @@ ApplicationWindow {
                                 else makerAddon2.text = name;
                                 addonSlot = 1 - addonSlot;
                             }
-                            Text { text: "Визуальный конструктор билдов"; color: "#f0f3f8"; font.pixelSize: 18; font.bold: true }
+                            Text { text: "Визуальный конструктор билдов"; color: win.colors.text; font.pixelSize: 18; font.bold: true }
                             Text {
                                 text: "Нажми на навык для добавления или перетащи его в слот. Навыки в слотах можно переставлять перетаскиванием."
                                 width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 11; color: win.muted
@@ -1473,7 +1475,7 @@ ApplicationWindow {
                                             color: makerCharHover.containsMouse ? win.colors.stroke : win.colors.panel
                                             border.color: makerChar.text === modelData.name ? win.accent : win.colors.stroke
                                             ArtThumb { x: 5; y: 4; pixels: 41; iconKey: modelData.name; placeholder: "DBD" }
-                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; color: "#f1f4f8"; font.pixelSize: 12; width: parent.width - 66; elide: Text.ElideRight }
+                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; color: win.colors.text; font.pixelSize: 12; width: parent.width - 66; elide: Text.ElideRight }
                                             MouseArea { id: makerCharHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: makerChar.text = modelData.name }
                                         }
                                     }
@@ -2046,7 +2048,7 @@ ApplicationWindow {
                                                     spacing: 9
                                                     Text {
                                                         text: skinPage.previewSkin ? skinPage.previewSkin.name : "Набор не выбран"
-                                                        color: "#f0f4fa"; font.pixelSize: 13; font.bold: true
+                                                        color: win.colors.text; font.pixelSize: 13; font.bold: true
                                                         wrapMode: Text.WordWrap; width: parent.width; maximumLineCount: 3; elide: Text.ElideRight
                                                     }
                                                     Text {
