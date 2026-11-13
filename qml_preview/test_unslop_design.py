@@ -56,7 +56,7 @@ class UnslopDesignTests(unittest.TestCase):
             'border.color: primary ? win.colors.accent : win.colors.stroke',
             'prominent: true',
             'text: "Генератор билдов"',
-            'QT QUICK • STABLE 3.1.0',
+            'QT QUICK • STABLE 3.1.1',
         ):
             with self.subTest(marker=marker):
                 # Main title uses an expression, so check that on its own.
