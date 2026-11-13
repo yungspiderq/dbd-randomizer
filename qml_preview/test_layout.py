@@ -42,7 +42,7 @@ class ResponsiveLayoutTests(unittest.TestCase):
         self.assertIn('id: buttonText', QML)
         self.assertIn('elide: Text.ElideRight', QML)
         self.assertIn('buttonText.truncated', QML)
-        self.assertIn('QT QUICK • STABLE 3.1.0', QML)
+        self.assertIn('QT QUICK • STABLE 3.1.1', QML)
 
 
 if __name__ == "__main__":
