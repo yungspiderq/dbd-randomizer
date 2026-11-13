@@ -52,7 +52,7 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(u.ASSET, "DBDRandomizerQtBeta.zip")
 
     def test_stable_version_does_not_offer_itself(self):
-        self.assertEqual(u.CURRENT_TAG, "v3.0.4")
+        self.assertEqual(u.CURRENT_TAG, "v3.1.0")
         def release(tag):
             return {"draft": False, "tag_name": tag,
                     "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
@@ -68,8 +68,8 @@ class UpdaterTests(unittest.TestCase):
                 release(u.CURRENT_TAG), release("v3.0.0-qt-rc.1")]).encode())):
             self.assertIsNone(u.check())
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release("v3.0.5"), release(u.CURRENT_TAG)]).encode())):
-            self.assertEqual(u.check()["tag"], "v3.0.5")
+                release("v3.1.1"), release(u.CURRENT_TAG)]).encode())):
+            self.assertEqual(u.check()["tag"], "v3.1.1")
 
     def test_incomplete_release_without_checksum_is_not_offered(self):
         def release(tag, checksum):
@@ -84,8 +84,8 @@ class UpdaterTests(unittest.TestCase):
                                "/releases/download/" + tag + "/" + u.ASSET + ".sha256"})
             return {"draft": False, "tag_name": tag, "assets": assets,
                     "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag}
-        invalid = release("v3.0.6", False)
-        complete = release("v3.0.5", True)
+        invalid = release("v3.1.2", False)
+        complete = release("v3.1.1", True)
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([invalid, complete]).encode())):
             self.assertEqual(u.check()["tag"], complete["tag_name"])
@@ -297,7 +297,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_newer_release_requires_portable_asset(self):
         base = {
-            "draft": False, "tag_name": "v3.0.5",
+            "draft": False, "tag_name": "v3.1.1",
             "name": "New Version",
             "html_url": "https://github.com/" + u.REPO + "/releases/tag/new",
             "assets": [
@@ -310,7 +310,7 @@ class UpdaterTests(unittest.TestCase):
             ]
         }
         latest = dict(base)
-        latest["tag_name"] = "v3.0.6"
+        latest["tag_name"] = "v3.1.2"
         latest["assets"] = [{"name": "DBDRandomizerQtBeta.exe", "size": 20000000}]
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([base, latest]).encode())):

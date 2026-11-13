@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt v3.0.4"
+    title: "DBD Randomizer Qt · v3.1.0"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -34,6 +34,8 @@ ApplicationWindow {
     property color muted: colors.muted
     property color accent: colors.accent
     font.family: "Segoe UI"
+    // Graphite workspace: restrained chrome, character art as the hero.
+    property int designUnit: 4
     onClosing: backend.close()
 
     // Headless QML check for interactive scrollbar instances.
@@ -176,15 +178,17 @@ ApplicationWindow {
         property string label: ""
         property string iconName: ""
         property bool primary: false
+        property bool prominent: false
         signal clicked()
-        implicitHeight: 44
-        opacity: enabled ? 1 : 0.55
-        radius: 10
-        color: primary ? (over.containsMouse ? win.colors.accentHover : win.accent) :
-                         (over.containsMouse ? win.colors.buttonHover : win.colors.button)
-        border.width: primary ? 0 : 1
-        border.color: win.stroke
-        Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 170 : 0 } }
+        implicitHeight: 42
+        opacity: enabled ? 1 : 0.5
+        radius: 8
+        color: prominent ? (over.containsMouse ? "#ffffff" : "#e8eef2") :
+               primary ? win.colors.navActive :
+               (over.containsMouse ? win.colors.buttonHover : win.colors.button)
+        border.width: prominent ? 0 : 1
+        border.color: primary ? win.colors.accent : win.colors.stroke
+        Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 120 : 0 } }
         clip: true
         Row {
             width: Math.max(0, button.width - 16)
@@ -194,7 +198,7 @@ ApplicationWindow {
                 visible: !!button.iconName
                 width: 15; height: 15
                 kind: button.iconName
-                tint: button.primary ? "#111820" : "#dbe8fa"
+                tint: button.prominent ? "#141a20" : button.primary ? win.colors.accentSoft : win.colors.muted
                 anchors.verticalCenter: parent.verticalCenter
             }
             Text {
@@ -205,7 +209,7 @@ ApplicationWindow {
                 horizontalAlignment: Text.AlignHCenter
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
-                color: button.primary ? "#111820" : "#eef5fd"
+                color: button.prominent ? "#141a20" : button.primary ? win.colors.text : win.colors.muted
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -386,17 +390,17 @@ ApplicationWindow {
         property string iconName: "all"
         signal clicked()
         width: parent.width
-        height: 48
-        radius: 9
+        height: 40
+        radius: 8
         color: win.page === label ? win.colors.navActive : hover.containsMouse ? win.colors.navHover : "transparent"
         Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 170 : 0 } }
         Rectangle { width: 3; height: parent.height - 16; anchors.verticalCenter: parent.verticalCenter; color: win.accent; visible: win.page === nav.label; radius: 2 }
         Row {
             anchors.verticalCenter: parent.verticalCenter
-            x: 16
-            spacing: 14
-            MiniGlyph { width: 20; height: 20; kind: nav.iconName; tint: win.page === nav.label ? win.accent : "#8da0b6"; anchors.verticalCenter: parent.verticalCenter }
-            Text { text: nav.label; color: win.page === nav.label ? "white" : win.colors.muted; font.pixelSize: 13; font.weight: win.page === nav.label ? Font.Bold : Font.Normal }
+            x: 12
+            spacing: 12
+            MiniGlyph { width: 18; height: 18; kind: nav.iconName; tint: win.page === nav.label ? win.colors.accentSoft : win.colors.muted; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: nav.label; color: win.page === nav.label ? win.colors.text : win.colors.muted; font.pixelSize: 13; font.weight: win.page === nav.label ? Font.DemiBold : Font.Normal }
         }
         MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: nav.clicked() }
     }
@@ -468,7 +472,7 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             text: option.title
             elide: Text.ElideRight
-            color: "#d9dfe8"
+            color: win.colors.text
             font.pixelSize: 12
         }
         Rectangle {
@@ -502,7 +506,7 @@ ApplicationWindow {
         }
         spacing: 0
         Rectangle {
-            Layout.preferredWidth: 228
+            Layout.preferredWidth: 252
             Layout.fillHeight: true
             color: win.colors.sidebar
             border.color: win.colors.stroke
@@ -515,21 +519,31 @@ ApplicationWindow {
                 boundsBehavior: Flickable.StopAtBounds
                 Column {
                 id: sidebarContents
-                x: 18
-                y: 25
-                width: parent.width - 36
-                spacing: 8
-                Image {
-                    width: 51; height: 51
-                    source: "assets/app_icon.png"
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                    anchors.horizontalCenter: parent.horizontalCenter
+                x: 16
+                y: 20
+                width: parent.width - 32
+                spacing: 4
+                Row {
+                    width: parent.width
+                    height: 60
+                    spacing: 12
+                    Image {
+                        width: 40; height: 40
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: "assets/app_icon.png"
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                    }
+                    Column {
+                        width: parent.width - 52
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 5
+                        Text { text: "DBD Randomizer"; color: win.colors.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+                        Text { text: "QT QUICK • STABLE 3.1.0"; color: win.colors.muted; font.pixelSize: 10 }
+                    }
                 }
-                Item { width: 1; height: 12 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • STABLE 3.0.4"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
-                Item { height: 10 }
+                Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
+                Item { height: 12 }
                 NavItem { ordinal: 1; label: "Билд"; iconName: "dice"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; iconName: "builder"; onClicked: win.page = label }
                 NavItem { ordinal: 3; label: "Избранное"; iconName: "favorite"; onClicked: win.page = label }
@@ -540,19 +554,20 @@ ApplicationWindow {
                 NavItem { ordinal: 8; label: "Клики и тайминги"; iconName: "timings"; onClicked: win.page = label }
                 NavItem { ordinal: 9; label: "Классы 2v8"; iconName: "class"; onClicked: win.page = label }
                 NavItem { ordinal: 10; label: "Оформление"; iconName: "theme"; onClicked: win.page = label }
-                Item { height: 10 }
+                Item { height: 16 }
                 Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
-                Item { height: 10 }
-                UiButton { width: parent.width; label: "Новый билд"; onClicked: { win.page = "Билд"; backend.generate() } }
+                Item { height: 12 }
+                UiButton { width: parent.width; label: "Новый билд"; iconName: "dice"; onClicked: { win.page = "Билд"; backend.generate() } }
                 UiButton { width: parent.width; label: "Копировать билд"; onClicked: backend.copyBuild() }
                 Item { height: 10 }
                 Rectangle {
-                    width: parent.width; height: 74; radius: 10; color: win.colors.button
-                    border.color: "#534046"
+                    width: parent.width; height: 62; radius: 8
+                    color: win.colors.surface
+                    border.color: win.colors.stroke
                     Column {
-                        anchors.centerIn: parent; spacing: 8
-                        Text { text: "QT ИНТЕРФЕЙС"; color: win.colors.accentSoft; font.pixelSize: 10; font.weight: Font.Bold }
-                        Text { text: "Оригинальные игровые данные\nи Qt-интерфейс"; color: "#c1b9bc"; font.pixelSize: 11 }
+                        x: 12; y: 10; spacing: 6
+                        Text { text: "Мастерская билдов"; color: win.colors.text; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        Text { text: "Навыки · внешность · испытания"; color: win.colors.muted; font.pixelSize: 10 }
                     }
                 }
                 }
@@ -578,15 +593,15 @@ ApplicationWindow {
                     boundsBehavior: Flickable.StopAtBounds
                     Column {
                         id: content
-                        x: 26; y: 25
+                        x: 32; y: 28
                         SequentialAnimation {
                             id: pageReveal
                             NumberAnimation {
                                 target: content
                                 property: "opacity"
-                                from: 0.58
+                                from: 0.94
                                 to: 1.0
-                                duration: backend.animationsEnabled ? 240 : 0
+                                duration: backend.animationsEnabled ? 140 : 0
                                 easing.type: Easing.OutCubic
                             }
                         }
@@ -602,10 +617,36 @@ ApplicationWindow {
                                 work.contentY = 0
                             }
                         }
-                        width: work.width - 52
-                        spacing: 18
-                        Text { text: win.page === "Билд" ? "Генератор билда" : win.page; font.pixelSize: 27; font.weight: Font.Bold; color: win.colors.text }
-                        Text { text: "Новый интерфейс с оригинальной базой DBD и автоматизацией"; font.pixelSize: 12; color: win.muted }
+                        width: Math.max(0, work.width - 64)
+                        spacing: 20
+                        Row {
+                            width: parent.width; spacing: 16
+                            Text {
+                                text: win.page === "Билд" ? "Генератор билдов" : win.page
+                                width: parent.width - 112
+                                font.pixelSize: 29
+                                font.weight: Font.DemiBold
+                                color: win.colors.text
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: "DBD / 3.1"
+                                width: 96
+                                horizontalAlignment: Text.AlignRight
+                                anchors.verticalCenter: parent.verticalCenter
+                                font.pixelSize: 11
+                                color: win.colors.muted
+                            }
+                        }
+                        Text {
+                            width: parent.width
+                            text: win.page === "Билд"
+                                  ? "Персонаж, навыки и испытание для следующего матча"
+                                  : "Сборки и игровые данные"
+                            font.pixelSize: 13
+                            wrapMode: Text.Wrap
+                            color: win.colors.muted
+                        }
                         Rectangle { width: parent.width; height: 1; color: win.stroke }
                         Column {
                             visible: win.page === "Билд"
@@ -650,8 +691,8 @@ ApplicationWindow {
                                         width: parent.width
                                         spacing: 8
                                         Text {
-                                            text: "РЕЖИМ РАНДОМИЗАТОРА"
-                                            color: "#cad6e5"
+                                            text: "Режим генерации"
+                                            color: win.colors.text
                                             font.pixelSize: 11
                                             font.bold: true
                                             font.letterSpacing: 1
@@ -659,7 +700,7 @@ ApplicationWindow {
                                         }
                                         Item { width: 1; height: 1 }
                                         Text {
-                                            text: backend.rotationEnabled ? "РОТАЦИЯ АКТИВНА" : "КЛАССИКА"
+                                            text: backend.rotationEnabled ? "Ротация активна" : "Обычный"
                                             color: backend.rotationEnabled ? win.colors.accentSoft : "#8493a5"
                                             font.pixelSize: 10
                                             font.bold: true
@@ -703,7 +744,7 @@ ApplicationWindow {
                                             width: parent.width - 120
                                             elide: Text.ElideRight
                                             anchors.verticalCenter: parent.verticalCenter
-                                            color: "#dfb0a9"
+                                            color: win.colors.accentSoft
                                             font.pixelSize: 10
                                         }
                                         UiButton {
@@ -715,53 +756,61 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                            Text { text: "ВАШ БИЛД"; color: win.muted; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                            Text { text: "Результат генерации"; color: win.colors.muted; font.pixelSize: 13; font.weight: Font.DemiBold }
                             Rectangle {
+                                id: generatedHero
+                                objectName: "generatedHero"
                                 width: parent.width
-                                height: 146
-                                radius: 13
-                                color: win.surface
-                                border.color: win.stroke
+                                height: Math.max(170, heroBody.implicitHeight + 36)
+                                radius: 12
+                                color: win.colors.surface
+                                border.color: win.colors.stroke
+                                Rectangle {
+                                    x: 0; y: 18; width: 3; height: parent.height - 36
+                                    radius: 2; color: win.colors.accent
+                                }
                                 Row {
-                                    anchors.fill: parent
-                                    anchors.margins: 12
-                                    spacing: 14
-                                    ArtThumb {
-                                        pixels: 120
-                                        iconKey: backend.detail.char
-                                        placeholder: "DBD"
-                                    }
+                                    id: heroBody
+                                    x: 20; y: 18
+                                    width: parent.width - 40
+                                    spacing: 20
+                                    ArtThumb { pixels: 116; iconKey: backend.detail.char; placeholder: "DBD" }
                                     Column {
-                                        width: parent.width - 135
-                                        spacing: 11
+                                        width: parent.width - 136
+                                        spacing: 10
+                                        Text {
+                                            text: backend.role === "killer" ? "Убийца" : "Выживший"
+                                            color: win.colors.accentSoft
+                                            font.pixelSize: 11; font.weight: Font.DemiBold
+                                        }
                                         Text {
                                             text: backend.detail.char || "Персонаж ещё не выбран"
-                                            width: parent.width
-                                            elide: Text.ElideRight
-                                            color: win.colors.text
-                                            font.pixelSize: 17
-                                            font.bold: true
+                                            width: parent.width; wrapMode: Text.Wrap
+                                            color: win.colors.text; font.pixelSize: 23
+                                            font.weight: Font.DemiBold
                                         }
                                         Row {
-                                            spacing: 10
-                                            ArtThumb { pixels: 48; iconKey: backend.detail.power; placeholder: "ITEM" }
+                                            width: parent.width; spacing: 12
+                                            ArtThumb { pixels: 44; iconKey: backend.detail.power; placeholder: "ITEM" }
                                             Column {
-                                                spacing: 4
-                                                Text { text: backend.role === "killer" ? "СИЛА МАНЬЯКА" : "ПРЕДМЕТ ВЫЖИВШЕГО"; color: "#8394a7"; font.pixelSize: 10; font.bold: true }
+                                                width: parent.width - 56
+                                                spacing: 5
+                                                Text {
+                                                    text: backend.role === "killer" ? "Способность" : "Предмет"
+                                                    color: win.colors.muted; font.pixelSize: 11
+                                                }
                                                 Text {
                                                     text: backend.detail.power || "Не выбрано"
-                                                    width: 350
-                                                    elide: Text.ElideRight
-                                                    color: "#e1e7ef"
-                                                    font.pixelSize: 13
+                                                    width: parent.width; wrapMode: Text.Wrap
+                                                    color: win.colors.text; font.pixelSize: 13
                                                 }
                                             }
                                         }
                                         Text {
                                             text: backend.detail["class"] || ""
-                                            width: parent.width
-                                            elide: Text.ElideRight
-                                            color: win.colors.accentSoft; font.pixelSize: 11
+                                            visible: !!text
+                                            width: parent.width; wrapMode: Text.Wrap
+                                            color: win.colors.muted; font.pixelSize: 12
                                         }
                                     }
                                 }
@@ -771,9 +820,9 @@ ApplicationWindow {
                                 visible: backend.detail.hasBuild
                                 width: parent.width
                                 height: backend.detail.hasSkin ? 144 : 95
-                                radius: 13
+                                radius: 12
                                 color: win.colors.panel
-                                border.color: backend.detail.hasSkin ? win.colors.accent : win.stroke
+                                border.color: win.colors.stroke
                                 Row {
                                     anchors.fill: parent
                                     anchors.margins: 12
@@ -788,7 +837,7 @@ ApplicationWindow {
                                         anchors.verticalCenter: parent.verticalCenter
                                         spacing: 7
                                         Text {
-                                            text: "ВЫПАВШИЙ СКИН"
+                                            text: "Выбранная внешность"
                                             color: win.colors.accentSoft
                                             font.pixelSize: 11
                                             font.bold: true
@@ -797,7 +846,7 @@ ApplicationWindow {
                                         Text {
                                             text: backend.detail.skin || "Скин не выбран"
                                             width: parent.width
-                                            color: "#f0f4fa"
+                                            color: win.colors.text
                                             font.pixelSize: 17
                                             font.bold: true
                                             wrapMode: Text.Wrap
@@ -810,7 +859,7 @@ ApplicationWindow {
                                                   .filter(Boolean).join(" · ") +
                                                   (backend.detail.skinId >= 0 ? " · ID " + backend.detail.skinId : "")
                                             width: parent.width
-                                            color: "#adbdd1"
+                                            color: win.colors.muted
                                             font.pixelSize: 11
                                             elide: Text.ElideRight
                                         }
@@ -820,7 +869,7 @@ ApplicationWindow {
                                                      backend.detail.skinEnglish !== backend.detail.skin
                                             text: "EN: " + backend.detail.skinEnglish
                                             width: parent.width
-                                            color: "#8fa3b8"
+                                            color: win.colors.muted
                                             font.pixelSize: 10
                                             elide: Text.ElideRight
                                         }
@@ -830,7 +879,7 @@ ApplicationWindow {
                                                 ? "В коллекции персонажа нет отмеченных скинов."
                                                 : "Включите «Случайная внешность» в настройках."
                                             width: parent.width
-                                            color: "#98a8ba"
+                                            color: win.colors.muted
                                             font.pixelSize: 11
                                             wrapMode: Text.Wrap
                                         }
@@ -849,7 +898,7 @@ ApplicationWindow {
                                     width: parent.width - 26
                                     spacing: 10
                                     Text {
-                                        text: "АДДОНЫ · НАЗВАНИЯ"
+                                        text: "Улучшения"
                                         color: win.muted
                                         font.pixelSize: 11
                                         font.bold: true
@@ -883,14 +932,14 @@ ApplicationWindow {
                                                         spacing: 6
                                                         Text {
                                                             text: "АДДОН " + addonCard.addonInfo.slot
-                                                            color: "#8d9eaf"
+                                                            color: win.colors.muted
                                                             font.pixelSize: 10
                                                             font.bold: true
                                                         }
                                                         Text {
                                                             text: addonCard.addonInfo.filled ? addonCard.addonInfo.name : "Нет аддона"
                                                             width: parent.width
-                                                            color: "#edf2f8"
+                                                            color: win.colors.text
                                                             font.pixelSize: 12
                                                             font.bold: true
                                                             wrapMode: Text.Wrap
@@ -928,9 +977,9 @@ ApplicationWindow {
                                 visible: !!backend.detail.challenge
                                 width: parent.width
                                 height: Math.max(166, challengeContent.implicitHeight + 28)
-                                radius: 13
-                                color: "#221f29"
-                                border.color: "#6c4149"
+                                radius: 12
+                                color: win.colors.panel
+                                border.color: win.colors.stroke
                                 Column {
                                     id: challengeContent
                                     x: 15
@@ -941,7 +990,7 @@ ApplicationWindow {
                                         width: parent.width
                                         spacing: 10
                                         Text {
-                                            text: "УСЛОВИЕ ЧЕЛЛЕНДЖА"
+                                            text: "Испытание матча"
                                             color: win.colors.accentSoft
                                             font.pixelSize: 11
                                             font.bold: true
@@ -950,7 +999,7 @@ ApplicationWindow {
                                         }
                                         Text {
                                             text: backend.detail.challengeDifficulty ? "· " + backend.detail.challengeDifficulty.toUpperCase() + (backend.detail.challengeTheme ? " · " + backend.detail.challengeTheme.toUpperCase() : "") : ""
-                                            color: "#c9a8ab"
+                                            color: win.colors.muted
                                             font.pixelSize: 10
                                             font.bold: true
                                             anchors.verticalCenter: parent.verticalCenter
@@ -967,7 +1016,7 @@ ApplicationWindow {
                                     Text {
                                         text: backend.detail.challenge
                                         width: parent.width
-                                        color: "#f6ebee"
+                                        color: win.colors.text
                                         font.pixelSize: 17
                                         font.bold: true
                                         wrapMode: Text.Wrap
@@ -983,7 +1032,7 @@ ApplicationWindow {
                                         visible: !!backend.detail.challengeWhy
                                         text: backend.detail.challengeWhy
                                         width: parent.width
-                                        color: "#a995a6"
+                                        color: win.colors.muted
                                         font.pixelSize: 11
                                         font.italic: true
                                         wrapMode: Text.Wrap
@@ -1011,8 +1060,8 @@ ApplicationWindow {
                                 width: parent.width
                                 spacing: 8
                                 Text {
-                                    text: "НАВЫКИ · 4 СЛОТА"
-                                    color: "#b9c6d6"
+                                    text: "Навыки · 4 слота"
+                                    color: win.colors.muted
                                     font.pixelSize: 11
                                     font.bold: true
                                     font.letterSpacing: 1
@@ -1040,14 +1089,15 @@ ApplicationWindow {
                                         radius: 14
                                         color: win.colors.panel
                                         border.width: 1
-                                        border.color: card.perkInfo.locked ? win.colors.accentSoft :
-                                                      cardHover.containsMouse ? win.accent : win.colors.stroke
+                                        border.color: card.perkInfo.locked ? win.colors.accent :
+                                                       cardHover.containsMouse ? win.colors.inputStroke : win.colors.stroke
                                         Behavior on border.color { ColorAnimation { duration: backend.animationsEnabled ? 160 : 0 } }
                                         clip: true
 
                                         Rectangle {
                                             width: 4; height: parent.height
-                                            color: card.perkInfo.locked ? win.colors.accentSoft : win.accent
+                                            color: win.colors.accent
+                                            visible: card.perkInfo.locked
                                         }
                                         Rectangle {
                                             x: 4; y: 0; width: parent.width - 4; height: 35
@@ -1055,8 +1105,8 @@ ApplicationWindow {
                                         }
                                         Text {
                                             x: 15; y: 11
-                                            text: "СЛОТ 0" + (card.slotIndex + 1)
-                                            color: "#aab9ca"
+                                            text: "Слот " + (card.slotIndex + 1)
+                                            color: win.colors.muted
                                             font.pixelSize: 10
                                             font.bold: true
                                             font.letterSpacing: 1
@@ -1173,10 +1223,10 @@ ApplicationWindow {
                                                 NumberAnimation {
                                                     target: card
                                                     property: "scale"
-                                                    from: 0.94
-                                                    to: 1
-                                                    duration: backend.animationsEnabled ? 300 : 0
-                                                    easing.type: Easing.OutBack
+                                                    from: 0.985
+                                                     to: 1
+                                                     duration: backend.animationsEnabled ? 150 : 0
+                                                     easing.type: Easing.OutCubic
                                                 }
                                             }
                                         }
@@ -1200,18 +1250,19 @@ ApplicationWindow {
                                 spacing: 8
                                 UiButton {
                                     width: parent.width * 0.46 - 6
-                                    label: "СГЕНЕРИРОВАТЬ"
-                                    primary: true
+                                    label: "Сгенерировать"
+                                    iconName: "dice"
+                                    prominent: true
                                     onClicked: backend.generate()
                                 }
                                 UiButton {
                                     width: parent.width * 0.30 - 6
-                                    label: "ПЕРЕБРОСИТЬ СВОБОДНЫЕ"
+                                    label: "Перебросить свободные"
                                     onClicked: backend.rerollPerks()
                                 }
                                 UiButton {
                                     width: parent.width * 0.24 - 4
-                                    label: "КОПИРОВАТЬ"
+                                    label: "Копировать"
                                     onClicked: backend.copyBuild()
                                 }
                             }
@@ -1242,7 +1293,7 @@ ApplicationWindow {
                                 width: parent.width; height: 86; radius: 12; color: win.surface; border.color: win.stroke
                                 Column { anchors.fill: parent; anchors.margins: 15; spacing: 9
                                     Text { text: "ИСТОРИЯ"; color: win.muted; font.pixelSize: 11; font.bold: true }
-                                    Text { text: backend.history.length ? backend.history[0] : "Здесь появится последний билд"; width: parent.width; elide: Text.ElideRight; color: "#cdd5df"; font.pixelSize: 12 }
+                                    Text { text: backend.history.length ? backend.history[0] : "Здесь появится последний билд"; width: parent.width; elide: Text.ElideRight; color: win.colors.text; font.pixelSize: 12 }
                                 }
                             }
                         }
@@ -1381,7 +1432,7 @@ ApplicationWindow {
                                 else makerAddon2.text = name;
                                 addonSlot = 1 - addonSlot;
                             }
-                            Text { text: "Визуальный конструктор билдов"; color: "#f0f3f8"; font.pixelSize: 18; font.bold: true }
+                            Text { text: "Визуальный конструктор билдов"; color: win.colors.text; font.pixelSize: 18; font.bold: true }
                             Text {
                                 text: "Нажми на навык для добавления или перетащи его в слот. Навыки в слотах можно переставлять перетаскиванием."
                                 width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 11; color: win.muted
@@ -1424,7 +1475,7 @@ ApplicationWindow {
                                             color: makerCharHover.containsMouse ? win.colors.stroke : win.colors.panel
                                             border.color: makerChar.text === modelData.name ? win.accent : win.colors.stroke
                                             ArtThumb { x: 5; y: 4; pixels: 41; iconKey: modelData.name; placeholder: "DBD" }
-                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; color: "#f1f4f8"; font.pixelSize: 12; width: parent.width - 66; elide: Text.ElideRight }
+                                            Text { text: modelData.name; x: 55; anchors.verticalCenter: parent.verticalCenter; color: win.colors.text; font.pixelSize: 12; width: parent.width - 66; elide: Text.ElideRight }
                                             MouseArea { id: makerCharHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: makerChar.text = modelData.name }
                                         }
                                     }
@@ -1997,7 +2048,7 @@ ApplicationWindow {
                                                     spacing: 9
                                                     Text {
                                                         text: skinPage.previewSkin ? skinPage.previewSkin.name : "Набор не выбран"
-                                                        color: "#f0f4fa"; font.pixelSize: 13; font.bold: true
+                                                        color: win.colors.text; font.pixelSize: 13; font.bold: true
                                                         wrapMode: Text.WordWrap; width: parent.width; maximumLineCount: 3; elide: Text.ElideRight
                                                     }
                                                     Text {
@@ -3628,6 +3679,34 @@ ApplicationWindow {
             return;
         }
         layoutSmokePassed = true;
+    }
+
+    // Real Qt-Quick geometry check for the redesigned, content-led build view.
+    property bool designSmokePassed: false
+    property string designSmokeError: ""
+    function verifyDesignLayout() {
+        designSmokePassed = false;
+        designSmokeError = "";
+        if (page !== "Билд") {
+            designSmokeError = "Build page not selected";
+            return;
+        }
+        if (generatedHero.width < 300 || heroBody.width < 250 ||
+            generatedHero.height + 1 < heroBody.height + 36) {
+            designSmokeError = "Hero size: card=" + generatedHero.width + "x" +
+                generatedHero.height + " inner=" + heroBody.width + "x" +
+                heroBody.height + " implicit=" + heroBody.implicitHeight;
+            return;
+        }
+        if (Math.abs(generatedHero.width - content.width) > 1.0) {
+            designSmokeError = "Hero card is not aligned to content grid";
+            return;
+        }
+        if (sidebarContents.width < 180 || work.width < 360) {
+            designSmokeError = "Navigation or page collapsed";
+            return;
+        }
+        designSmokePassed = true;
     }
 
     // QML state transitions exercised by CI without using game input.
