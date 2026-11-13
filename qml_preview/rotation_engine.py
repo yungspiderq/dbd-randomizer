@@ -234,7 +234,8 @@ def make_rotated_build(core, db, side, available, rotation, **kwargs):
             addons.append(core.NO_ADDONS if not addons else core.EMPTY)
     else:
         if not addons:
-            addons = [core.NO_ADDONS if use_addons and not addon_pool else core.EMPTY]
+            addons = [core.NO_ADDONS if (use_addons and not addon_pool
+                     and build["power_or_item"] != core.EMPTY) else core.EMPTY]
         while len(addons) < 2:
             addons.append(core.EMPTY)
     build["addons"] = addons
