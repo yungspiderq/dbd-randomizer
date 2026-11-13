@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt v3.0.2"
+    title: "DBD Ultimate Search Randomizer | Qt v3.0.3"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -52,9 +52,129 @@ ApplicationWindow {
         scrollSmokePassed = true;
     }
 
+    // Original vector icons: no emoji fonts, extra assets or network access.
+    // One painter works for navigation, perk categories and challenge modes.
+    component MiniGlyph: Canvas {
+        id: glyph
+        property string kind: "all"
+        property color tint: win.colors.accentSoft
+        width: 18
+        height: 18
+        renderTarget: Canvas.FramebufferObject
+        onKindChanged: requestPaint()
+        onTintChanged: requestPaint()
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.clearRect(0, 0, width, height);
+            ctx.save();
+            ctx.scale(width / 20, height / 20);
+            ctx.strokeStyle = tint;
+            ctx.fillStyle = tint;
+            ctx.lineWidth = 1.8;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            function line(x, y, ex, ey) {
+                ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+            }
+            function rect(x, y, w, h) {
+                ctx.strokeRect(x, y, w, h);
+            }
+            function circle(x, y, r) {
+                ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+            }
+            function dot(x, y, r) {
+                ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+            }
+            function polygon(points, fill) {
+                ctx.beginPath();
+                ctx.moveTo(points[0], points[1]);
+                for (var i = 2; i < points.length; i += 2)
+                    ctx.lineTo(points[i], points[i + 1]);
+                ctx.closePath();
+                if (fill) ctx.fill(); else ctx.stroke();
+            }
+            switch (kind) {
+            case "dice":
+                rect(3, 3, 14, 14); dot(7, 7, 1); dot(13, 13, 1); dot(10, 10, 1);
+                break;
+            case "builder":
+                line(3, 17, 14, 6); circle(15, 5, 3); line(3, 17, 6, 17);
+                line(3, 17, 3, 14);
+                break;
+            case "favorite":
+                polygon([10, 2, 12.4, 7.1, 18, 7.7, 14, 11.5, 15, 17.5,
+                         10, 14.7, 5, 17.5, 6, 11.5, 2, 7.7, 7.6, 7.1], false);
+                break;
+            case "community":
+                circle(7, 6, 2.5); circle(14.5, 7.5, 2);
+                ctx.beginPath(); ctx.arc(7, 17, 5.2, Math.PI, 2 * Math.PI); ctx.stroke();
+                ctx.beginPath(); ctx.arc(14.2, 17, 3.5, Math.PI, 2 * Math.PI); ctx.stroke();
+                break;
+            case "character":
+                circle(10, 6, 3);
+                ctx.beginPath(); ctx.arc(10, 19, 6.5, Math.PI, 2 * Math.PI); ctx.stroke();
+                break;
+            case "skin":
+                polygon([6, 2, 14, 2, 18, 6, 15, 9, 14, 7.5, 14, 18,
+                         6, 18, 6, 7.5, 5, 9, 2, 6], false);
+                break;
+            case "stats":
+                rect(2, 12, 3, 6); rect(9, 8, 3, 10); rect(16, 3, 3, 15);
+                break;
+            case "timings":
+                circle(10, 10, 7); circle(10, 10, 3); dot(10, 10, 1.3);
+                break;
+            case "class":
+                polygon([10, 1, 17, 4, 16.2, 12, 10, 19, 3.8, 12, 3, 4], false);
+                line(10, 5, 10, 15);
+                break;
+            case "theme":
+                circle(9, 10, 7); dot(6, 7, 1.3); dot(10, 5, 1.3);
+                dot(14, 8, 1.3); dot(6, 12, 1.3); circle(13, 14, 2);
+                break;
+            case "all":
+                rect(2, 2, 7, 7); rect(11, 2, 7, 7);
+                rect(2, 11, 7, 7); rect(11, 11, 7, 7);
+                break;
+            case "common":
+                circle(7.4, 10, 5.3); circle(12.6, 10, 5.3);
+                break;
+            case "unique":
+                polygon([10, 1.5, 18, 10, 10, 18.5, 2, 10], false);
+                line(10, 5.5, 10, 14.5);
+                break;
+            case "mixed":
+                line(3, 4, 17, 16); line(12.5, 16, 17, 16);
+                line(17, 11.5, 17, 16); line(17, 4, 3, 16);
+                line(3, 11.5, 3, 16); line(3, 16, 7.5, 16);
+                break;
+            case "general":
+                rect(4, 3, 12, 15); line(7, 2, 13, 2);
+                line(7, 8, 13, 8); line(7, 12, 13, 12);
+                break;
+            case "power":
+                polygon([12, 1, 4, 11, 10, 11, 8, 19, 17, 8, 11, 8], false);
+                break;
+            case "easy":
+                rect(3, 13, 4, 5);
+                break;
+            case "medium":
+                rect(3, 13, 4, 5); rect(9, 9, 4, 9);
+                break;
+            case "hard":
+                rect(2, 13, 4, 5); rect(8, 9, 4, 9); rect(14, 4, 4, 14);
+                break;
+            default:
+                circle(10, 10, 6); dot(10, 10, 1.4);
+            }
+            ctx.restore();
+        }
+    }
+
     component UiButton: Rectangle {
         id: button
         property string label: ""
+        property string iconName: ""
         property bool primary: false
         signal clicked()
         implicitHeight: 44
@@ -65,12 +185,23 @@ ApplicationWindow {
         border.width: primary ? 0 : 1
         border.color: win.stroke
         Behavior on color { ColorAnimation { duration: backend.animationsEnabled ? 170 : 0 } }
-        Text {
+        Row {
             anchors.centerIn: parent
-            text: button.label
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
-            color: button.primary ? "#111820" : "#eef5fd"
+            spacing: 6
+            MiniGlyph {
+                visible: !!button.iconName
+                width: 15; height: 15
+                kind: button.iconName
+                tint: button.primary ? "#111820" : "#dbe8fa"
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+                text: button.label
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                color: button.primary ? "#111820" : "#eef5fd"
+                anchors.verticalCenter: parent.verticalCenter
+            }
         }
         MouseArea {
             id: over
@@ -241,6 +372,7 @@ ApplicationWindow {
         id: nav
         property string label: ""
         property int ordinal: 0
+        property string iconName: "all"
         signal clicked()
         width: parent.width
         height: 48
@@ -252,7 +384,7 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             x: 16
             spacing: 14
-            Text { text: (nav.ordinal < 10 ? "0" : "") + nav.ordinal; color: win.page === nav.label ? win.accent : "#67768a"; font.pixelSize: 11; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
+            MiniGlyph { width: 20; height: 20; kind: nav.iconName; tint: win.page === nav.label ? win.accent : "#8da0b6"; anchors.verticalCenter: parent.verticalCenter }
             Text { text: nav.label; color: win.page === nav.label ? "white" : win.colors.muted; font.pixelSize: 13; font.weight: win.page === nav.label ? Font.Bold : Font.Normal }
         }
         MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: nav.clicked() }
@@ -385,18 +517,18 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • STABLE 3.0.2"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • STABLE 3.0.3"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
-                NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
-                NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
-                NavItem { ordinal: 3; label: "Избранное"; onClicked: win.page = label }
-                NavItem { ordinal: 4; label: "Билды сообщества"; onClicked: win.page = label }
-                NavItem { ordinal: 5; label: "Персонажи"; onClicked: win.page = label }
-                NavItem { ordinal: 6; label: "Внешность"; onClicked: win.page = label }
-                NavItem { ordinal: 7; label: "Статистика"; onClicked: win.page = label }
-                NavItem { ordinal: 8; label: "Клики и тайминги"; onClicked: win.page = label }
-                NavItem { ordinal: 9; label: "Классы 2v8"; onClicked: win.page = label }
-                NavItem { ordinal: 10; label: "Оформление"; onClicked: win.page = label }
+                NavItem { ordinal: 1; label: "Билд"; iconName: "dice"; onClicked: win.page = label }
+                NavItem { ordinal: 2; label: "Конструктор"; iconName: "builder"; onClicked: win.page = label }
+                NavItem { ordinal: 3; label: "Избранное"; iconName: "favorite"; onClicked: win.page = label }
+                NavItem { ordinal: 4; label: "Билды сообщества"; iconName: "community"; onClicked: win.page = label }
+                NavItem { ordinal: 5; label: "Персонажи"; iconName: "character"; onClicked: win.page = label }
+                NavItem { ordinal: 6; label: "Внешность"; iconName: "skin"; onClicked: win.page = label }
+                NavItem { ordinal: 7; label: "Статистика"; iconName: "stats"; onClicked: win.page = label }
+                NavItem { ordinal: 8; label: "Клики и тайминги"; iconName: "timings"; onClicked: win.page = label }
+                NavItem { ordinal: 9; label: "Классы 2v8"; iconName: "class"; onClicked: win.page = label }
+                NavItem { ordinal: 10; label: "Оформление"; iconName: "theme"; onClicked: win.page = label }
                 Item { height: 10 }
                 Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
                 Item { height: 10 }
@@ -470,8 +602,8 @@ ApplicationWindow {
                             spacing: 18
                             Row {
                                 width: parent.width; spacing: 10
-                                UiButton { width: (parent.width - 10) / 2; label: "ВЫЖИВШИЙ"; primary: backend.role === "survivor"; onClicked: backend.setRole("survivor") }
-                                UiButton { width: (parent.width - 10) / 2; label: "МАНЬЯК"; primary: backend.role === "killer"; onClicked: backend.setRole("killer") }
+                                UiButton { width: (parent.width - 10) / 2; label: "ВЫЖИВШИЙ"; iconName: "character"; primary: backend.role === "survivor"; onClicked: backend.setRole("survivor") }
+                                UiButton { width: (parent.width - 10) / 2; label: "МАНЬЯК"; iconName: "class"; primary: backend.role === "killer"; onClicked: backend.setRole("killer") }
                             }
                             Row {
                                 width: parent.width
@@ -805,7 +937,7 @@ ApplicationWindow {
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
                                         Text {
-                                            text: backend.detail.challengeDifficulty ? "· " + backend.detail.challengeDifficulty.toUpperCase() : ""
+                                            text: backend.detail.challengeDifficulty ? "· " + backend.detail.challengeDifficulty.toUpperCase() + (backend.detail.challengeTheme ? " · " + backend.detail.challengeTheme.toUpperCase() : "") : ""
                                             color: "#c9a8ab"
                                             font.pixelSize: 10
                                             font.bold: true
@@ -1247,12 +1379,14 @@ ApplicationWindow {
                                 UiButton {
                                     width: (parent.width - 9) / 2
                                     label: "ВЫЖИВШИЙ"
+                                    iconName: "character"
                                     primary: makerPage.makerSide === "SURVIVOR"
                                     onClicked: makerPage.changeSide("SURVIVOR")
                                 }
                                 UiButton {
                                     width: (parent.width - 9) / 2
                                     label: "МАНЬЯК"
+                                    iconName: "class"
                                     primary: makerPage.makerSide === "KILLER"
                                     onClicked: makerPage.changeSide("KILLER")
                                 }
@@ -1477,14 +1611,15 @@ ApplicationWindow {
                                         width: parent.width; spacing: 6
                                         Repeater {
                                             model: [
-                                                {key:"all", label:"ВСЕ"},
-                                                {key:"common", label:"ОБЩИЕ"},
-                                                {key:"unique", label:"УНИКАЛЬНЫЕ"},
-                                                {key:"character", label:"ПЕРСОНАЖА"}
+                                                {key:"all", label:"ВСЕ", icon:"all"},
+                                                {key:"common", label:"ОБЩИЕ", icon:"common"},
+                                                {key:"unique", label:"УНИКАЛЬНЫЕ", icon:"unique"},
+                                                {key:"character", label:"ПЕРСОНАЖА", icon:"character"}
                                             ]
                                             UiButton {
                                                 width: (parent.width - 18) / 4; height: 32
                                                 label: modelData.label
+                                                iconName: modelData.icon
                                                 primary: makerPage.perkFilter === modelData.key
                                                 onClicked: makerPage.perkFilter = modelData.key
                                             }
@@ -2823,13 +2958,14 @@ ApplicationWindow {
                             spacing: 5
                             Repeater {
                                 model: [
-                                    { key: "mixed", text: "Смешанные" },
-                                    { key: "general", text: "Обычные" },
-                                    { key: "power", text: "Способности" }
+                                    { key: "mixed", text: "Смешанные", icon: "mixed" },
+                                    { key: "general", text: "Обычные", icon: "general" },
+                                    { key: "power", text: "Способности", icon: "power" }
                                 ]
                                 UiButton {
                                     width: (parent.width - 10) / 3
                                     height: 34; label: modelData.text
+                                    iconName: modelData.icon
                                     primary: backend.advanced.challengeType === modelData.key
                                     onClicked: backend.setAdvanced("challengeType", modelData.key)
                                 }
