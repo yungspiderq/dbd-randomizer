@@ -35,7 +35,7 @@ class CategoryIconsTests(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, source)
-        self.assertIn("QT QUICK • STABLE 3.0.3", source)
+        self.assertIn("QT QUICK • STABLE 3.0.4", source)
 
 
 if __name__ == "__main__":
