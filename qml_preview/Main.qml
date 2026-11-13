@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Ultimate Search Randomizer | Qt v3.0.1"
+    title: "DBD Ultimate Search Randomizer | Qt v3.0.2"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -35,6 +35,22 @@ ApplicationWindow {
     property color accent: colors.accent
     font.family: "Segoe UI"
     onClosing: backend.close()
+
+    // Headless QML check for interactive scrollbar instances.
+    property bool scrollSmokePassed: false
+    property string scrollSmokeError: ""
+    function verifyFastScroll() {
+        scrollSmokePassed = false;
+        scrollSmokeError = "";
+        var bars = [pageScrollBar, builderScrollBar, outfitScrollBar];
+        for (var i = 0; i < bars.length; ++i) {
+            if (!bars[i] || !bars[i].interactive || bars[i].width < 10) {
+                scrollSmokeError = "Scrollbar missing or not draggable at index " + i;
+                return;
+            }
+        }
+        scrollSmokePassed = true;
+    }
 
     component UiButton: Rectangle {
         id: button
@@ -63,6 +79,30 @@ ApplicationWindow {
             cursorShape: button.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             enabled: button.enabled
             onClicked: button.clicked()
+        }
+    }
+
+    // Grab and drag the thumb to jump across long pages and catalogues.
+    component QuickScrollBar: ScrollBar {
+        id: quickBar
+        width: 14
+        implicitWidth: 14
+        active: true
+        interactive: true
+        hoverEnabled: true
+        policy: ScrollBar.AsNeeded
+        minimumSize: 0.07
+        background: Rectangle {
+            implicitWidth: 14
+            radius: 7
+            color: "#26313f"
+            opacity: 0.88
+        }
+        contentItem: Rectangle {
+            implicitWidth: 10
+            radius: 5
+            color: quickBar.pressed ? win.colors.accentSoft :
+                   quickBar.hovered ? win.colors.accent : "#8595ab"
         }
     }
 
@@ -324,6 +364,7 @@ ApplicationWindow {
             color: win.colors.sidebar
             border.color: win.colors.stroke
             Flickable {
+                ScrollBar.vertical: QuickScrollBar {  }
                 anchors.fill: parent
                 contentWidth: width
                 contentHeight: sidebarContents.implicitHeight + 50
@@ -344,7 +385,7 @@ ApplicationWindow {
                 }
                 Item { width: 1; height: 12 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "DBD RANDOMIZER"; color: "#f0f2f5"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 1.1 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • STABLE 3.0.1"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "QT QUICK • STABLE 3.0.2"; color: "#7e8999"; font.pixelSize: 10; font.letterSpacing: 1 }
                 Item { height: 10 }
                 NavItem { ordinal: 1; label: "Билд"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; onClicked: win.page = label }
@@ -383,6 +424,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 spacing: 0
                 Flickable {
+                    ScrollBar.vertical: QuickScrollBar { id: pageScrollBar; objectName: "mainPageScrollBar" }
                     id: work
                     objectName: "workScroll"
                     Layout.fillWidth: true
@@ -1222,6 +1264,7 @@ ApplicationWindow {
                                     Text { text: "01 · ПЕРСОНАЖ"; font.pixelSize: 11; font.bold: true; color: win.colors.muted }
                                     UiField { id: makerChar; width: parent.width; placeholderText: "Найти персонажа..." }
                                     ListView {
+                                        ScrollBar.vertical: QuickScrollBar {  }
                                         id: makerCharacters
                                         reuseItems: true
                                         cacheBuffer: 96
@@ -1253,6 +1296,7 @@ ApplicationWindow {
                                         placeholderText: makerPage.makerSide === "KILLER" ? "Сила маньяка подбирается автоматически" : "Найти предмет выжившего..."
                                     }
                                     ListView {
+                                        ScrollBar.vertical: QuickScrollBar {  }
                                         id: makerItems
                                         reuseItems: true
                                         cacheBuffer: 96
@@ -1288,6 +1332,7 @@ ApplicationWindow {
                                     }
                                     UiField { id: addonSearch; width: parent.width; placeholderText: "Поиск доступных аддонов по названию..." }
                                     ListView {
+                                        ScrollBar.vertical: QuickScrollBar {  }
                                         id: makerAddons
                                         reuseItems: true
                                         cacheBuffer: 96
@@ -1457,6 +1502,7 @@ ApplicationWindow {
                                         text: "Сначала выбери персонажа в блоке 01."
                                     }
                                     ListView {
+                                        ScrollBar.vertical: QuickScrollBar { id: builderScrollBar; objectName: "builderPerkScrollBar" }
                                         id: makerPerks
                                         reuseItems: true
                                         cacheBuffer: 96
@@ -1489,7 +1535,7 @@ ApplicationWindow {
                                                     color: win.colors.muted; elide: Text.ElideRight; font.pixelSize: 10
                                                 }
                                                 Text {
-                                                    anchors.right: parent.right; anchors.rightMargin: 11
+                                                    anchors.right: parent.right; anchors.rightMargin: 23
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     text: "ВЫБРАН"
                                                     visible: makerPage.perkFields().some(function(f) {
@@ -1569,6 +1615,7 @@ ApplicationWindow {
                             UiButton { width: parent.width; label: "ОПУБЛИКОВАТЬ ТЕКУЩИЙ БИЛД"; primary: true; onClicked: { backend.setPublishPref("nickname", nickEntry.text); backend.publishCurrent() } }
                             Text { text: "Найдено билдов: " + backend.community.length; color: "#b1becc"; font.pixelSize: 12 }
                             ListView {
+                                ScrollBar.vertical: QuickScrollBar {  }
                                 id: buildsList
                                 width: parent.width; height: 430; clip: true; spacing: 7
                                 model: backend.community
@@ -1646,6 +1693,7 @@ ApplicationWindow {
                                             }
                                             Rectangle { width: parent.width; height: 1; color: "#2f3947" }
                                             ListView {
+                                                ScrollBar.vertical: QuickScrollBar {  }
                                                 id: characterList
                                         reuseItems: true
                                         cacheBuffer: 96
@@ -1736,6 +1784,7 @@ ApplicationWindow {
                                         Text { text: "ПЕРСОНАЖИ"; color: "#ced7e3"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
                                         UiField { id: skinCharSearch; width: parent.width; placeholderText: "Поиск героя" }
                                         ListView {
+                                            ScrollBar.vertical: QuickScrollBar {  }
                                             id: skinCharList
                                         reuseItems: true
                                         cacheBuffer: 96
@@ -1860,6 +1909,7 @@ ApplicationWindow {
                                             }
                                         }
                                         ListView {
+                                            ScrollBar.vertical: QuickScrollBar { id: outfitScrollBar; objectName: "outfitScrollBar" }
                                             id: skinsList
                                         reuseItems: true
                                         cacheBuffer: 96
@@ -1913,7 +1963,7 @@ ApplicationWindow {
                                                 Rectangle {
                                                     width: 25; height: 25; radius: 6
                                                     anchors.right: parent.right
-                                                    anchors.rightMargin: 9
+                                                    anchors.rightMargin: 22
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     color: modelData.owned ? win.accent : win.colors.buttonHover
                                                     border.color: modelData.owned ? win.accent : "#63758a"
@@ -2062,6 +2112,7 @@ ApplicationWindow {
                                 }
                             }
                             ListView {
+                                ScrollBar.vertical: QuickScrollBar {  }
                                 id: favoriteList
                                         reuseItems: true
                                         cacheBuffer: 96
@@ -2573,6 +2624,7 @@ ApplicationWindow {
                                     Text { text: "ИСТОРИЯ ВЫПАДЕНИЙ"; color: "#e5edf5"; font.pixelSize: 12; font.bold: true }
                                     Text { text: "Хранятся последние 100 событий, показаны до 28 за выбранный период"; color: "#92a4b7"; font.pixelSize: 10 }
                                     ListView {
+                                        ScrollBar.vertical: QuickScrollBar {  }
                                         id: statsHistory
                                         width: recentCard.width - 24
                                         height: 343
@@ -2702,6 +2754,7 @@ ApplicationWindow {
                     color: "#11161e"
                     border.color: "#222b37"
                     Flickable {
+                        ScrollBar.vertical: QuickScrollBar {  }
                         anchors.fill: parent
                         contentWidth: width
                         contentHeight: settingsColumn.implicitHeight + 48
@@ -2848,6 +2901,7 @@ ApplicationWindow {
             border.width: 1
         }
         contentItem: Flickable {
+            ScrollBar.vertical: QuickScrollBar {  }
             contentWidth: width
             contentHeight: infoBody.implicitHeight + 16
             clip: true
@@ -3004,6 +3058,7 @@ ApplicationWindow {
             border.width: 1
         }
         contentItem: Flickable {
+            ScrollBar.vertical: QuickScrollBar {  }
             contentWidth: width
             contentHeight: perkInfoBody.implicitHeight + 34
             clip: true
