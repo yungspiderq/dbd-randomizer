@@ -21,7 +21,7 @@ def main():
     # The native Windows style does not permit the customized QML controls.
     # Basic respects our fully custom buttons, fields, themes, and popups.
     QQuickStyle.setStyle("Basic")
-    app.setApplicationName("DBD Randomizer Qt 3.0.4")
+    app.setApplicationName("DBD Randomizer Qt 3.1.0")
     frozen = bool(getattr(sys, "frozen", False))
     packaged_root = Path(sys._MEIPASS) if frozen else HERE.parent
     icon = packaged_root / "qml_preview" / "assets" / "app_icon.png"
@@ -110,6 +110,29 @@ def main():
                 app.quit()
 
         QTimer.singleShot(450, verify_long_text_layout)
+    elif "--smoke-design" in sys.argv:
+        window = engine.rootObjects()[0]
+
+        def verify_design():
+            try:
+                from PySide6.QtCore import QMetaObject
+                from PySide6.QtTest import QTest
+                window.setProperty("page", "Билд")
+                for width, height in ((1050, 720), (1350, 850)):
+                    window.resize(width, height)
+                    QTest.qWait(140)
+                    assert QMetaObject.invokeMethod(window, "verifyDesignLayout")
+                    assert window.property("designSmokePassed"), (
+                        window.property("designSmokeError") or "Design layout failed")
+                print("Qt v3.1 design smoke OK at 1050 and 1350 px")
+            except Exception as exc:
+                print("Qt v3.1 design smoke FAILED: " + repr(exc),
+                      file=sys.stderr)
+                appearance_check["ok"] = False
+            finally:
+                app.quit()
+
+        QTimer.singleShot(400, verify_design)
     elif "--smoke-scrollbars" in sys.argv:
         window = engine.rootObjects()[0]
 
@@ -213,11 +236,11 @@ def main():
                 app.processEvents()
                 assert window.property("page") == "Оформление"
                 assert abs(window.property("uiScale") - 1.2) < 0.01
-                assert window.property("color").name().lower() == "#0b1018"
-                assert backend.appearancePalette["accent"] == "#4298e5"
+                assert window.property("color").name().lower() == "#0e1217"
+                assert backend.appearancePalette["accent"] == "#8fb3cd"
                 backend.setAppearanceTheme("violet")
                 app.processEvents()
-                assert window.property("color").name().lower() == "#100f18"
+                assert window.property("color").name().lower() == "#111116"
                 backend.resetAppearance()
                 app.processEvents()
                 assert abs(window.property("uiScale") - 1.0) < 0.01
