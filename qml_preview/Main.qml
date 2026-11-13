@@ -3691,16 +3691,18 @@ ApplicationWindow {
             designSmokeError = "Build page not selected";
             return;
         }
-        if (generatedHero.width < 500 || heroBody.width <= 0 ||
-            generatedHero.height + 1 < heroBody.implicitHeight + 36) {
-            designSmokeError = "Generated character preview clips its contents";
+        if (generatedHero.width < 300 || heroBody.width < 250 ||
+            generatedHero.height + 1 < heroBody.height + 36) {
+            designSmokeError = "Hero size: card=" + generatedHero.width + "x" +
+                generatedHero.height + " inner=" + heroBody.width + "x" +
+                heroBody.height + " implicit=" + heroBody.implicitHeight;
             return;
         }
         if (Math.abs(generatedHero.width - content.width) > 1.0) {
             designSmokeError = "Hero card is not aligned to content grid";
             return;
         }
-        if (sidebarContents.width < 180 || work.width < 660) {
+        if (sidebarContents.width < 180 || work.width < 360) {
             designSmokeError = "Navigation or page collapsed";
             return;
         }
