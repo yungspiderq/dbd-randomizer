@@ -989,7 +989,8 @@ class QtBridge(QObject):
                     respect_owned=bool(self._option("respect_owned")))
             self._notify("Билд готов: " + self.build["char"] +
                          (". Несовместимых закреплений снято: " + str(dropped_pins)
-                          if dropped_pins else "") + note)
+                          if dropped_pins else "") +
+                         (". " + note if note else ""))
         except Exception as e:
             self._notify("Генерация: " + str(e))
 
