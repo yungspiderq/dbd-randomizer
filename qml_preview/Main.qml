@@ -756,53 +756,61 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                            Text { text: "ВАШ БИЛД"; color: win.muted; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                            Text { text: "Результат генерации"; color: win.colors.muted; font.pixelSize: 13; font.weight: Font.DemiBold }
                             Rectangle {
+                                id: generatedHero
+                                objectName: "generatedHero"
                                 width: parent.width
-                                height: 146
-                                radius: 13
-                                color: win.surface
-                                border.color: win.stroke
+                                height: Math.max(170, heroBody.implicitHeight + 36)
+                                radius: 12
+                                color: win.colors.surface
+                                border.color: win.colors.stroke
+                                Rectangle {
+                                    x: 0; y: 18; width: 3; height: parent.height - 36
+                                    radius: 2; color: win.colors.accent
+                                }
                                 Row {
-                                    anchors.fill: parent
-                                    anchors.margins: 12
-                                    spacing: 14
-                                    ArtThumb {
-                                        pixels: 120
-                                        iconKey: backend.detail.char
-                                        placeholder: "DBD"
-                                    }
+                                    id: heroBody
+                                    x: 20; y: 18
+                                    width: parent.width - 40
+                                    spacing: 20
+                                    ArtThumb { pixels: 116; iconKey: backend.detail.char; placeholder: "DBD" }
                                     Column {
-                                        width: parent.width - 135
-                                        spacing: 11
+                                        width: parent.width - 136
+                                        spacing: 10
+                                        Text {
+                                            text: backend.role === "killer" ? "Убийца" : "Выживший"
+                                            color: win.colors.accentSoft
+                                            font.pixelSize: 11; font.weight: Font.DemiBold
+                                        }
                                         Text {
                                             text: backend.detail.char || "Персонаж ещё не выбран"
-                                            width: parent.width
-                                            elide: Text.ElideRight
-                                            color: win.colors.text
-                                            font.pixelSize: 17
-                                            font.bold: true
+                                            width: parent.width; wrapMode: Text.Wrap
+                                            color: win.colors.text; font.pixelSize: 23
+                                            font.weight: Font.DemiBold
                                         }
                                         Row {
-                                            spacing: 10
-                                            ArtThumb { pixels: 48; iconKey: backend.detail.power; placeholder: "ITEM" }
+                                            width: parent.width; spacing: 12
+                                            ArtThumb { pixels: 44; iconKey: backend.detail.power; placeholder: "ITEM" }
                                             Column {
-                                                spacing: 4
-                                                Text { text: backend.role === "killer" ? "СИЛА МАНЬЯКА" : "ПРЕДМЕТ ВЫЖИВШЕГО"; color: "#8394a7"; font.pixelSize: 10; font.bold: true }
+                                                width: parent.width - 56
+                                                spacing: 5
+                                                Text {
+                                                    text: backend.role === "killer" ? "Способность" : "Предмет"
+                                                    color: win.colors.muted; font.pixelSize: 11
+                                                }
                                                 Text {
                                                     text: backend.detail.power || "Не выбрано"
-                                                    width: 350
-                                                    elide: Text.ElideRight
-                                                    color: "#e1e7ef"
-                                                    font.pixelSize: 13
+                                                    width: parent.width; wrapMode: Text.Wrap
+                                                    color: win.colors.text; font.pixelSize: 13
                                                 }
                                             }
                                         }
                                         Text {
                                             text: backend.detail["class"] || ""
-                                            width: parent.width
-                                            elide: Text.ElideRight
-                                            color: win.colors.accentSoft; font.pixelSize: 11
+                                            visible: !!text
+                                            width: parent.width; wrapMode: Text.Wrap
+                                            color: win.colors.muted; font.pixelSize: 12
                                         }
                                     }
                                 }
