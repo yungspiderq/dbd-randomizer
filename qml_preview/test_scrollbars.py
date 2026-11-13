@@ -31,7 +31,7 @@ class ScrollbarTests(unittest.TestCase):
             with self.subTest(control=name):
                 self.assertIn(name, source)
         self.assertIn("function verifyFastScroll()", source)
-        self.assertIn("QT QUICK • STABLE 3.1.0", source)
+        self.assertIn("QT QUICK • STABLE 3.1.1", source)
 
 
 if __name__ == "__main__":
