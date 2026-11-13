@@ -3681,6 +3681,32 @@ ApplicationWindow {
         layoutSmokePassed = true;
     }
 
+    // Real Qt-Quick geometry check for the redesigned, content-led build view.
+    property bool designSmokePassed: false
+    property string designSmokeError: ""
+    function verifyDesignLayout() {
+        designSmokePassed = false;
+        designSmokeError = "";
+        if (page !== "Билд") {
+            designSmokeError = "Build page not selected";
+            return;
+        }
+        if (generatedHero.width < 500 || heroBody.width <= 0 ||
+            generatedHero.height + 1 < heroBody.implicitHeight + 36) {
+            designSmokeError = "Generated character preview clips its contents";
+            return;
+        }
+        if (Math.abs(generatedHero.width - content.width) > 1.0) {
+            designSmokeError = "Hero card is not aligned to content grid";
+            return;
+        }
+        if (sidebarContents.width < 180 || work.width < 660) {
+            designSmokeError = "Navigation or page collapsed";
+            return;
+        }
+        designSmokePassed = true;
+    }
+
     // QML state transitions exercised by CI without using game input.
     function runBuilderSmoke() {
         builderSmokeStatus = 0;
