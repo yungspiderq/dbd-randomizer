@@ -425,6 +425,7 @@ class QtBridge(QObject):
     def options(self):
         return {
             "addons": bool(self._option("addons_enabled")),
+            "event_items": bool(self._option("event_items_enabled")),
             "appearance": bool(self._option("skin_enabled")),
             "challenge": bool(self._option("challenge_enabled")),
             "owned": bool(self._option("respect_owned")),
@@ -852,7 +853,8 @@ class QtBridge(QObject):
 
     @Slot(str)
     def toggleOption(self, key):
-        names = {"addons": "addons_enabled", "appearance": "skin_enabled",
+        names = {"addons": "addons_enabled", "event_items": "event_items_enabled",
+                 "appearance": "skin_enabled",
                  "challenge": "challenge_enabled", "owned": "respect_owned",
                  "classes": "class_enabled", "dry": "dry_run", "ocr": "ocr_verify",
                  "select_char": "select_char"}
@@ -944,6 +946,8 @@ class QtBridge(QObject):
                       addons_enabled=bool(self._option("addons_enabled")),
                       skin_enabled=bool(self._option("skin_enabled")),
                       owned_skins=self.cfg.get("skins", {}), fx=fx)
+            if self._role == "SURVIVOR":
+                kw["event_items_enabled"] = bool(self._option("event_items_enabled"))
             self.build_before_generation = self.build
             if self._rotation_enabled:
                 self.build = make_rotated_build(core, self.db, self._role, names, self._rotation, **kw)
@@ -979,16 +983,10 @@ class QtBridge(QObject):
             self.historyChanged.emit()
             self._save()
             note = ""
-            if (self.build["side"] == "KILLER" and self.build["char"] == "Доктор"
-                    and self._option("respect_owned")):
-                owned_addons = set(self.db.get("owned", {}).get("killer_addons") or ())
-                playable = set(core._playable_addons(
-                    self.db["killers"]["Доктор"]["addons"]))
-                eligible = playable & owned_addons if owned_addons else playable
-                if eligible == {"Радужный король", "Радужный ферзь"}:
-                    note = (". Только эти два аддона отмечены в списке открытых. "
-                            "Отключите «Только отмеченные навыки и аддоны» "
-                            "или отметьте остальные аддоны.")
+            if self.build["side"] == "KILLER":
+                note = core.killer_addon_diagnostic(
+                    self.db, self.build["char"],
+                    respect_owned=bool(self._option("respect_owned")))
             self._notify("Билд готов: " + self.build["char"] +
                          (". Несовместимых закреплений снято: " + str(dropped_pins)
                           if dropped_pins else "") + note)
