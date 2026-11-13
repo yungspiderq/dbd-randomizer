@@ -1260,7 +1260,7 @@ def killer_addon_diagnostic(db, name, respect_owned=False):
         if len(eligible) <= 2:
             notes.append(
                 "Фильтр «Только отмеченные» оставил %d из %d аддонов %s. "
-                "Отметьте больше аддонов или отключите фильтр." %
+                "отметьте остальные аддоны или отключите фильтр." %
                 (len(eligible), len(current), name))
     return " ".join(notes)
 
