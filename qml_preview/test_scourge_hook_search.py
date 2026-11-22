@@ -42,6 +42,44 @@ class ScourgeHookSearchTests(unittest.TestCase):
                      "Радужный король", "Ключ от судна", "крюк: Пучина ярости"):
             self.assertEqual(core.game_search_query(name), name)
 
+    def test_every_known_invocation_perk_searches_without_symbols(self):
+        perks = list(core.DATA.SURV_COMMON_PERKS)
+        for survivor in core.DATA.SURVIVORS.values():
+            perks.extend(survivor if isinstance(survivor, list) else survivor["perks"])
+        invocations = {p for p in perks if p.casefold().startswith("чары")}
+        self.assertGreaterEqual(len(invocations), 2)
+        for name in invocations:
+            with self.subTest(name=name):
+                query = core.game_search_query(name)
+                self.assertTrue(query.startswith("чары "))
+                self.assertEqual(query, query.lower())
+                self.assertTrue(all(ch.isalnum() or ch == " " for ch in query))
+                self.assertEqual(query, " ".join(query.split()))
+
+    def test_invocation_search_strips_colon_dash_quotes_and_whitespace(self):
+        for name in (
+            "Чары: пауки-прядильщики",
+            "ЧАРЫ — ПАУКИ-ПРЯДИЛЬЩИКИ!!!",
+            'Чары «пауки-прядильщики»',
+            "  Чары:: (пауки-прядильщики)  ",
+        ):
+            self.assertEqual(core.game_search_query(name),
+                             "чары пауки прядильщики")
+        self.assertEqual(core.game_search_query("Чары: предательские вороны"),
+                         "чары предательские вороны")
+        self.assertEqual(core.game_search_query("Порча: погибель"),
+                         "Порча: погибель")
+
+    def test_invocation_ocr_match_handles_game_punctuation(self):
+        original = "Чары: пауки-прядильщики"
+        for result in (original, "Чары пауки прядильщики",
+                       "ЧАРЫ — ПАУКИ-ПРЯДИЛЬЩИКИ",
+                       "Поиск: Чары: пауки-прядильщики"):
+            with self.subTest(result=result):
+                self.assertTrue(core.game_search_result_matches(original, result))
+        self.assertFalse(core.game_search_result_matches(
+            original, "Чары: предательские вороны"))
+
     def test_ocr_match_handles_colon_and_plain_search_result(self):
         original = "Секущий крюк: пучина ярости"
         for result in (
