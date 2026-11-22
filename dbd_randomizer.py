@@ -1426,7 +1426,7 @@ def game_search_query(name):
     Do not alter other perks, addons, or items.
     """
     if not isinstance(name, str) or not re.match(
-        r"^\\s*секущий\\s+крюк\\b", name, flags=re.IGNORECASE
+        r"^\s*секущий\s+крюк\b", name, flags=re.IGNORECASE
     ):
         return name
     return " ".join("".join(
