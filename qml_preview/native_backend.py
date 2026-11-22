@@ -1254,9 +1254,9 @@ class QtBridge(QObject):
         for hero, spec in chars.items():
             for name in (spec.get("perks", []) if isinstance(spec, dict) else spec):
                 owners.setdefault(name, []).append(hero)
-        needle = core._norm(query or "")
+        needle = core._norm(core.game_search_query(query or ""))
         filtered = [name for name in sorted(names)
-                    if not needle or needle in core._norm(name)
+                    if not needle or needle in core._norm(core.game_search_query(name))
                     or needle in core._norm(" ".join(owners.get(name, [])))]
         return [{
             "name": name,
@@ -1653,7 +1653,7 @@ class QtBridge(QObject):
                 self._assert_input_ready()
                 core.INPUT.hotkey("ctrl","a",guard=self._assert_input_ready)
                 self._sleep(0.03)
-            if not self._paste(target):
+            if not self._paste(core.game_search_query(target)):
                 continue
             self._sleep(self._timing("search_settle")*(1.6 if attempt else 1.0))
             if verify_ocr:
@@ -1663,7 +1663,7 @@ class QtBridge(QObject):
                 if not ocr:
                     self._notify("OCR: текст не распознан для "+target)
                     continue
-                if core._norm(target) not in core._norm(ocr):
+                if not core.game_search_result_matches(target, ocr):
                     self._notify("OCR: результат не совпал для "+target)
                     continue
             if not self._click(dest,"result"):
