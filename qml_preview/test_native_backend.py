@@ -532,6 +532,29 @@ class QtBackendTests(unittest.TestCase):
              patch.object(core.INPUT, "hotkey"):
             self.assertFalse(self.bridge._search_and_select("example"))
 
+    def test_scourge_hook_auto_equip_pastes_plain_text(self):
+        self.bridge._target_window = 501
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = False
+        self.bridge.cfg["timings"]["retries"] = 0
+        self.bridge.cfg["timings"]["search_settle"] = 0
+        with patch.object(self.bridge, "_sleep"), \
+             patch.object(self.bridge, "_click", return_value=True), \
+             patch.object(self.bridge, "_paste", return_value=True) as paste, \
+             patch.object(core.INPUT, "foreground_window", return_value=501), \
+             patch.object(core.INPUT, "hotkey"):
+            self.assertTrue(self.bridge._search_and_select(
+                "Секущий крюк: пучина ярости"))
+            paste.assert_called_once_with("секущий крюк пучина ярости")
+
+    def test_scourge_hook_builder_search_without_colon(self):
+        clean = self.bridge.searchPerks("KILLER", "секущий крюк пучина ярости")
+        punctuated = self.bridge.searchPerks("KILLER", "Секущий крюк: пучина ярости")
+        self.assertEqual([x["name"] for x in clean],
+                         ["Секущий крюк: пучина ярости"])
+        self.assertEqual([x["name"] for x in clean],
+                         [x["name"] for x in punctuated])
+
     def test_failed_equip_resets_cached_state(self):
         self.bridge.generate()
         self.bridge.cfg["options"]["dry_run"] = False
