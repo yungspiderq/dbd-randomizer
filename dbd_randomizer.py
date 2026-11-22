@@ -1421,12 +1421,13 @@ def game_search_query(name):
     """Text actually pasted into DBD's search field, not the catalog title.
 
     The UI can keep the official perk name with punctuation. DBD's search
-    behaves better when Scourge Hook perks use plain space-separated words:
+    behaves better when prefixed perks use plain space-separated words:
     'Секущий крюк: пучина ярости' -> 'секущий крюк пучина ярости'.
+    'Чары: пауки-прядильщики' -> 'чары пауки прядильщики'.
     Do not alter other perks, addons, or items.
     """
     if not isinstance(name, str) or not re.match(
-        r"^\s*секущий\s+крюк\b", name, flags=re.IGNORECASE
+        r"^\s*(?:секущий\s+крюк|чары)\b", name, flags=re.IGNORECASE
     ):
         return name
     return " ".join("".join(
