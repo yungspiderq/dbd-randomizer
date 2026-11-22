@@ -1417,6 +1417,38 @@ def build_to_clipboard_text(b):
 # ----------------------------------------------------------------------------
 # Валидация базы
 # ----------------------------------------------------------------------------
+def game_search_query(name):
+    """Text actually pasted into DBD's search field, not the catalog title.
+
+    The UI can keep the official perk name with punctuation. DBD's search
+    behaves better when Scourge Hook perks use plain space-separated words:
+    'Секущий крюк: пучина ярости' -> 'секущий крюк пучина ярости'.
+    Do not alter other perks, addons, or items.
+    """
+    if not isinstance(name, str) or not re.match(
+        r"^\\s*секущий\\s+крюк\\b", name, flags=re.IGNORECASE
+    ):
+        return name
+    return " ".join("".join(
+        character if character.isalnum() or character.isspace() else " "
+        for character in name
+    ).split()).lower()
+
+
+def game_search_result_matches(original, recognized):
+    """Recognize a displayed result even if OCR kept the original colon."""
+    if _norm(original) in _norm(recognized):
+        return True
+    query = game_search_query(original)
+    if query == original:
+        return False
+    plain_ocr = " ".join("".join(
+        character if character.isalnum() or character.isspace() else " "
+        for character in (recognized or "")
+    ).split())
+    return _norm(query) in _norm(plain_ocr)
+
+
 def _norm(s):
     return (s or "").strip().lower().replace("ё", "е")
 
@@ -4537,7 +4569,7 @@ class App:
         text = ocr_read(*region)
         if not text:
             return None
-        hit = _norm(target) in _norm(text)
+        hit = game_search_result_matches(target, text)
         self.log(f"OCR: «{text[:60]}» -> {'совпало' if hit else 'НЕ совпало'} с «{target}»")
         return hit
 
@@ -4575,7 +4607,7 @@ class App:
                 # Ctrl+A + Delete надёжнее кнопки «×»: работает и когда поле уже пустое
                 INPUT.hotkey("ctrl", "a")
                 self._sleep(0.03)
-            self._paste(target)
+            self._paste(game_search_query(target))
             self._sleep(settle * (1.6 if attempt else 1.0))   # повтор — заведомо дольше
 
             checked = self._ocr_matches(target)
