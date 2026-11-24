@@ -52,7 +52,7 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(u.ASSET, "DBDRandomizerQtBeta.zip")
 
     def test_stable_version_does_not_offer_itself(self):
-        self.assertEqual(u.CURRENT_TAG, "v3.1.2")
+        self.assertEqual(u.CURRENT_TAG, "v3.1.3")
         def release(tag):
             return {"draft": False, "tag_name": tag,
                     "name": tag, "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag,
@@ -68,8 +68,8 @@ class UpdaterTests(unittest.TestCase):
                 release(u.CURRENT_TAG), release("v3.0.0-qt-rc.1")]).encode())):
             self.assertIsNone(u.check())
         with patch.object(u, "_get", return_value=io.BytesIO(json.dumps([
-                release("v3.1.3"), release(u.CURRENT_TAG)]).encode())):
-            self.assertEqual(u.check()["tag"], "v3.1.3")
+                release("v3.1.4"), release(u.CURRENT_TAG)]).encode())):
+            self.assertEqual(u.check()["tag"], "v3.1.4")
 
     def test_incomplete_release_without_checksum_is_not_offered(self):
         def release(tag, checksum):
@@ -85,7 +85,7 @@ class UpdaterTests(unittest.TestCase):
             return {"draft": False, "tag_name": tag, "assets": assets,
                     "html_url": "https://github.com/" + u.REPO + "/releases/tag/" + tag}
         invalid = release("v3.1.4", False)
-        complete = release("v3.1.3", True)
+        complete = release("v3.1.4", True)
         with patch.object(u, "_get", return_value=io.BytesIO(
                 json.dumps([invalid, complete]).encode())):
             self.assertEqual(u.check()["tag"], complete["tag_name"])
@@ -297,7 +297,7 @@ class UpdaterTests(unittest.TestCase):
 
     def test_newer_release_requires_portable_asset(self):
         base = {
-            "draft": False, "tag_name": "v3.1.3",
+            "draft": False, "tag_name": "v3.1.4",
             "name": "New Version",
             "html_url": "https://github.com/" + u.REPO + "/releases/tag/new",
             "assets": [

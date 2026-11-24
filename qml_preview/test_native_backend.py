@@ -555,6 +555,16 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual([x["name"] for x in clean],
                          [x["name"] for x in punctuated])
 
+    def test_boon_and_invocation_builder_search(self):
+        for query, expected in (
+            ("дар круг исцеления", "Дар: круг исцеления"),
+            ("Дар: круг исцеления", "Дар: круг исцеления"),
+            ("чары пауки прядильщики", "Чары: пауки-прядильщики"),
+        ):
+            with self.subTest(query=query):
+                self.assertEqual([x["name"] for x in self.bridge.searchPerks(
+                    "SURVIVOR", query)], [expected])
+
     def test_failed_equip_resets_cached_state(self):
         self.bridge.generate()
         self.bridge.cfg["options"]["dry_run"] = False

@@ -42,6 +42,30 @@ class ScourgeHookSearchTests(unittest.TestCase):
                      "Радужный король", "Ключ от судна", "крюк: Пучина ярости"):
             self.assertEqual(core.game_search_query(name), name)
 
+    def test_all_boon_and_invocation_perks(self):
+        perks = set(core.DATA.SURV_COMMON_PERKS)
+        for names in core.DATA.SURVIVORS.values():
+            perks.update(names)
+        families = {p for p in perks if p.casefold().startswith(("дар:", "чары:"))}
+        self.assertGreaterEqual(len(families), 7)
+        for name in families:
+            with self.subTest(name=name):
+                query = core.game_search_query(name)
+                self.assertNotEqual(query, name)
+                self.assertTrue(all(ch.isalnum() or ch == " " for ch in query))
+                self.assertTrue(core.game_search_result_matches(name, query))
+                self.assertTrue(core.game_search_result_matches(name, name))
+
+    def test_boon_and_invocation_variants(self):
+        for name in ("Дар: круг исцеления", "ДАР — КРУГ ИСЦЕЛЕНИЯ!!!",
+                     'Дар «круг исцеления»', "  дар:: круг   исцеления "):
+            self.assertEqual(core.game_search_query(name), "дар круг исцеления")
+        self.assertEqual(core.game_search_query("Чары: пауки-прядильщики"),
+                         "чары пауки прядильщики")
+        self.assertFalse(core.game_search_result_matches(
+            "Дар: круг исцеления", "Дар: уход в тень"))
+        self.assertEqual(core.game_search_query("Подарок"), "Подарок")
+
     def test_ocr_match_handles_colon_and_plain_search_result(self):
         original = "Секущий крюк: пучина ярости"
         for result in (

@@ -1,13 +1,13 @@
-name: Qt Stable v3.1.2 - verify Windows and publish release
+name: Qt Stable v3.1.3 - verify Windows and publish release
 
 on:
   push:
-    branches: ["main", "fix/qt-3.1.2-scourge-hook-game-search"]
+    branches: ["main", "fix/qt-3.1.3-boon-search"]
     paths: ["qml_preview/**", "dbd_randomizer.py", "dbd_data.py", "dbd_killer_challenges.py", "dbd_icons.py", "smoke_test.py", "tools/addon_names_ru_en.py", "tools/catalog_audit.py", "tools/test_catalog_audit.py", "tests/qt_rc2_candidate_e2e.py", ".github/workflows/qt-beta-release.yml"]
   workflow_dispatch:
     inputs:
       publish_stable:
-        description: "Publish v3.1.2 Stable Scourge Hook game-search fix after Windows validation"
+        description: "Publish v3.1.3 Stable Boon and Invocation game-search fix after Windows validation"
         type: boolean
         default: false
         required: true
@@ -126,7 +126,7 @@ jobs:
           "$hash  DBDRandomizerQtBeta.zip" | Set-Content -Path "dist/DBDRandomizerQtBeta.zip.sha256" -Encoding ascii
           Write-Host "Portable ZIP size: $([math]::Round((Get-Item 'dist/DBDRandomizerQtBeta.zip').Length / 1MB, 2)) MiB"
 
-      - name: Verify upgrade from published v3.1.1 to v3.1.2 Stable ZIP
+      - name: Verify upgrade from published v3.1.2 to v3.1.3 Stable ZIP
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -134,10 +134,10 @@ jobs:
         run: |
           $old = Join-Path $env:RUNNER_TEMP "qt-rc1-original"
           New-Item -ItemType Directory -Force -Path $old | Out-Null
-          gh release download v3.1.1 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
-          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published v3.1.1 release" }
+          gh release download v3.1.2 --repo "${{ github.repository }}" --pattern "DBDRandomizerQtBeta.zip*" --dir $old
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch published v3.1.2 release" }
           python tests/qt_rc2_candidate_e2e.py --old-zip "$old/DBDRandomizerQtBeta.zip" --new-zip "dist/DBDRandomizerQtBeta.zip"
-          if ($LASTEXITCODE -ne 0) { throw "Stable v3.1.1 to v3.1.2 updater E2E failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Stable v3.1.2 to v3.1.3 updater E2E failed" }
 
       - name: Upload verified Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
@@ -147,15 +147,15 @@ jobs:
             dist/DBDRandomizerQtBeta.zip
             dist/DBDRandomizerQtBeta.zip.sha256
 
-      - name: Publish GitHub Stable v3.1.2 (only after every validation above)
-        if: github.ref == 'refs/heads/main' && ((github.event_name == 'push' && contains(github.event.head_commit.message, '[publish stable v3.1.2]')) || (github.event_name == 'workflow_dispatch' && inputs.publish_stable == true))
+      - name: Publish GitHub Stable v3.1.3 (only after every validation above)
+        if: github.ref == 'refs/heads/main' && ((github.event_name == 'push' && contains(github.event.head_commit.message, '[publish stable v3.1.3]')) || (github.event_name == 'workflow_dispatch' && inputs.publish_stable == true))
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v3.1.2"
+          $tag = "v3.1.3"
           if (gh release view $tag --repo "${{ github.repository }}" 2>$null) {
             throw "Stable $tag exists; refusing to overwrite published release assets"
           } else {
-            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt v3.1.2 — Scourge Hook Game Search" --notes-file "qml_preview/RELEASE_NOTES.md" --latest
+            gh release create $tag dist/DBDRandomizerQtBeta.zip dist/DBDRandomizerQtBeta.zip.sha256 --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "DBD Randomizer Qt v3.1.3 — Boon and Invocation Game Search" --notes-file "qml_preview/RELEASE_NOTES.md" --latest
           }

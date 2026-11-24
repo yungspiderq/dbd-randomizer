@@ -1254,10 +1254,15 @@ class QtBridge(QObject):
         for hero, spec in chars.items():
             for name in (spec.get("perks", []) if isinstance(spec, dict) else spec):
                 owners.setdefault(name, []).append(hero)
-        needle = core._norm(core.game_search_query(query or ""))
+        def search_key(value):
+            return core._norm(" ".join("".join(
+                ch if ch.isalnum() or ch.isspace() else " "
+                for ch in (value or "")
+            ).split()))
+        needle = search_key(query)
         filtered = [name for name in sorted(names)
-                    if not needle or needle in core._norm(core.game_search_query(name))
-                    or needle in core._norm(" ".join(owners.get(name, [])))]
+                    if not needle or needle in search_key(name)
+                    or needle in search_key(" ".join(owners.get(name, [])))]
         return [{
             "name": name,
             "owner": ", ".join(owners.get(name, [])),
