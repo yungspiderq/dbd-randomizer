@@ -22,6 +22,7 @@ p.survivors), то есть внутренний id игры. Он НЕ раве
 
 # Убийцы: EN имя из Module:Datatable (p.killers) -> RU имя из dbd_data.KILLERS.
 KILLER_EN_RU = {
+    "Terrifier": "Ужасающий",
     "Trapper": "Охотник",
     "Wraith": "Призрак",
     "Hillbilly": "Деревенщина",
@@ -70,6 +71,7 @@ KILLER_EN_RU = {
 
 # Выжившие: EN имя из Module:Datatable (p.survivors) -> RU имя из dbd_data.SURVIVORS.
 SURVIVOR_EN_RU = {
+    "Sienna Shaw": "Сиенна Шоу",
     "Dwight Fairfield": "Дуайт Фэйрфилд",
     "Meg Thomas": "Мэг Томас",
     "Claudette Morel": "Клодетт Морель",

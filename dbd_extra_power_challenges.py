@@ -5,6 +5,10 @@ One middle-difficulty and one harder goal per registered killer.
 These are optional, self-judged in-game tasks, not event telemetry.
 """
 EXTRA_KILLER_POWER_TRIALS = {
+    "Ужасающий": [
+        ["Разнообразие", "За матч трижды выбери разные варианты способности подряд."],
+        ["Смена подхода", "За матч используй четыре разных варианта силы в отдельных игровых эпизодах."]
+    ],
     "Охотник": [
         [
             "Путь вокруг капкана",

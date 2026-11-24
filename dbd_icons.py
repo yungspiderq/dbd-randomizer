@@ -10,6 +10,13 @@ deadbydaylight.wiki.gg. Иконки НЕ лежат в репозитории: 
 ICON_BASE = "https://deadbydaylight.wiki.gg/images/"
 
 PERK_ICONS = {
+    "Смешные дела": "T_UI_iconsPerks_FunnyBusiness.png",
+    "Череда убийств": "T_UI_iconsPerks_KillSpree.png",
+    "Смешливый шут": "T_UI_iconsPerks_Laughingstock.png",
+    "Ярость Валькирии": "T_UI_iconsPerks_ValkyriesRage.png",
+    "Общая травма": "T_UI_iconsPerks_SharedTrauma.png",
+    "Лучший подарок на свете": "T_UI_iconsPerks_BestGiftEver.png",
+
     'Аварийная кнопка': 'IconPerks_deadMansSwitch.png',
     'Адреналин': 'IconPerks_adrenaline.png',
     'Алчность': 'IconPerks_HumanGreed.png',
@@ -333,6 +340,27 @@ PERK_ICONS = {
 }
 
 ADDON_ICONS = {
+    "Mike's Phone": "T_UI_iconAddon_MikesPhone.png",
+    "Bottle of Bleach": "T_UI_iconAddon_BottleOfBleach.png",
+    "Blackened Heart": "T_UI_iconAddon_BlackenedHeart.png",
+    "Allie's Scalp": "T_UI_iconAddon_AlliesScalp.png",
+    "Sienna's Flesh": "T_UI_iconAddon_SiennasFlesh.png",
+    "Shiny Tricycle": "T_UI_iconAddon_ShinyTricycle.png",
+    "Burnt Wings": "T_UI_iconAddon_BurntWings.png",
+    "Brooke's Pustule": "T_UI_iconAddon_BrooksPustule.png",
+    "Bloodstained Bullet": "T_UI_iconAddon_BloodstainedBullet.png",
+    "Victoria's Eye": "T_UI_iconAddon_VictoriasEye.png",
+    "Thornton Salt": "T_UI_iconAddon_ThorntonSalt.png",
+    "Emily": "T_UI_iconAddon_Emily.png",
+    "Dead Opossum": "T_UI_iconAddon_DeadOpossum.png",
+    "Candy Head Bowl": "T_UI_iconAddon_CandyHeadBowl.png",
+    "Wacky Jacks": "T_UI_iconAddon_WackyJacks.png",
+    "Jonathan's Skull": "T_UI_iconAddon_JonathansSkull.png",
+    "Explosive Gift": "T_UI_iconAddon_ExplosiveGift.png",
+    "Art Crispies": "T_UI_iconAddon_ArtCrispies.png",
+    "The Ninth Circle": "T_UI_iconAddon_TheNinthCircle.png",
+    "Duct Tape": "T_UI_iconAddon_DuctTape.png",
+
     '15-процентный эфир': 'IconAddon_ether15Vol.png',
     'Tir оптика': 'IconAddon_tirOptic.png',
     '«Гоуст Фейс пойман на камеру»': 'IconAddon_caughtOnTape.png',
@@ -1225,6 +1253,8 @@ KILLER_PORTRAITS = {
 }
 
 POWER_ICONS = {
+    "Мешок игрушек": "T_UI_iconPowers_GarbageBag.png",
+
     'UVX': 'IconPowers_uvx.png',
     'Бензопила': 'IconPowers_chainsaw.png',
     'Бензопила Буббы': 'IconPowers_bubbasChainsaw.png',

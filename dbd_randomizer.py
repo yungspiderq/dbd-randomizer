@@ -623,6 +623,8 @@ SKIN_SEARCH_ALIASES = {
     "Первый": "First Vecna Henry Creel векна",
     "Лич": "Lich Vecna",
     "Правосудие": "Judgment",
+    "Ужасающий": "Terrifier Art",
+    "Сиенна Шоу": "Sienna Shaw",
     "Егерь": "Houndmaster",
     "Красу": "Krasue",
     "Слэшер": "Slasher Jason джейсон",
@@ -809,7 +811,21 @@ def load_db():
         try:
             with open(DB_FILE, "r", encoding="utf-8") as fh:
                 user = json.load(fh)
-            if user.get("db_revision") != DATA.DB_REVISION:
+            if user.get("db_revision") == 3 and DATA.DB_REVISION == 4:
+                # Additive Terrifier migration: preserve manual catalog edits and ownership.
+                for section in ("killers", "survivors", "survivor_items",
+                                "surv_common_perks", "killer_common_perks"):
+                    if user.get(section):
+                        db[section] = user[section]
+                for section, name in (("killers", "Ужасающий"), ("survivors", "Сиенна Шоу")):
+                    source = DATA.KILLERS if section == "killers" else DATA.SURVIVORS
+                    db[section].setdefault(name, copy.deepcopy(source[name]))
+                if isinstance(user.get("owned"), dict):
+                    db["owned"].update(user["owned"])
+                shutil.copy2(DB_FILE, DB_FILE + ".bak")
+                db["_db_migrated"] = True
+                dump_db(db)
+            elif user.get("db_revision") != DATA.DB_REVISION:
                 # Локальная копия старше встроенной базы: имена в ней могут
                 # принадлежать игре позапрошлого патча («Самонастраивающийся
                 # карбюратор» после v2.15.0). Пересоздаём, пользовательские
@@ -1468,8 +1484,8 @@ def validate_db(db):
     survivors = db.get("survivors", {})
     items = db.get("survivor_items", {})
 
-    if len(killers) < 44:
-        warnings.append(f"Убийц в базе: {len(killers)} (в игре 44 на патче {db.get('version')}).")
+    if len(killers) < 45:
+        warnings.append(f"Убийц в базе: {len(killers)} (в игре 45 на патче {db.get('version')}).")
     if len(survivors) < 50:
         warnings.append(f"Выживших в базе: {len(survivors)}.")
 

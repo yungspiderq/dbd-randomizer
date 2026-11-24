@@ -35,6 +35,25 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual([x["name"] for x in found["rows"]], ["Дар: круг исцеления"])
         self.assertTrue(found["rows"][0]["detail"])
 
+    def test_terrifier_catalog_and_randomization(self):
+        art = self.db["killers"]["Ужасающий"]
+        self.assertEqual(len(set(art["addons"])), 20)
+        self.assertEqual(len(art["perks"]), 3)
+        self.assertEqual(len(self.db["survivors"]["Сиенна Шоу"]), 3)
+        for name in art["addons"]:
+            self.assertIn(name, core.ICONS.ADDON_ICONS)
+        b = core.make_killer_build(self.db, ["Ужасающий"], skin_enabled=False)
+        self.assertEqual(b["char"], "Ужасающий")
+        self.assertEqual(len(set(b["addons"])), 2)
+        self.assertTrue(set(b["addons"]) <= set(art["addons"]))
+        result = catalog(self.db, "KILLER", "addons", "Ужасающий")
+        self.assertEqual(result["total"], 20)
+        for side, names in (("KILLER", art["perks"]), ("SURVIVOR", self.db["survivors"]["Сиенна Шоу"])):
+            for name in names:
+                row = catalog(self.db, side, "perks", name)["rows"][0]
+                self.assertTrue(row["detail"])
+                self.assertIn(name, core.ICONS.PERK_ICONS)
+
     def test_addons_respect_real_pool(self):
         result = catalog(self.db, "KILLER", "addons", "Доктор", playable=core._playable_addons)
         self.assertEqual(result["total"], len(set(core._playable_addons(self.db["killers"]["Доктор"]["addons"]))))

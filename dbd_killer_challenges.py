@@ -10,6 +10,10 @@ Avoid mechanical prerequisites such as add-ons or particular perks.
 from dbd_extra_power_challenges import EXTRA_KILLER_POWER_TRIALS
 
 KILLER_POWER_TRIALS = {
+    "Ужасающий": [
+        ["Сюрприз из мешка", "За матч используй два разных варианта игровой силы."],
+        ["Полная коллекция", "Используй все пять вариантов игровой силы за один матч."]
+    ],
     "Охотник": [
         [
             "Засада у капкана",

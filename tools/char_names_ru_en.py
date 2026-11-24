@@ -9,6 +9,7 @@
 # Выжившие: RU имя -> EN полное имя (ключ Module:Datatable/Icons, файл Survivor*.png).
 # Ли Юнчин отсутствует: портрета на вики нет (разрешённое исключение в тестах).
 SURVIVOR_RU_EN = {
+    "Сиенна Шоу": "Sienna Shaw",
     "Аврора": "Aurora Stardotter", "Орела Роуз": "Orela Rose", "Рик Граймс": "Rick Grimes",
     "Мишон Граймс": "Michonne Grimes", "Ви Бунясак": "Vee Boonyasak",
     "Дастин Хендерсон": "Dustin Henderson", "Одиннадцать": "Eleven", "Квон Тхэён": "Kwon Tae-young",

@@ -1734,6 +1734,10 @@ class QtBridge(QObject):
             return
         try:
             steps=self._equip_steps()
+            provisional = set(core.DATA.KILLERS.get("Ужасающий", {}).get("addons", []))
+            if any(target in provisional for _, target, _ in steps) and not self._option("dry_run"):
+                self._notify("Русские названия аддонов Ужасающего ещё не сверены. Выберите их вручную; автоматическая экипировка этих аддонов пока отключена.")
+                return
             if not steps:
                 self._notify("Экипировка не требуется: нет действий для отправки.")
                 return

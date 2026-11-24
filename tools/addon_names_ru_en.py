@@ -10,6 +10,29 @@
 """
 
 ADDON_RU_EN = {
+    # Original English names until the Russian client is verified.
+    "Ужасающий": {
+        "Mike's Phone": "Mike's Phone",
+        "Bottle of Bleach": "Bottle of Bleach",
+        "Blackened Heart": "Blackened Heart",
+        "Allie's Scalp": "Allie's Scalp",
+        "Sienna's Flesh": "Sienna's Flesh",
+        "Shiny Tricycle": "Shiny Tricycle",
+        "Burnt Wings": "Burnt Wings",
+        "Brooke's Pustule": "Brooke's Pustule",
+        "Bloodstained Bullet": "Bloodstained Bullet",
+        "Victoria's Eye": "Victoria's Eye",
+        "Thornton Salt": "Thornton Salt",
+        "Emily": "Emily",
+        "Dead Opossum": "Dead Opossum",
+        "Candy Head Bowl": "Candy Head Bowl",
+        "Wacky Jacks": "Wacky Jacks",
+        "Jonathan's Skull": "Jonathan's Skull",
+        "Explosive Gift": "Explosive Gift",
+        "Art Crispies": "Art Crispies",
+        "The Ninth Circle": "The Ninth Circle",
+        "Duct Tape": "Duct Tape",
+    },
     "Охотник": {
         "Кровавая пружина": "Bloody Coil", "Радужный камень": "Iridescent Stone",
         "Маслянистая пружина": "Oily Coil", "Натяжная пружина": "Tension Spring",
