@@ -555,6 +555,14 @@ class QtBackendTests(unittest.TestCase):
         self.assertEqual([x["name"] for x in clean],
                          [x["name"] for x in punctuated])
 
+    def test_companion_catalog_and_analysis(self):
+        result = self.bridge.encyclopedia("SURVIVOR", "perks", "дар круг исцеления", 0)
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["rows"][0]["name"], "Дар: круг исцеления")
+        self.bridge.generate()
+        self.assertTrue(self.bridge.buildAnalysis["hasBuild"])
+        self.assertEqual(self.bridge.buildAnalysis["filled"], 4)
+
     def test_boon_and_invocation_builder_search(self):
         for query, expected in (
             ("дар круг исцеления", "Дар: круг исцеления"),

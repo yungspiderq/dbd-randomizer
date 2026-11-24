@@ -13,9 +13,9 @@ class CategoryIconsTests(unittest.TestCase):
             r'NavItem \{ ordinal: (\d+); label: "([^"]+)"; iconName: "([^"]+)"',
             source,
         )
-        self.assertEqual(len(nav), 10)
-        self.assertEqual(len({label for _, label, _ in nav}), 10)
-        self.assertEqual(len({icon for _, _, icon in nav}), 10)
+        self.assertEqual(len(nav), 12)
+        self.assertEqual(len({label for _, label, _ in nav}), 12)
+        self.assertEqual(len({icon for _, _, icon in nav}), 12)
         self.assertIn("component MiniGlyph: Canvas", source)
         self.assertIn("onKindChanged: requestPaint()", source)
         self.assertIn('property string iconName: ""', source)
@@ -35,7 +35,7 @@ class CategoryIconsTests(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, source)
-        self.assertIn("QT QUICK • STABLE 3.1.2", source)
+        self.assertIn("QT QUICK • STABLE 3.2.0", source)
 
 
 if __name__ == "__main__":

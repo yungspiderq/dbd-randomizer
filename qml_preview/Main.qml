@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Randomizer Qt · v3.1.3"
+    title: "DBD Randomizer Qt · v3.2.0"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -96,6 +96,12 @@ ApplicationWindow {
                 if (fill) ctx.fill(); else ctx.stroke();
             }
             switch (kind) {
+            case "analysis":
+                circle(8, 8, 5); line(12, 12, 18, 18); line(5, 9, 8, 6); line(8, 6, 11, 8);
+                break;
+            case "book":
+                polygon([2, 3, 10, 5, 18, 3, 18, 16, 10, 18, 2, 16], false); line(10, 5, 10, 18);
+                break;
             case "dice":
                 rect(3, 3, 14, 14); dot(7, 7, 1); dot(13, 13, 1); dot(10, 10, 1);
                 break;
@@ -539,13 +545,15 @@ ApplicationWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 5
                         Text { text: "DBD Randomizer"; color: win.colors.text; font.pixelSize: 16; font.weight: Font.DemiBold }
-                        Text { text: "QT QUICK • STABLE 3.1.3"; color: win.colors.muted; font.pixelSize: 10 }
+                        Text { text: "QT QUICK • STABLE 3.2.0"; color: win.colors.muted; font.pixelSize: 10 }
                     }
                 }
                 Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
                 Item { height: 12 }
                 NavItem { ordinal: 1; label: "Билд"; iconName: "dice"; onClicked: win.page = label }
                 NavItem { ordinal: 2; label: "Конструктор"; iconName: "builder"; onClicked: win.page = label }
+                NavItem { ordinal: 11; label: "Анализатор билдов"; iconName: "analysis"; onClicked: win.page = label }
+                NavItem { ordinal: 12; label: "Энциклопедия DBD"; iconName: "book"; onClicked: win.page = label }
                 NavItem { ordinal: 3; label: "Избранное"; iconName: "favorite"; onClicked: win.page = label }
                 NavItem { ordinal: 4; label: "Билды сообщества"; iconName: "community"; onClicked: win.page = label }
                 NavItem { ordinal: 5; label: "Персонажи"; iconName: "character"; onClicked: win.page = label }
@@ -630,7 +638,7 @@ ApplicationWindow {
                                 elide: Text.ElideRight
                             }
                             Text {
-                                text: "DBD / 3.1"
+                                text: "DBD / 3.2"
                                 width: 96
                                 horizontalAlignment: Text.AlignRight
                                 anchors.verticalCenter: parent.verticalCenter
@@ -2555,6 +2563,175 @@ ApplicationWindow {
                                     width: (parent.width - 10) / 2; primary: true
                                     label: "К ГЕНЕРАТОРУ"
                                     onClicked: win.page = "Билд"
+                                }
+                            }
+                        }
+
+
+                        Column {
+                            id: analysisPage
+                            visible: win.page === "Анализатор билдов"
+                            width: parent.width
+                            spacing: 12
+                            property var report: backend.buildAnalysis
+                            Text {
+                                width: parent.width; wrapMode: Text.WordWrap
+                                text: "Анализ текущего билда. Правила совместимости и тематические категории — не статистика побед."
+                                color: win.muted; font.pixelSize: 13
+                            }
+                            Row {
+                                width: parent.width; spacing: 8
+                                UiButton { width: (parent.width - 8) / 2; label: "К генератору"; onClicked: win.page = "Билд" }
+                                UiButton { width: (parent.width - 8) / 2; label: "К конструктору"; onClicked: win.page = "Конструктор" }
+                            }
+                            Text {
+                                width: parent.width; wrapMode: Text.WordWrap
+                                text: analysisPage.report.hasBuild ? analysisPage.report.character + "  ·  " + analysisPage.report.filled + "/4 навыка" : "Сначала создай или загрузи билд."
+                                color: win.colors.text; font.pixelSize: 20; font.bold: true
+                            }
+                            Text {
+                                width: parent.width; wrapMode: Text.WordWrap
+                                visible: analysisPage.report.hasBuild
+                                text: "Ручная классификация: " + analysisPage.report.classified + " из " + analysisPage.report.filled + " навыков. Один навык может относиться к нескольким категориям."
+                                color: win.muted; font.pixelSize: 12
+                            }
+                            Repeater {
+                                model: analysisPage.visible ? analysisPage.report.groups : []
+                                delegate: Rectangle {
+                                    width: analysisPage.width; height: 48; radius: 8
+                                    color: win.colors.panel; border.color: win.stroke
+                                    Text { x: 12; y: 7; text: modelData.name + " · " + modelData.count; color: win.colors.text; font.pixelSize: 12 }
+                                    Rectangle {
+                                        x: 12; y: 31; width: Math.max(0, parent.width - 24); height: 6; radius: 3
+                                        color: win.colors.button
+                                        Rectangle { width: parent.width * Math.min(1, modelData.count / 4); height: parent.height; radius: 3; color: win.accent }
+                                    }
+                                }
+                            }
+                            Text { visible: analysisPage.report.hasBuild; text: "НАВЫКИ И РОЛИ"; color: win.muted; font.bold: true; font.pixelSize: 12 }
+                            Repeater {
+                                model: analysisPage.visible ? analysisPage.report.perks : []
+                                delegate: Rectangle {
+                                    width: analysisPage.width; height: Math.max(68, analysisPerkText.implicitHeight + 20); radius: 8
+                                    color: win.colors.panel; border.color: win.stroke
+                                    ArtThumb { x: 9; anchors.verticalCenter: parent.verticalCenter; pixels: 46; iconKey: modelData.name; placeholder: "PERK" }
+                                    Column {
+                                        id: analysisPerkText
+                                        x: 66; width: parent.width - 78; anchors.verticalCenter: parent.verticalCenter; spacing: 5
+                                        Text { width: parent.width; wrapMode: Text.WordWrap; text: modelData.name; color: win.colors.text; font.bold: true; font.pixelSize: 13 }
+                                        Text { width: parent.width; wrapMode: Text.WordWrap; text: modelData.tags; color: win.muted; font.pixelSize: 12 }
+                                    }
+                                }
+                            }
+                            Text { visible: analysisPage.report.hasBuild; text: "СИНЕРГИИ"; color: win.colors.accentSoft; font.bold: true; font.pixelSize: 13 }
+                            Text {
+                                visible: analysisPage.report.hasBuild && !analysisPage.report.synergies.length
+                                width: parent.width; wrapMode: Text.WordWrap; color: win.muted
+                                text: "В проверенных правилах нет известных сочетаний. Это не означает, что билд слабый."
+                            }
+                            Repeater {
+                                model: analysisPage.visible ? analysisPage.report.synergies : []
+                                delegate: Text { width: analysisPage.width; text: modelData; wrapMode: Text.WordWrap; color: win.colors.text; font.pixelSize: 13 }
+                            }
+                            Text { visible: analysisPage.report.hasBuild; text: "ОГРАНИЧЕНИЯ И КОНФЛИКТЫ"; color: win.colors.accentSoft; font.bold: true; font.pixelSize: 13 }
+                            Text {
+                                visible: analysisPage.report.hasBuild && !analysisPage.report.warnings.length
+                                width: parent.width; wrapMode: Text.WordWrap; color: win.muted
+                                text: "По имеющимся правилам явных конфликтов не найдено."
+                            }
+                            Repeater {
+                                model: analysisPage.visible ? analysisPage.report.warnings : []
+                                delegate: Text { width: analysisPage.width; text: modelData; wrapMode: Text.WordWrap; color: win.colors.text; font.pixelSize: 13 }
+                            }
+                        }
+
+                        Column {
+                            id: encyclopediaPage
+                            visible: win.page === "Энциклопедия DBD"
+                            width: parent.width
+                            spacing: 12
+                            property string side: "KILLER"
+                            property string kind: "characters"
+                            property int requestedPage: 0
+                            property var selected: null
+                            property var result: visible ? backend.encyclopedia(side, kind, encyclopediaSearch.text, requestedPage) : ({rows:[], total:0, page:0, pages:1})
+                            function resetSelection() { requestedPage = 0; selected = null }
+                            function changeSide(value) {
+                                side = value
+                                if (value === "KILLER" && kind === "items") kind = "characters"
+                                resetSelection()
+                            }
+                            Text { width: parent.width; text: "Справочник локальной базы DBD. Эффекты и описания могут зависеть от патча."; wrapMode: Text.WordWrap; color: win.muted; font.pixelSize: 13 }
+                            Row {
+                                width: parent.width; spacing: 8
+                                UiButton { width: (parent.width-8)/2; label: "Маньяки"; primary: encyclopediaPage.side === "KILLER"; onClicked: encyclopediaPage.changeSide("KILLER") }
+                                UiButton { width: (parent.width-8)/2; label: "Выжившие"; primary: encyclopediaPage.side === "SURVIVOR"; onClicked: encyclopediaPage.changeSide("SURVIVOR") }
+                            }
+                            Row {
+                                width: parent.width; spacing: 6
+                                Repeater {
+                                    model: [{key:"characters", name:"Персонажи"}, {key:"perks", name:"Навыки"}, {key:"addons", name:"Аддоны"}, {key:"items", name:"Предметы"}]
+                                    UiButton {
+                                        width: (encyclopediaPage.width-18)/4
+                                        label: modelData.name
+                                        enabled: modelData.key !== "items" || encyclopediaPage.side === "SURVIVOR"
+                                        primary: encyclopediaPage.kind === modelData.key
+                                        onClicked: { encyclopediaPage.kind = modelData.key; encyclopediaPage.resetSelection() }
+                                    }
+                                }
+                            }
+                            UiField {
+                                id: encyclopediaSearch
+                                width: parent.width; placeholderText: "Поиск по названию, персонажу или категории"
+                                onTextChanged: encyclopediaPage.resetSelection()
+                            }
+                            Row {
+                                width: parent.width; spacing: 8
+                                UiButton { width: (parent.width-16)/3; label: "Назад"; enabled: encyclopediaPage.result.page > 0; onClicked: { encyclopediaPage.selected = null; encyclopediaPage.requestedPage = encyclopediaPage.result.page-1 } }
+                                Text { width: (parent.width-16)/3; anchors.verticalCenter: parent.verticalCenter; horizontalAlignment: Text.AlignHCenter; color: win.colors.text; text: (encyclopediaPage.result.page+1) + "/" + encyclopediaPage.result.pages + " · " + encyclopediaPage.result.total; font.pixelSize: 12 }
+                                UiButton { width: (parent.width-16)/3; label: "Далее"; enabled: encyclopediaPage.result.page+1 < encyclopediaPage.result.pages; onClicked: { encyclopediaPage.selected = null; encyclopediaPage.requestedPage = encyclopediaPage.result.page+1 } }
+                            }
+                            Rectangle {
+                                visible: encyclopediaPage.selected !== null
+                                width: parent.width; height: visible ? encyclopediaDetail.implicitHeight + 24 : 0
+                                radius: 10; color: win.colors.panel; border.color: win.stroke
+                                Column {
+                                    id: encyclopediaDetail
+                                    x: 12; y: 12; width: parent.width - 24; spacing: 8
+                                    property var row: encyclopediaPage.selected || ({name:"", owner:"", category:"", detail:"", kind:""})
+                                    Text { width: parent.width; wrapMode: Text.WordWrap; text: encyclopediaDetail.row.name; color: win.colors.text; font.pixelSize: 18; font.bold: true }
+                                    Text { width: parent.width; wrapMode: Text.WordWrap; text: [encyclopediaDetail.row.owner, encyclopediaDetail.row.category].filter(Boolean).join(" · "); color: win.muted; font.pixelSize: 12 }
+                                    Text {
+                                        width: parent.width; wrapMode: Text.WordWrap; color: win.colors.text; font.pixelSize: 13
+                                        text: encyclopediaDetail.row.kind === "addons" ?
+                                            (backend.addonEffect.effect || backend.addonEffect.summary || "Точное описание пока отсутствует в локальной базе.") :
+                                            (encyclopediaDetail.row.detail || "Описание пока отсутствует в локальной базе.")
+                                    }
+                                    UiButton {
+                                        width: parent.width; label: "Открыть справочник на Wiki"
+                                        onClicked: {
+                                            if (encyclopediaDetail.row.kind === "addons") backend.openAddonSource()
+                                            else backend.openEncyclopediaReference(encyclopediaPage.kind)
+                                        }
+                                    }
+                                }
+                            }
+                            Text { visible: encyclopediaPage.result.total === 0; text: "Ничего не найдено."; color: win.muted; font.pixelSize: 13 }
+                            Repeater {
+                                model: encyclopediaPage.result.rows
+                                delegate: CatalogRow {
+                                    width: encyclopediaPage.width
+                                    title: modelData.name
+                                    subtitle: [modelData.owner, modelData.category].filter(Boolean).join(" · ")
+                                    artKey: modelData.icon
+                                    showCheck: false
+                                    selected: encyclopediaPage.selected !== null && encyclopediaPage.selected.name === modelData.name && encyclopediaPage.selected.owner === modelData.owner && encyclopediaPage.selected.category === modelData.category
+                                    onActivated: {
+                                        encyclopediaPage.selected = modelData
+                                        if (modelData.kind === "addons")
+                                            backend.selectAddonEffect(modelData.side, modelData.owner, modelData.category, modelData.name)
+                                        work.contentY = 0
+                                    }
                                 }
                             }
                         }

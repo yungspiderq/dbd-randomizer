@@ -56,7 +56,7 @@ class UnslopDesignTests(unittest.TestCase):
             'border.color: primary ? win.colors.accent : win.colors.stroke',
             'prominent: true',
             'text: "Генератор билдов"',
-            'QT QUICK • STABLE 3.1.2',
+            'QT QUICK • STABLE 3.2.0',
         ):
             with self.subTest(marker=marker):
                 # Main title uses an expression, so check that on its own.
@@ -67,7 +67,7 @@ class UnslopDesignTests(unittest.TestCase):
         self.assertEqual(QML.count("prominent: true"), 1)
         self.assertNotIn("QT ИНТЕРФЕЙС", QML)
         self.assertNotIn('text: "ВАШ БИЛД"', QML)
-        self.assertEqual(len(re.findall(r'NavItem \{ ordinal: \d+;', QML)), 10)
+        self.assertEqual(len(re.findall(r'NavItem \{ ordinal: \d+;', QML)), 12)
 
 
 if __name__ == "__main__":

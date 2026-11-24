@@ -24,6 +24,7 @@ import qt_updater
 from addon_effects import AddonEffectLibrary
 from rotation_engine import RotationState, make_rotated_build
 from perk_cards import perk_info, reconcile_pins
+from companion import analyze, catalog
 from perk_descriptions import description_for
 from stats_engine import BuildStatistics
 from favorites import FavoriteBuilds
@@ -1221,6 +1222,22 @@ class QtBridge(QObject):
     def copyClass(self):
         QGuiApplication.clipboard().setText(core.classes_to_text(list(self._classes.items())))
         self._notify("Классы скопированы.")
+
+    @Property("QVariantMap", notify=buildRevisionChanged)
+    def buildAnalysis(self):
+        return analyze(self.db, self.build, (core.EMPTY, core.NO_ADDONS))
+
+    @Slot(str, str, str, int, result="QVariantMap")
+    def encyclopedia(self, side, kind, query, page):
+        return catalog(self.db, side, kind, query, page,
+                       playable=core._playable_addons)
+
+    @Slot(str)
+    def openEncyclopediaReference(self, kind):
+        pages = {"characters": "Characters", "perks": "Perks",
+                 "addons": "Add-ons", "items": "Items"}
+        if kind in pages:
+            QDesktopServices.openUrl(QUrl("https://deadbydaylight.wiki.gg/wiki/" + pages[kind]))
 
     @Slot(str, str, result="QVariantList")
     def searchCharacters(self, side, query):
