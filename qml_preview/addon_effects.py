@@ -174,8 +174,6 @@ class AddonEffectLibrary:
             ", ".join(dict.fromkeys(CATEGORY_RU.get(tag, tag) for tag in tags if tag))
             if tags else ""
         )
-        if character == "Ужасающий":
-            summary = "Английское название; русская локализация ещё не подтверждена." + (" " + summary if summary else "")
         return {
             "name": name,
             "english": english,

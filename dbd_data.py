@@ -14,7 +14,7 @@ dbd_data.py — база данных DBD Ultimate Randomizer (RU-локализ
 Ростер: Terrifier (24.11.2026) — 45 убийц.
 """
 
-VERSION = "10.3.0 / 2026-11 (Terrifier; новые аддоны EN, RU ожидает сверки)"
+VERSION = "10.3.0 / 2026-11 (Terrifier; RU-названия аддонов предоставлены пользователем)"
 
 # Ревизия структуры и имён встроенной базы. Поднимается при каждой правке имён
 # (v2.15.1 = 2: наборы Деревенщины/Каннибала/Чумы, чистка удалённых аддонов).
@@ -45,6 +45,28 @@ REMOVED_FROM_GAME = frozenset({
 # получают и пулы аддонов, и белые списки «только открытое у меня» (owned),
 # ревизия базы при исправлении написания не меняется.
 ADDON_RENAMES = {
+    # Migrate the English labels from the unpublished Terrifier candidate.
+    "The Ninth Circle": "Девятый круг",
+    "Duct Tape": "Клейкая лента",
+    "Explosive Gift": "Взрывоопасный подарок",
+    "Wacky Jacks": "Дурик Джекс",
+    "Art Crispies": "Хрустяшки Арта",
+    "Jonathan's Skull": "Череп Джонатана",
+    "Victoria's Eye": "Глаз Виктории",
+    "Candy Head Bowl": "Голова с конфетами",
+    "Dead Opossum": "Дохлый опоссум",
+    "Thornton Salt": "Торнтонская соль",
+    "Emily": "Эмили",
+    "Brooke's Pustule": "Волдырь Брук",
+    "Shiny Tricycle": "Новенький трехколесник",
+    "Bloodstained Bullet": "Окровавленная пуля",
+    "Burnt Wings": "Опаленные крылья",
+    "Sienna's Flesh": "Плоть Сиенны",
+    "Bottle of Bleach": "Отбеливатель",
+    "Blackened Heart": "Почерневшее сердце",
+    "Allie's Scalp": "Скальп Элли",
+    "Mike's Phone": "Телефон Майка",
+
     # Прежнее оформление заметок Картера заменено на написание в официальной
     # русской игровой локализации; сохраняем owned-списки пользователей.
     "«Дисциплина» — заметки Картера": '"Дисциплина" - заметки Картера',
@@ -85,10 +107,31 @@ KILLER_COMMON_PERKS = [
 # ============================================================================
 
 KILLERS = {
-    # Terrifier: EN add-on labels pending verified Russian client strings.
+    # Terrifier: Russian add-on labels supplied by the user.
     "Ужасающий": {
         "power": "Мешок игрушек",
-        "addons": ["Mike's Phone","Bottle of Bleach","Blackened Heart","Allie's Scalp","Sienna's Flesh","Shiny Tricycle","Burnt Wings","Brooke's Pustule","Bloodstained Bullet","Victoria's Eye","Thornton Salt","Emily","Dead Opossum","Candy Head Bowl","Wacky Jacks","Jonathan's Skull","Explosive Gift","Art Crispies","The Ninth Circle","Duct Tape"],
+        "addons": [
+            "Девятый круг",
+            "Клейкая лента",
+            "Взрывоопасный подарок",
+            "Дурик Джекс",
+            "Хрустяшки Арта",
+            "Череп Джонатана",
+            "Глаз Виктории",
+            "Голова с конфетами",
+            "Дохлый опоссум",
+            "Торнтонская соль",
+            "Эмили",
+            "Волдырь Брук",
+            "Новенький трехколесник",
+            "Окровавленная пуля",
+            "Опаленные крылья",
+            "Плоть Сиенны",
+            "Отбеливатель",
+            "Почерневшее сердце",
+            "Скальп Элли",
+            "Телефон Майка",
+        ],
         "perks": ["Смешные дела", "Череда убийств", "Смешливый шут"],
     },
     "Охотник": {

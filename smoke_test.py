@@ -438,7 +438,7 @@ class TestKillerPowerChallenges(unittest.TestCase):
         from collections import Counter
         self.assertEqual(len(EXTRA_GENERAL_CHALLENGES), 75)
         self.assertEqual(len(EXTRA_KILLER_POWER_TRIALS), len(D.KILLERS))
-        self.assertEqual(sum(map(len, EXTRA_KILLER_POWER_TRIALS.values())), 88)
+        self.assertEqual(sum(map(len, EXTRA_KILLER_POWER_TRIALS.values())), 2 * len(D.KILLERS))
         self.assertGreaterEqual(len({c["theme"] for c in EXTRA_GENERAL_CHALLENGES}), 10)
         counts = Counter((c["side"], c["diff"]) for c in EXTRA_GENERAL_CHALLENGES)
         for side in ("KILLER", "SURVIVOR"):

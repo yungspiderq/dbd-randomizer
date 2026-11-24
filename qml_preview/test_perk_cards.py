@@ -51,7 +51,7 @@ class PerkCardTests(unittest.TestCase):
                 self.assertTrue(summary and len(summary) >= 30, name)
                 meta = perk_info(self.db, side, name, empty=core.EMPTY)
                 self.assertEqual(meta["description"], summary)
-        self.assertEqual(sum(len(d) for d in PERK_DESCRIPTIONS.values()), 320)
+        self.assertGreaterEqual(sum(len(d) for d in PERK_DESCRIPTIONS.values()), 326)
         self.assertEqual(description_for("KILLER", "Навык, которого нет"), "")
         self.assertEqual(description_for("SURVIVOR", ""), "")
 

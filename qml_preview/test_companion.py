@@ -1,4 +1,7 @@
 import sys
+import json
+import tempfile
+from unittest.mock import patch
 import unittest
 from pathlib import Path
 
@@ -53,6 +56,34 @@ class CompanionTests(unittest.TestCase):
                 row = catalog(self.db, side, "perks", name)["rows"][0]
                 self.assertTrue(row["detail"])
                 self.assertIn(name, core.ICONS.PERK_ICONS)
+
+    def test_terrifier_exact_russian_names_and_migration(self):
+        from tools.addon_names_ru_en import ADDON_RU_EN
+        expected = [
+            "Девятый круг", "Клейкая лента", "Взрывоопасный подарок",
+            "Дурик Джекс", "Хрустяшки Арта", "Череп Джонатана",
+            "Глаз Виктории", "Голова с конфетами", "Дохлый опоссум",
+            "Торнтонская соль", "Эмили", "Волдырь Брук",
+            "Новенький трехколесник", "Окровавленная пуля", "Опаленные крылья",
+            "Плоть Сиенны", "Отбеливатель", "Почерневшее сердце",
+            "Скальп Элли", "Телефон Майка",
+        ]
+        self.assertEqual(self.db["killers"]["Ужасающий"]["addons"], expected)
+        mapping = ADDON_RU_EN["Ужасающий"]
+        self.assertEqual(set(mapping), set(expected))
+        for name in expected:
+            self.assertEqual(core.DATA.ADDON_RENAMES[mapping[name]], name)
+            self.assertEqual(core.game_search_query(name), name)
+            self.assertIn(name, core.ICONS.ADDON_ICONS)
+        self.db["killers"]["Ужасающий"]["addons"] = [mapping[name] for name in expected]
+        self.db["owned"]["killer_addons"] = [mapping[expected[0]]]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "dbd_database.json"
+            path.write_text(json.dumps(self.db, ensure_ascii=False), encoding="utf-8")
+            with patch.object(core, "DB_FILE", str(path)):
+                restored = core.load_db()
+        self.assertEqual(restored["killers"]["Ужасающий"]["addons"], expected)
+        self.assertEqual(restored["owned"]["killer_addons"], [expected[0]])
 
     def test_addons_respect_real_pool(self):
         result = catalog(self.db, "KILLER", "addons", "Доктор", playable=core._playable_addons)
