@@ -85,6 +85,16 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(restored["killers"]["Ужасающий"]["addons"], expected)
         self.assertEqual(restored["owned"]["killer_addons"], [expected[0]])
 
+    def test_terrifier_addon_descriptions_are_complete(self):
+        from addon_effects import AddonEffectLibrary
+        with tempfile.TemporaryDirectory() as folder:
+            library = AddonEffectLibrary(folder)
+            for name in self.db["killers"]["Ужасающий"]["addons"]:
+                row = library.get("KILLER", "Ужасающий", "", name)
+                self.assertTrue(row["english"], name)
+                self.assertTrue(row["verified"], name)
+                self.assertGreaterEqual(len(row["effect"]), 25, name)
+
     def test_addons_respect_real_pool(self):
         result = catalog(self.db, "KILLER", "addons", "Доктор", playable=core._playable_addons)
         self.assertEqual(result["total"], len(set(core._playable_addons(self.db["killers"]["Доктор"]["addons"]))))
