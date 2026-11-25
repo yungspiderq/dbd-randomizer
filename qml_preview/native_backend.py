@@ -1271,11 +1271,7 @@ class QtBridge(QObject):
         for hero, spec in chars.items():
             for name in (spec.get("perks", []) if isinstance(spec, dict) else spec):
                 owners.setdefault(name, []).append(hero)
-        def search_key(value):
-            return core._norm(" ".join("".join(
-                ch if ch.isalnum() or ch.isspace() else " "
-                for ch in (value or "")
-            ).split()))
+        search_key = core.game_search_key
         needle = search_key(query)
         filtered = [name for name in sorted(names)
                     if not needle or needle in search_key(name)
@@ -1312,9 +1308,9 @@ class QtBridge(QObject):
             addons = [a for category in eligible for a in category.get("addons", [])]
         else:
             return []
-        needle = core._norm(query)
+        needle = core.game_search_key(query)
         names = [name for name in sorted(set(core._playable_addons(addons)))
-                 if not needle or needle in core._norm(name)]
+                 if not needle or needle in core.game_search_key(name)]
         return [{"name": name} for name in names[:75 if needle else 30]]
 
     @Slot(str, str, str, str, str, str, str, str, str, result=bool)
@@ -1675,7 +1671,10 @@ class QtBridge(QObject):
                 self._assert_input_ready()
                 core.INPUT.hotkey("ctrl","a",guard=self._assert_input_ready)
                 self._sleep(0.03)
-            if not self._paste(core.game_search_query(target)):
+            query = core.game_search_query(target)
+            if not query:
+                return False
+            if not self._paste(query):
                 continue
             self._sleep(self._timing("search_settle")*(1.6 if attempt else 1.0))
             if verify_ocr:

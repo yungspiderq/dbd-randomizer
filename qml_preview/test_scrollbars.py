@@ -23,6 +23,15 @@ class ScrollbarTests(unittest.TestCase):
         self.assertIn("policy: ScrollBar.AsNeeded", source)
         self.assertIn("minimumSize: 0.07", source)
 
+    def test_mouse_wheel_is_accelerated_in_every_view(self):
+        source = QML.read_text(encoding="utf-8")
+        self.assertEqual(len(re.findall(r"\bFastWheel\s*\{\s*\}", source)), 15)
+        self.assertIn("component FastWheel: WheelHandler", source)
+        self.assertIn("property real wheelStep: 240", source)
+        self.assertIn("event.angleDelta.y / 120 * win.wheelStep", source)
+        self.assertIn("event.accepted = win.scrollWheel(parent, delta)", source)
+        self.assertIn("view.cancelFlick()", source)
+
     def test_page_builder_outfits_and_favorites_are_covered(self):
         source = QML.read_text(encoding="utf-8")
         for name in ("mainPageScrollBar", "builderPerkScrollBar",
@@ -31,7 +40,7 @@ class ScrollbarTests(unittest.TestCase):
             with self.subTest(control=name):
                 self.assertIn(name, source)
         self.assertIn("function verifyFastScroll()", source)
-        self.assertIn("QT QUICK • STABLE 3.2.2", source)
+        self.assertIn("QT QUICK • STABLE 3.2.3", source)
 
 
 if __name__ == "__main__":

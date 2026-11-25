@@ -12,7 +12,7 @@ ApplicationWindow {
     property real uiScale: backend.appearanceScale
     property var colors: backend.appearancePalette
     color: colors.background
-    title: "DBD Randomizer Qt · v3.2.2"
+    title: "DBD Randomizer Qt · v3.2.3"
     property string page: "Билд"
     property int builderSmokeStatus: 0
     property string builderSmokeError: ""
@@ -50,6 +50,16 @@ ApplicationWindow {
                 scrollSmokeError = "Scrollbar missing or not draggable at index " + i;
                 return;
             }
+        }
+        var probe = {originY: 20, topMargin: 0, bottomMargin: 0,
+                     contentHeight: 1000, height: 200, contentY: 20,
+                     cancelFlick: function() {}};
+        if (!scrollWheel(probe, -wheelStep) || probe.contentY !== 260 ||
+            !scrollWheel(probe, -2000) || probe.contentY !== 820 ||
+            scrollWheel(probe, -wheelStep) ||
+            !scrollWheel(probe, 2000) || probe.contentY !== 20) {
+            scrollSmokeError = "Mouse wheel distance or boundary clamp failed";
+            return;
         }
         scrollSmokePassed = true;
     }
@@ -228,6 +238,33 @@ ApplicationWindow {
             cursorShape: button.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             enabled: button.enabled
             onClicked: button.clicked()
+        }
+    }
+
+    // A mouse-wheel notch advances 240 logical pixels in every catalogue.
+    // Preserve high-resolution pixel deltas and allow the outer page to scroll
+    // when an inner list is already at its edge.
+    property real wheelStep: 240
+    function scrollWheel(view, delta) {
+        if (!view || !delta)
+            return false;
+        var top = view.originY - view.topMargin;
+        var bottom = Math.max(top, view.originY + view.contentHeight + view.bottomMargin - view.height);
+        var nextY = Math.max(top, Math.min(bottom, view.contentY - delta));
+        if (Math.abs(nextY - view.contentY) < 0.01)
+            return false;
+        view.cancelFlick();
+        view.contentY = nextY;
+        return true;
+    }
+
+    component FastWheel: WheelHandler {
+        target: null
+        acceptedDevices: PointerDevice.Mouse
+        onWheel: function(event) {
+            var delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y :
+                        event.angleDelta.y / 120 * win.wheelStep;
+            event.accepted = win.scrollWheel(parent, delta);
         }
     }
 
@@ -517,6 +554,7 @@ ApplicationWindow {
             color: win.colors.sidebar
             border.color: win.colors.stroke
             Flickable {
+                FastWheel { }
                 ScrollBar.vertical: QuickScrollBar {  }
                 anchors.fill: parent
                 contentWidth: width
@@ -545,7 +583,7 @@ ApplicationWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 5
                         Text { text: "DBD Randomizer"; color: win.colors.text; font.pixelSize: 16; font.weight: Font.DemiBold }
-                        Text { text: "QT QUICK • STABLE 3.2.2"; color: win.colors.muted; font.pixelSize: 10 }
+                        Text { text: "QT QUICK • STABLE 3.2.3"; color: win.colors.muted; font.pixelSize: 10 }
                     }
                 }
                 Rectangle { width: parent.width; height: 1; color: win.colors.stroke }
@@ -590,6 +628,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 spacing: 0
                 Flickable {
+                    FastWheel { }
                     ScrollBar.vertical: QuickScrollBar { id: pageScrollBar; objectName: "mainPageScrollBar" }
                     id: work
                     objectName: "workScroll"
@@ -1475,6 +1514,7 @@ ApplicationWindow {
                                     Text { text: "01 · ПЕРСОНАЖ"; font.pixelSize: 11; font.bold: true; color: win.colors.muted }
                                     UiField { id: makerChar; width: parent.width; placeholderText: "Найти персонажа..." }
                                     ListView {
+                                        FastWheel { }
                                         ScrollBar.vertical: QuickScrollBar {  }
                                         id: makerCharacters
                                         reuseItems: true
@@ -1507,6 +1547,7 @@ ApplicationWindow {
                                         placeholderText: makerPage.makerSide === "KILLER" ? "Сила маньяка подбирается автоматически" : "Найти предмет выжившего..."
                                     }
                                     ListView {
+                                        FastWheel { }
                                         ScrollBar.vertical: QuickScrollBar {  }
                                         id: makerItems
                                         reuseItems: true
@@ -1543,6 +1584,7 @@ ApplicationWindow {
                                     }
                                     UiField { id: addonSearch; width: parent.width; placeholderText: "Поиск доступных аддонов по названию..." }
                                     ListView {
+                                        FastWheel { }
                                         ScrollBar.vertical: QuickScrollBar {  }
                                         id: makerAddons
                                         reuseItems: true
@@ -1714,6 +1756,7 @@ ApplicationWindow {
                                         text: "Сначала выбери персонажа в блоке 01."
                                     }
                                     ListView {
+                                        FastWheel { }
                                         ScrollBar.vertical: QuickScrollBar { id: builderScrollBar; objectName: "builderPerkScrollBar" }
                                         id: makerPerks
                                         reuseItems: true
@@ -1827,6 +1870,7 @@ ApplicationWindow {
                             UiButton { width: parent.width; label: "ОПУБЛИКОВАТЬ ТЕКУЩИЙ БИЛД"; primary: true; onClicked: { backend.setPublishPref("nickname", nickEntry.text); backend.publishCurrent() } }
                             Text { text: "Найдено билдов: " + backend.community.length; color: "#b1becc"; font.pixelSize: 12 }
                             ListView {
+                                FastWheel { }
                                 ScrollBar.vertical: QuickScrollBar {  }
                                 id: buildsList
                                 width: parent.width; height: 430; clip: true; spacing: 7
@@ -1905,6 +1949,7 @@ ApplicationWindow {
                                             }
                                             Rectangle { width: parent.width; height: 1; color: "#2f3947" }
                                             ListView {
+                                                FastWheel { }
                                                 ScrollBar.vertical: QuickScrollBar {  }
                                                 id: characterList
                                         reuseItems: true
@@ -1996,6 +2041,7 @@ ApplicationWindow {
                                         Text { text: "ПЕРСОНАЖИ"; color: "#ced7e3"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
                                         UiField { id: skinCharSearch; width: parent.width; placeholderText: "Поиск героя" }
                                         ListView {
+                                            FastWheel { }
                                             ScrollBar.vertical: QuickScrollBar {  }
                                             id: skinCharList
                                         reuseItems: true
@@ -2121,6 +2167,7 @@ ApplicationWindow {
                                             }
                                         }
                                         ListView {
+                                            FastWheel { }
                                             ScrollBar.vertical: QuickScrollBar { id: outfitScrollBar; objectName: "outfitScrollBar" }
                                             id: skinsList
                                         reuseItems: true
@@ -2324,6 +2371,7 @@ ApplicationWindow {
                                 }
                             }
                             ListView {
+                                FastWheel { }
                                 ScrollBar.vertical: QuickScrollBar {  }
                                 id: favoriteList
                                         reuseItems: true
@@ -3011,6 +3059,7 @@ ApplicationWindow {
                                     Text { text: "ИСТОРИЯ ВЫПАДЕНИЙ"; color: "#e5edf5"; font.pixelSize: 12; font.bold: true }
                                     Text { text: "Хранятся последние 100 событий, показаны до 28 за выбранный период"; color: "#92a4b7"; font.pixelSize: 10 }
                                     ListView {
+                                        FastWheel { }
                                         ScrollBar.vertical: QuickScrollBar {  }
                                         id: statsHistory
                                         width: recentCard.width - 24
@@ -3178,6 +3227,7 @@ ApplicationWindow {
                     color: "#11161e"
                     border.color: "#222b37"
                     Flickable {
+                        FastWheel { }
                         ScrollBar.vertical: QuickScrollBar {  }
                         anchors.fill: parent
                         contentWidth: width
@@ -3339,6 +3389,7 @@ ApplicationWindow {
             border.width: 1
         }
         contentItem: Flickable {
+            FastWheel { }
             ScrollBar.vertical: QuickScrollBar {  }
             contentWidth: width
             contentHeight: infoBody.implicitHeight + 16
@@ -3496,6 +3547,7 @@ ApplicationWindow {
             border.width: 1
         }
         contentItem: Flickable {
+            FastWheel { }
             ScrollBar.vertical: QuickScrollBar {  }
             contentWidth: width
             contentHeight: perkInfoBody.implicitHeight + 34

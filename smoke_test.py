@@ -1621,6 +1621,18 @@ class TestAutomation(unittest.TestCase):
         pasted = [call[1] for call in self.fake.calls if call[0] == "paste"]
         self.assertEqual(pasted, ["секущий крюк пучина ярости"])
 
+    def test_search_and_select_addon_without_punctuation(self):
+        self._set_coords()
+        self.app.dry_var.set(False)
+        self.app.option = lambda key: {
+            "result_index": 1, "use_clear_button": False,
+            "verify_clipboard": True, "ocr_verify": False, "abort_key": "f9"
+        }.get(key, False)
+        self.app._sleep = lambda s, abortable=True: None
+        self.assertTrue(self.app.search_and_select('"Дисциплина" - заметки Картера'))
+        pasted = [call[1] for call in self.fake.calls if call[0] == "paste"]
+        self.assertEqual(pasted, ["дисциплина заметки картера"])
+
     def test_equip_steps_killer_skips_power(self):
         self.app.build = {"side": "KILLER", "char": "Охотник", "power_or_item": "Медвежий капкан",
                           "power_is_item": False, "addons": ["Точильный камень", "Кофейная гуща"],

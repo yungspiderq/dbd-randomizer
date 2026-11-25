@@ -547,6 +547,30 @@ class QtBackendTests(unittest.TestCase):
                 "Секущий крюк: пучина ярости"))
             paste.assert_called_once_with("секущий крюк пучина ярости")
 
+    def test_punctuation_free_addon_and_perk_auto_equip(self):
+        self.bridge._target_window = 501
+        self.bridge.cfg["options"]["dry_run"] = False
+        self.bridge.cfg["options"]["ocr_verify"] = False
+        self.bridge.cfg["timings"]["retries"] = 0
+        self.bridge.cfg["timings"]["search_settle"] = 0
+        for name, expected in (
+            ('"Дисциплина" - заметки Картера', "дисциплина заметки картера"),
+            ("Порча: никому не скрыться от смерти", "порча никому не скрыться от смерти"),
+        ):
+            with self.subTest(name=name), patch.object(self.bridge, "_sleep"), \
+                 patch.object(self.bridge, "_click", return_value=True), \
+                 patch.object(self.bridge, "_paste", return_value=True) as paste, \
+                 patch.object(core.INPUT, "foreground_window", return_value=501), \
+                 patch.object(core.INPUT, "hotkey"):
+                self.assertTrue(self.bridge._search_and_select(name))
+                paste.assert_called_once_with(expected)
+
+    def test_addon_builder_search_ignores_punctuation(self):
+        expected = '"Дисциплина" - заметки Картера'
+        for query in (expected, "дисциплина заметки картера"):
+            rows = self.bridge.searchAddons("KILLER", "Доктор", "", query)
+            self.assertIn(expected, [row["name"] for row in rows])
+
     def test_scourge_hook_builder_search_without_colon(self):
         clean = self.bridge.searchPerks("KILLER", "секущий крюк пучина ярости")
         punctuated = self.bridge.searchPerks("KILLER", "Секущий крюк: пучина ярости")

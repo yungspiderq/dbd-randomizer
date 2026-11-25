@@ -228,8 +228,8 @@ class IconCombo:
             for w in inner.winfo_children():
                 w.destroy()
             self._rows.clear()
-            needle = _norm(needle)
-            shown = [v for v in self._values if not needle or needle in _norm(v)]
+            needle = game_search_key(needle)
+            shown = [v for v in self._values if not needle or needle in game_search_key(v)]
             for v in shown:
                 row = tk.Frame(inner, bg="#151a21")
                 row.pack(fill="x")
@@ -1434,30 +1434,26 @@ def build_to_clipboard_text(b):
 # Валидация базы
 # ----------------------------------------------------------------------------
 def game_search_query(name):
-    """Normalize special perk families for DBD without changing catalog titles."""
+    """Remove punctuation from every game search, never from catalog names."""
     if not isinstance(name, str):
         return name
     plain = " ".join("".join(
-        character if character.isalnum() or character.isspace() else " "
-        for character in name
-    ).split()).lower()
-    if re.match(r"^(?:секущий крюк|чары|дар)(?: |$)", plain):
-        return plain
-    return name
+        ch if ch.isalnum() or ch.isspace() else " " for ch in name
+    ).split())
+    if plain != name or re.match(r"^(?:секущий крюк|чары|дар)(?: |$)", plain, re.I):
+        return plain.lower()
+    return plain
+
+
+def game_search_key(value):
+    return _norm(game_search_query(value or ""))
 
 
 def game_search_result_matches(original, recognized):
-    """Recognize a displayed result even if OCR kept the original colon."""
-    if _norm(original) in _norm(recognized):
-        return True
-    query = game_search_query(original)
-    if query == original:
-        return False
-    plain_ocr = " ".join("".join(
-        character if character.isalnum() or character.isspace() else " "
-        for character in (recognized or "")
-    ).split())
-    return _norm(query) in _norm(plain_ocr)
+    """Match normalized complete words, rejecting an empty query."""
+    target = game_search_key(original)
+    observed = game_search_key(recognized)
+    return bool(target and observed and (" " + target + " ") in (" " + observed + " "))
 
 
 def _norm(s):
@@ -4618,7 +4614,10 @@ class App:
                 # Ctrl+A + Delete надёжнее кнопки «×»: работает и когда поле уже пустое
                 INPUT.hotkey("ctrl", "a")
                 self._sleep(0.03)
-            self._paste(game_search_query(target))
+            query = game_search_query(target)
+            if not query:
+                return False
+            self._paste(query)
             self._sleep(settle * (1.6 if attempt else 1.0))   # повтор — заведомо дольше
 
             checked = self._ocr_matches(target)
